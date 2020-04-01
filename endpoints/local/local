@@ -272,7 +272,7 @@ for i in ${clients[@]} ${servers[@]}; do
                 $cmd
             else
                 echo -e "About to run using nohup:\n$cmd\n"
-                nohup $cmd &
+                nohup $cmd 2>&1 >"$rickshaw_run_dir/$i-stderrout.txt" &
             fi
         else
             exit_error "[ERROR]could not find script $rickshaw_run_dir/client-server-script"
@@ -289,7 +289,7 @@ for i in ${clients[@]} ${servers[@]}; do
             $cmd
         else
             echo -e "About to run using nohup:\n$cmd\n"
-            nohup $cmd &
+            nohup $cmd 2>&1 >"$rickshaw_run_dir/$i-stderrout.txt" &
         fi
     elif [ "$osruntime" == "podman"]; then
         echo doing podman runtime

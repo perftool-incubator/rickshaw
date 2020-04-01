@@ -175,10 +175,7 @@ if [ -z "$cs_id" ]; then
     exit_error "The clien/server ID (--cs-id) was not defined"
 fi
 cs_dir="$endpoint_run_dir/$cs_id"
-/bin/mkdir -p "$cs_dir" ||
-    exit_error "Could not mkdir $cs_dir"
-exec >$endpoint_run_dir/$cs_id/$cs_id-stderrout.txt
-exec 2>&1
+/bin/mkdir -p "$cs_dir" || exit_error "Could not mkdir $cs_dir"
 
 cs_type=`echo $cs_id | awk -F- '{print $1}'`
 if [ -z "$rickshaw_host" ]; then
