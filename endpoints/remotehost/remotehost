@@ -41,6 +41,8 @@ else
     exit
 fi
 
+chroot_rbind_mounts="proc dev sys lib/modules usr/src boot"
+
 endpoint_name="remotehost"
 osruntime="chroot"
 userenv="rhubi8"
@@ -199,17 +201,13 @@ function cleanup_osruntime() {
 
         if [ -e $endpoint_run_dir/chroot-container-mount.txt ]; then
             container_mount=`cat $endpoint_run_dir/chroot-container-mount.txt`
-            for fs in proc dev dev/hugepages proc sys lib/modules usr/src boot; do
-                if [ -e $container_mount/$fs ]; then
-                    echo "Removing [$container_mount/$fs] for chroot using container [$container_name]"
-                    do_ssh $user@$host umount $container_mount/$fs
-                else
-                    echo "NOT removing [$container_mount/$fs] for chroot using container [$container_name] because it does not appear to be mounted"
-                    do_ssh $user@$host mount | grep $container_mount/$fs
-                fi
+            for fs in ${chroot_rbind_mounts}; do
+                echo "Removing ${fs} from ${container_mount}"
+                do_ssh $user@$host umount --verbose --recursive ${container_mount}/${fs}
+                echo
             done
             echo "Unmounting container base mount [$container_mount] for chroot using container [$container_name]"
-            do_ssh $user@$host umount $container_mount
+            do_ssh $user@$host podman umount $container_name
         else
             echo "WARNING: the file with container base mount [$endpoint_run_dir/chroot-container-mount.txt] could not be found"
         fi
@@ -357,10 +355,12 @@ function launch_osruntime() {
             do_ssh $user@$host mkdir -p $container_mount/tmp
             do_ssh $user@$host mount --verbose --options bind $remote_data_dir $container_mount/tmp
             echo "Adding host directories to container mount"
-            for fs in proc dev dev/hugepages proc sys lib/modules usr/src boot; do
-                echo "Adding $fs"
+            for fs in ${chroot_rbind_mounts}; do
+                echo "Adding ${fs} to ${container_mount}"
                 do_ssh $user@$host mkdir -p $container_mount/$fs
-                do_ssh $user@$host mount --verbose --options bind /$fs $container_mount/$fs
+                do_ssh $user@$host mount --verbose --options rbind /$fs $container_mount/$fs
+                do_ssh $user@$host mount --verbose --make-rslave $container_mount/$fs
+                echo
             done
             # for chroot osruntime we can also simply copy the ssh key
             echo "Copying ssh key to $user@$host:$container_mount/tmp/ for chroot runtime"
