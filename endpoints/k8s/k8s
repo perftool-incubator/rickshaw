@@ -64,6 +64,8 @@ declare -A nodeSelector
 declare -A securityContext
 declare -A resources
 declare -A annotations
+declare -A volumes
+declare -A volumeMounts
 
 function cleanup_json() {
     local json="$1"; shift
@@ -479,6 +481,24 @@ function process_k8s_opts() {
                     exit_error "Could not find annotations file $file for $name"
                 fi
                 ;;
+            volumeMounts)
+                name=`echo $val | awk -F: '{print $1}'`
+                file=`echo $val | awk -F: '{print $2}'`
+                if [ ! -z "$file" -o -e $file ]; then
+                    volumeMounts[$name]=`cat $file`
+                else
+                    exit_error "Could not find volumeMounts file $file for $name"
+                fi
+                ;;
+            volumes)
+                name=`echo $val | awk -F: '{print $1}'`
+                file=`echo $val | awk -F: '{print $2}'`
+                if [ ! -z "$file" -o -e $file ]; then
+                    volumes[$name]=`cat $file`
+                else
+                    exit_error "Could not find volumes file $file for $name"
+                fi
+                ;;
             *)
                 if echo $arg | grep -q -- "="; then
                     echo "You can't use a \"=\" for assignment in endpoint options"
@@ -624,12 +644,19 @@ function build_pod_spec() {
         echo '          }' >>$json
         echo "        ]" >>$json
     fi
-    if [ "$type" == "cs" -a "$hugepage" == "1" ]; then
-        echo '       ,"volumeMounts": [' >>$json
-        echo '          { "mountPath": "/dev/hugepages",' >>$json
-        echo '            "name": "hugepage"' >>$json
-        echo '          }' >>$json
-        echo "        ]" >>$json
+    # If user provided volumeMounts.json, use it. It not, and "hugepage", do implicitly
+    if [ "$type" == "cs" ]; then
+        set +u
+        if [ ! -z "${volumeMounts[$name]}" ]; then
+            echo -e ",${volumeMounts[$name]}" >>$json
+        elif [ "$hugepage" == "1" ]; then
+            echo '       ,"volumeMounts": [' >>$json
+            echo '          { "mountPath": "/dev/hugepages",' >>$json
+            echo '            "name": "hugepage"' >>$json
+            echo '          }' >>$json
+            echo "        ]" >>$json
+        fi
+        set -u
     fi
     if [ "$type" == "worker" -o "$type" == "master" ]; then
         echo "        ,\"securityContext\": {" >>$json
@@ -651,6 +678,7 @@ function build_pod_spec() {
     fi
     echo "      }" >>$json
     echo "    ]" >>$json
+
     if [ "$type" == "worker" -o "$type" == "master" ]; then
         echo '       ,"volumes": [' >>$json
         echo '          { "name": "hostfs-run",' >>$json
@@ -661,15 +689,23 @@ function build_pod_spec() {
         echo '          }' >>$json
         echo '        ]' >>$json
     fi
-    if [ "$type" == "cs" -a "$hugepage" == "1" ]; then
-        echo '       ,"volumes": [' >>$json
-        echo '          { "name": "hugepage",' >>$json
-        echo '            "emptyDir": {' >>$json
-        echo '              "medium": "HugePages"' >>$json
-        echo '            }' >>$json
-        echo '          }' >>$json
-        echo '        ]' >>$json
+    # If user provided volumes.json, use it. It not, and "hugepage", do implicitly
+    if [ "$type" == "cs" ]; then
+        set +u
+        if [ ! -z "${volumes[$name]}" ]; then
+            echo -e ",${volumes[$name]}" >>$json
+        elif [ "$hugepage" == "1" ]; then
+           echo '       ,"volumes": [' >>$json
+           echo '          { "name": "hugepage",' >>$json
+           echo '            "emptyDir": {' >>$json
+           echo '              "medium": "HugePages"' >>$json
+           echo '            }' >>$json
+           echo '          }' >>$json
+           echo '        ]' >>$json
+        fi
+        set -u
     fi
+
     echo "  }" >>$json
     echo "}" >>$json
     cleanup_json "${json}"
