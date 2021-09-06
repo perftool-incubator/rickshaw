@@ -23,6 +23,7 @@ jobs:
 
     - name: Checkout rickshaw
       uses: actions/checkout@v2
+      with:
         path: rickshaw
 
 #    - uses: actions/perftool-incubator/crucible-ci/ci-environment-info@main
@@ -49,6 +50,7 @@ jobs:
 
     - name: Checkout rickshaw
       uses: actions/checkout@v2
+      with:
         path: rickshaw
 
 #    - uses: actions/perftool-incubator/crucible-ci/ci-environment-info@main
@@ -75,6 +77,7 @@ jobs:
 
     - name: Checkout rickshaw
       uses: actions/checkout@v2
+      with:
         path: rickshaw
 
 #    - uses: actions/perftool-incubator/crucible-ci/ci-environment-info@main
