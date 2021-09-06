@@ -16,13 +16,7 @@ jobs:
     steps:
     - uses: actions/checkout@v2
 
-    - name: Show Environment
-      run: |
-        whoami
-        echo
-        pwd
-        echo
-        ls -la
+    - uses: actions/perftool-incubator/crucible-ci/ci-environment-info
 
     - name: Git Clone crucible-ci
       run: |
@@ -44,13 +38,7 @@ jobs:
     steps:
     - uses: actions/checkout@v2
 
-    - name: Show Environment
-      run: |
-        whoami
-        echo
-        pwd
-        echo
-        ls -la
+    - uses: actions/perftool-incubator/crucible-ci/ci-environment-info
 
     - name: Git Clone crucible-ci
       run: |
@@ -61,7 +49,7 @@ jobs:
       run: |
         sudo ~/crucible-ci/setup-ci-environment --ci-target rickshaw --ci-target-dir $(pwd)
 
-    - name: Run CI
+    - name: Run fio CI
       run: |
         sudo ~/crucible-ci/run-ci --userenvs all --scenarios fio
 
@@ -72,13 +60,7 @@ jobs:
     steps:
     - uses: actions/checkout@v2
 
-    - name: Show Environment
-      run: |
-        whoami
-        echo
-        pwd
-        echo
-        ls -la
+    - uses: actions/perftool-incubator/crucible-ci/ci-environment-info
 
     - name: Git Clone crucible-ci
       run: |
@@ -89,6 +71,6 @@ jobs:
       run: |
         sudo ~/crucible-ci/setup-ci-environment --ci-target rickshaw --ci-target-dir $(pwd)
 
-    - name: Run CI
+    - name: Run uperf CI
       run: |
         sudo ~/crucible-ci/run-ci --userenvs all --scenarios uperf
