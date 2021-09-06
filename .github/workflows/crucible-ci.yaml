@@ -14,15 +14,15 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+    - name: Checkout rickshaw
+      uses: actions/checkout@v2
+
     - name: Checkout crucible-ci
       uses: actions/checkout@v2
       with:
         repository: perftool-incubator/crucible-ci
         ref: main
         path: crucible-ci
-
-    - name: Checkout rickshaw
-      uses: actions/checkout@v2
 
     - name: debug
       run: |
