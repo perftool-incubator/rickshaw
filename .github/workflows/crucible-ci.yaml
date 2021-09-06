@@ -24,7 +24,8 @@ jobs:
         ref: main
         path: crucible-ci
 
-    - uses: ./crucible-ci/.github/actions/ci-environment-info
+    - name: Gather ci-environment info
+      uses: ./crucible-ci/.github/actions/ci-environment-info
 
     - name: Setup CI Environment
       run: |
@@ -49,7 +50,8 @@ jobs:
         ref: main
         path: crucible-ci
 
-    - uses: ./crucible-ci/.github/actions/ci-environment-info
+    - name: Gather ci-environment info
+      uses: ./crucible-ci/.github/actions/ci-environment-info
 
     - name: Setup CI Environment
       run: |
@@ -74,7 +76,8 @@ jobs:
         ref: main
         path: crucible-ci
 
-    - uses: ./crucible-ci/.github/actions/ci-environment-info
+    - name: Gather ci-environment info
+      uses: ./crucible-ci/.github/actions/ci-environment-info
 
     - name: Setup CI Environment
       run: |
