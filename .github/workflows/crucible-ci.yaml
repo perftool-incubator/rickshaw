@@ -16,6 +16,8 @@ jobs:
     steps:
     - name: Checkout rickshaw
       uses: actions/checkout@v2
+      with:
+        path: rickshaw
 
     - name: Checkout crucible-ci
       uses: actions/checkout@v2
@@ -24,16 +26,16 @@ jobs:
         ref: main
         path: crucible-ci
 
-    - name: Gather ci-environment info
+    - name: Gather ci-environment-info
       uses: ./crucible-ci/.github/actions/ci-environment-info
 
     - name: Setup CI Environment
       run: |
-        sudo ./crucible-ci/setup-ci-environment --ci-target rickshaw --ci-target-dir $(pwd)
+        sudo ./crucible-ci/setup-ci-environment --ci-target rickshaw --ci-target-dir $(pwd)/rickshaw
 
     - name: Run CI
       run: |
-        sudo .//crucible-ci/run-ci --samples 3 --repeat-runs --scenarios fio
+        sudo ./crucible-ci/run-ci --samples 3 --repeat-runs --scenarios fio
 
   crucible-ci-all-userenvs-fio:
     name: crucible-ci-fio
@@ -42,6 +44,8 @@ jobs:
     steps:
     - name: Checkout rickshaw
       uses: actions/checkout@v2
+      with:
+        path: rickshaw
 
     - name: Checkout crucible-ci
       uses: actions/checkout@v2
@@ -50,12 +54,12 @@ jobs:
         ref: main
         path: crucible-ci
 
-    - name: Gather ci-environment info
+    - name: Gather ci-environment-info
       uses: ./crucible-ci/.github/actions/ci-environment-info
 
     - name: Setup CI Environment
       run: |
-        sudo ./crucible-ci/setup-ci-environment --ci-target rickshaw --ci-target-dir $(pwd)
+        sudo ./crucible-ci/setup-ci-environment --ci-target rickshaw --ci-target-dir $(pwd)/rickshaw
 
     - name: Run fio CI
       run: |
@@ -68,6 +72,8 @@ jobs:
     steps:
     - name: Checkout rickshaw
       uses: actions/checkout@v2
+      with:
+        path: rickshaw
 
     - name: Checkout crucible-ci
       uses: actions/checkout@v2
@@ -76,12 +82,12 @@ jobs:
         ref: main
         path: crucible-ci
 
-    - name: Gather ci-environment info
+    - name: Gather ci-environment-info
       uses: ./crucible-ci/.github/actions/ci-environment-info
 
     - name: Setup CI Environment
       run: |
-        sudo ./crucible-ci/setup-ci-environment --ci-target rickshaw --ci-target-dir $(pwd)
+        sudo ./crucible-ci/setup-ci-environment --ci-target rickshaw --ci-target-dir $(pwd)/rickshaw
 
     - name: Run uperf CI
       run: |
