@@ -16,7 +16,7 @@ jobs:
     steps:
     - uses: actions/checkout@v2
 
-    - uses: actions/perftool-incubator/crucible-ci/ci-environment-info@main
+    - uses: actions/crucible-ci/ci-environment-info@main
 
     - name: Git Clone crucible-ci
       run: |
@@ -38,7 +38,7 @@ jobs:
     steps:
     - uses: actions/checkout@v2
 
-    - uses: actions/perftool-incubator/crucible-ci/ci-environment-info@main
+    - uses: actions/crucible-ci/ci-environment-info@main
 
     - name: Git Clone crucible-ci
       run: |
@@ -60,7 +60,7 @@ jobs:
     steps:
     - uses: actions/checkout@v2
 
-    - uses: actions/perftool-incubator/crucible-ci/ci-environment-info@main
+    - uses: actions/crucible-ci/ci-environment-info@main
 
     - name: Git Clone crucible-ci
       run: |
