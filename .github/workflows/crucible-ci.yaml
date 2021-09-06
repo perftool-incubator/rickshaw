@@ -19,6 +19,7 @@ jobs:
       with:
         repository: perftool-incubator/crucible-ci
         ref: main
+	path: crucible-ci
 
     - name: Checkout rickshaw
       uses: actions/checkout@v2
@@ -43,6 +44,7 @@ jobs:
       with:
         repository: perftool-incubator/crucible-ci
         ref: main
+	path: crucible-ci
 
     - name: Checkout rickshaw
       uses: actions/checkout@v2
@@ -67,6 +69,7 @@ jobs:
       with:
         repository: perftool-incubator/crucible-ci
         ref: main
+	path: crucible-ci
 
     - name: Checkout rickshaw
       uses: actions/checkout@v2
