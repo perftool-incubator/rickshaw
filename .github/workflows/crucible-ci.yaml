@@ -22,7 +22,7 @@ jobs:
     - name: Checkout rickshaw
       uses: actions/checkout@v2
 
-    - uses: perftool-incubator/crucible-ci/ci-environment-info@main
+    - uses: actions/perftool-incubator/crucible-ci/ci-environment-info@main
 
     - name: Setup CI Environment
       run: |
@@ -45,7 +45,7 @@ jobs:
     - name: Checkout rickshaw
       uses: actions/checkout@v2
 
-    - uses: perftool-incubator/crucible-ci/ci-environment-info@main
+    - uses: actions/perftool-incubator/crucible-ci/ci-environment-info@main
 
     - name: Setup CI Environment
       run: |
@@ -68,7 +68,7 @@ jobs:
     - name: Checkout rickshaw
       uses: actions/checkout@v2
 
-    - uses: perftool-incubator/crucible-ci/ci-environment-info@main
+    - uses: actions/perftool-incubator/crucible-ci/ci-environment-info@main
 
     - name: Setup CI Environment
       run: |
