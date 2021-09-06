@@ -24,6 +24,16 @@ jobs:
     - name: Checkout rickshaw
       uses: actions/checkout@v2
 
+    - name: debug
+      run: |
+        pwd
+        echo
+        ls -la
+        echo
+        ls -la crucible-ci
+        echo
+        ls -laR crucible-ci/.github/
+
     - uses: ./crucible-ci/.github/actions/ci-environment-info
 
     - name: Setup CI Environment
