@@ -14,14 +14,15 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v2
+    - name: Checkout crucible-ci
+      uses: actions/checkout@v2.3.4
+      with:
+        repository: perftool-incubator/crucible-ci@main
+
+    - name: Checkout rickshaw
+      uses: actions/checkout@v2
 
     - uses: perftool-incubator/crucible-ci/ci-environment-info@main
-
-    - name: Git Clone crucible-ci
-      run: |
-        pushd ~/
-        git clone https://github.com/perftool-incubator/crucible-ci.git
 
     - name: Setup CI Environment
       run: |
@@ -36,14 +37,15 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v2
+    - name: Checkout crucible-ci
+      uses: actions/checkout@v2.3.4
+      with:
+        repository: perftool-incubator/crucible-ci@main
+
+    - name: Checkout rickshaw
+      uses: actions/checkout@v2
 
     - uses: perftool-incubator/crucible-ci/ci-environment-info@main
-
-    - name: Git Clone crucible-ci
-      run: |
-        pushd ~/
-        git clone https://github.com/perftool-incubator/crucible-ci.git
 
     - name: Setup CI Environment
       run: |
@@ -58,14 +60,15 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v2
+    - name: Checkout crucible-ci
+      uses: actions/checkout@v2.3.4
+      with:
+        repository: perftool-incubator/crucible-ci@main
+
+    - name: Checkout rickshaw
+      uses: actions/checkout@v2
 
     - uses: perftool-incubator/crucible-ci/ci-environment-info@main
-
-    - name: Git Clone crucible-ci
-      run: |
-        pushd ~/
-        git clone https://github.com/perftool-incubator/crucible-ci.git
 
     - name: Setup CI Environment
       run: |
