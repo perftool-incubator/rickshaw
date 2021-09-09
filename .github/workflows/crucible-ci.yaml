@@ -29,6 +29,7 @@ jobs:
     - name: Run crucible-ci->integration-tests
       uses: ./crucible-ci/.github/actions/integration-tests
       with:
+        artifact_tag: "samples-iteration-repeat-runs"
         ci_target: "rickshaw"
         ci_target_dir: ${{ github.workspace }}/rickshaw
         scenarios: "fio"
@@ -55,6 +56,7 @@ jobs:
     - name: Run crucible-ci->integration-tests
       uses: ./crucible-ci/.github/actions/integration-tests
       with:
+        artifact_tag: "fio"
         ci_target: "rickshaw"
         ci_target_dir: ${{ github.workspace }}/rickshaw
         scenarios: "fio"
@@ -80,6 +82,7 @@ jobs:
     - name: Run crucible-ci->integration-tests
       uses: ./crucible-ci/.github/actions/integration-tests
       with:
+        artifact_tag: "uperf"
         ci_target: "rickshaw"
         ci_target_dir: ${{ github.workspace }}/rickshaw
         scenarios: "uperf"
