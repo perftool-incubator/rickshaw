@@ -22,8 +22,8 @@ jobs:
     - name: Checkout crucible-ci
       uses: actions/checkout@v2
       with:
-        repository: perftool-incubator/crucible-ci
-        ref: main
+        repository: k-rister/crucible-ci
+        ref: dev-kmr
         path: crucible-ci
 
     - name: Run crucible-ci->integration-tests
@@ -48,8 +48,8 @@ jobs:
     - name: Checkout crucible-ci
       uses: actions/checkout@v2
       with:
-        repository: perftool-incubator/crucible-ci
-        ref: main
+        repository: k-rister/crucible-ci
+        ref: dev-kmr
         path: crucible-ci
 
     - name: Run crucible-ci->integration-tests
@@ -73,8 +73,8 @@ jobs:
     - name: Checkout crucible-ci
       uses: actions/checkout@v2
       with:
-        repository: perftool-incubator/crucible-ci
-        ref: main
+        repository: k-rister/crucible-ci
+        ref: dev-kmr
         path: crucible-ci
 
     - name: Run crucible-ci->integration-tests
