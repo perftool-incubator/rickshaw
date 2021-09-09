@@ -26,16 +26,14 @@ jobs:
         ref: main
         path: crucible-ci
 
-    - name: Gather ci-environment-info
-      uses: ./crucible-ci/.github/actions/ci-environment-info
-
-    - name: Setup CI Environment
-      run: |
-        sudo ./crucible-ci/setup-ci-environment --ci-target rickshaw --ci-target-dir $(pwd)/rickshaw
-
-    - name: Run CI
-      run: |
-        sudo ./crucible-ci/run-ci --samples 3 --repeat-runs --scenarios fio
+    - name: Run crucible-ci->integration-tests
+      uses: ./crucible-ci/.github/actions/integration-tests
+      with:
+        ci_target: "rickshaw"
+        ci_target_dir: ${{ github.workspace }}/rickshaw
+        scenarios: "fio"
+        repeat_runs: "yes"
+        run_samples: "3"
 
   crucible-ci-all-userenvs-fio:
     name: crucible-ci-fio
@@ -54,16 +52,13 @@ jobs:
         ref: main
         path: crucible-ci
 
-    - name: Gather ci-environment-info
-      uses: ./crucible-ci/.github/actions/ci-environment-info
-
-    - name: Setup CI Environment
-      run: |
-        sudo ./crucible-ci/setup-ci-environment --ci-target rickshaw --ci-target-dir $(pwd)/rickshaw
-
-    - name: Run fio CI
-      run: |
-        sudo ./crucible-ci/run-ci --userenvs all --scenarios fio
+    - name: Run crucible-ci->integration-tests
+      uses: ./crucible-ci/.github/actions/integration-tests
+      with:
+        ci_target: "rickshaw"
+        ci_target_dir: ${{ github.workspace }}/rickshaw
+        scenarios: "fio"
+        userenvs: "all"
 
   crucible-ci-all-userenvs-uperf:
     name: crucible-ci-uperf
@@ -82,13 +77,10 @@ jobs:
         ref: main
         path: crucible-ci
 
-    - name: Gather ci-environment-info
-      uses: ./crucible-ci/.github/actions/ci-environment-info
-
-    - name: Setup CI Environment
-      run: |
-        sudo ./crucible-ci/setup-ci-environment --ci-target rickshaw --ci-target-dir $(pwd)/rickshaw
-
-    - name: Run uperf CI
-      run: |
-        sudo ./crucible-ci/run-ci --userenvs all --scenarios uperf
+    - name: Run crucible-ci->integration-tests
+      uses: ./crucible-ci/.github/actions/integration-tests
+      with:
+        ci_target: "rickshaw"
+        ci_target_dir: ${{ github.workspace }}/rickshaw
+        scenarios: "uperf"
+        userenvs: "all"
