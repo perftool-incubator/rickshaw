@@ -1,0 +1,9 @@
+    {
+      "name": "utils",
+      "type": "distro",
+      "distro_info": {
+        "packages": [
+          "curl", "tar", "cpio", "xz", "gzip", "jq", "git", "cpio", "findutils", "hostname", "iputils", "iproute", "perl-core"
+        ]
+      }
+    }

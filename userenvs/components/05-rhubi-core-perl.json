@@ -1,0 +1,9 @@
+    {
+      "name": "core-perl",
+      "type": "manual",
+      "manual_info": {
+        "commands": [
+          "curl --silent -L https://cpanmin.us | /usr/bin/perl - App::cpanminus"
+        ]
+      }
+    }

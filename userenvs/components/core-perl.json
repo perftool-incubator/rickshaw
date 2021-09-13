@@ -1,0 +1,9 @@
+    {
+      "name": "core-perl",
+      "type": "distro",
+      "distro_info": {
+        "packages": [
+          "perl-App-cpanminus"
+        ]
+      }
+    }

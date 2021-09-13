@@ -45,7 +45,8 @@
           "findutils",
           "hostname",
           "iputils",
-          "iproute"
+          "iproute",
+          "perl-core"
         ]
       }
     },
@@ -79,6 +80,24 @@
             "ldconfig --verbose"
           ]
         }
+      }
+    },
+    {
+      "name": "core-perl",
+      "type": "manual",
+      "manual_info": {
+        "commands": [
+          "curl --silent -L https://cpanmin.us | /usr/bin/perl - App::cpanminus"
+        ]
+      }
+    },
+    {
+      "name": "core-node",
+      "type": "distro",
+      "distro_info": {
+        "packages": [
+          "nodejs"
+        ]
       }
     }
   ]
