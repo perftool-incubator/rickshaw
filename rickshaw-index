@@ -423,15 +423,16 @@ sub wait_for_docs {
             }
             my $found = indexed_doc_count($doctype);
             my $submitted = $num_docs_submitted{$doctype};
-            printf "  %s: %d submitted, %d found\n", $doctype, $submitted, $found;
+            printf "  %s: %d submitted, %d found", $doctype, $submitted, $found;
             if ($submitted == $found) {
+                print ", complete";
                 @doctypes = grep(!/^$doctype?/, @doctypes);
             }
+            print "\n";
             if ($found > $submitted) {
                 printf "ERROR: should not have more found than submitted, exiting\n";
             }
         }
-        printf "\n";
         $attempts++;
         sleep 2;
     }
@@ -527,7 +528,7 @@ if (ref $idx_resp_ref eq ref [] ) {
     }
     my @sorted_vers = sort(keys(%vers));
     $latest_ver = $sorted_vers[0];
-    printf "Latest CDM version found in local ES instacne is %s\n", $latest_ver;
+    printf "Latest CDM version found in local ES instance is %s\n", $latest_ver;
     foreach my $req_name ("run", "iteration", "tag", "param", "sample", "period", "metric_desc", "metric_data") {
         my $complete_index_name = "cdm" . $latest_ver . "-" . $req_name;
         if (! exists $fullnames{$complete_index_name}) {
