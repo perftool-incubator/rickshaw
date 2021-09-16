@@ -120,6 +120,25 @@
           ]
         }
       }
+    },
+    {
+      "name": "core-perl",
+      "type": "manual",
+      "manual_info": {
+        "commands": [
+          "yum -v -y install perl-core",
+          "curl --silent -L https://cpanmin.us | /usr/bin/perl - App::cpanminus"
+        ]
+      }
+    },
+    {
+      "name": "core-node",
+      "type": "distro",
+      "distro_info": {
+        "packages": [
+          "nodejs"
+        ]
+      }
     }
   ]
 }

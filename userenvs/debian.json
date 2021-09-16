@@ -45,7 +45,8 @@
           "findutils",
           "hostname",
           "iputils-ping",
-          "iproute2"
+          "iproute2",
+          "numactl"
         ]
       }
     },
@@ -60,6 +61,24 @@
           "autoconf",
           "automake",
           "make"
+        ]
+      }
+    },
+    {
+      "name": "core-perl",
+      "type": "distro",
+      "distro_info": {
+        "packages": [
+          "cpanminus"
+        ]
+      }
+    },
+    {
+      "name": "core-node",
+      "type": "distro",
+      "distro_info": {
+        "packages": [
+          "nodejs"
         ]
       }
     }

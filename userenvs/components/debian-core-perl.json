@@ -1,0 +1,10 @@
+
+    {
+      "name": "core-perl",
+      "type": "distro",
+      "distro_info": {
+        "packages": [
+          "cpanminus"
+        ]
+      }
+    }
