@@ -47,6 +47,7 @@ endpoint_name="remotehost"
 osruntime="chroot"
 userenv="rhubi8"
 user="root"
+
 ssh_opts="-o StrictHostKeyChecking=no -o PasswordAuthentication=no"
 declare -A cpuPartitioning
 declare -A numaNode
@@ -127,11 +128,12 @@ function endpoint_remotehost_test_start() {
 }
 
 function do_ssh() {
-    local user_host user host ssh_cmd
+    local user_host user host password ssh_cmd full_ssh_cmd
     user_host=$1; shift
     user=`echo $user_host | awk -F@ '{print $1}'`
     host=`echo $user_host | awk -F@ '{print $2}'`
     ssh_cmd=""
+    full_ssh_cmd=""
     if [ -z "$user" ]; then
         exit_error "do_ssh: user was blank: $user_host"
     fi
@@ -143,7 +145,13 @@ function do_ssh() {
     else
         ssh_cmd="ssh $ssh_opts $user_host $@"
     fi
-    $ssh_cmd
+    if [ -n "$password" ]; then
+         full_ssh_cmd="sshpass -p $password $ssh_cmd"
+    else
+         full_ssh_cmd="$ssh_cmd"
+    fi
+
+    $full_ssh_cmd
     local rc=$?
     return $rc
 }
@@ -287,6 +295,9 @@ function process_remotehost_opts() {
                 ;;
             user)
                 user=$val
+                ;;
+            password)
+                password=$val
                 ;;
             cpu-partitioning)
                 # cpu-partitioning is per engine:
