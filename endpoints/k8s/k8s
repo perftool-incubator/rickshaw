@@ -59,6 +59,7 @@ hugepage="0"
 osruntime="pod"
 runtimeClassName=""
 masters_tool_collect="1"
+kubeconfig="1"
 declare -A cpuPartitioning
 declare -A nodeSelector
 declare -A securityContext
@@ -333,10 +334,12 @@ function k8s_req_check() {
         echo "[ERROR]host is not defined"
         exit 1
     fi
-    k8s_kubeconfig=`ssh -o StrictHostKeyChecking=no $user@$host env | grep ^KUBECONFIG | awk -F"KUBECONFIG=" '{print $2}'`
-    if [ -z "$k8s_kubeconfig" ]; then
-        echo "[ERROR]KUBECONFIG on k8s host $host not defined"
-        exit 1
+    if [ "${kubeconfig}" == "1" ]; then
+        k8s_kubeconfig=`ssh -o StrictHostKeyChecking=no $user@$host env | grep ^KUBECONFIG | awk -F"KUBECONFIG=" '{print $2}'`
+        if [ -z "$k8s_kubeconfig" ]; then
+            echo "[ERROR]KUBECONFIG on k8s host $host not defined"
+            exit 1
+        fi
     fi
     k8s_kubectl=`ssh -o StrictHostKeyChecking=no $user@$host kubectl 2>&1`
     if [ $? -gt 0 ]; then
@@ -357,6 +360,9 @@ function process_k8s_opts() {
         # The $val may have : in it, so don't use awk to get only the second field
         val=`echo $opt | sed -e s/^$arg://`
         case "$arg" in
+            kubeconfig)
+                kubeconfig=$val
+                ;;
             client|server|clients|servers)
                 addto_clients_servers "$arg" "$val"
                 ;;
@@ -924,19 +930,21 @@ echo "These nodes are hosting the client-server pods: $active_worker_nodes"
 echo "Working on creating worker-tool pods"
 create_pods worker_tool_pods worker $active_worker_nodes
 echo "These worker-tool pods were created: $worker_tool_pods"
+new_k8s_followers="${worker_tool_pods}"
 verify_pods_running tool_worker_nodes $worker_tool_pods
 echo "These nodes are hosting the worker-tool pods: $tool_worker_nodes"
 master_nodes=`cat "$endpoint_run_dir/master-nodes.txt"`
 echo "These nodes are masters: $master_nodes"
+if [ -z "${master_nodes}" ]; then
+    masters_tool_collect="0"
+fi
 if [ "${masters_tool_collect}" == "1" ]; then
     echo "Working on creating these master-tool pods"
     create_pods master_tool_pods master $master_nodes
     echo "These master-tool pods were created: $master_tool_pods"
     verify_pods_running tool_master_nodes $master_tool_pods
     echo "These nodes are hosting the master-tool pods: $master_nodes"
-fi
-new_k8s_followers="${worker_tool_pods}"
-if [ "${masters_tool_collect}" == "1" ]; then
     new_k8s_followers+=" ${master_tool_pods}"
 fi
+
 process_roadblocks k8s ${new_k8s_followers}
