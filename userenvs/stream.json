@@ -56,7 +56,12 @@
           "findutils",
           "hostname",
           "iputils",
-          "iproute"
+          "iproute",
+          "elfutils-libelf-devel",
+          "openssl-devel",
+          "xz-devel",
+          "libzstd-devel",
+          "libcap-devel"
         ]
       }
     },

@@ -50,7 +50,6 @@ my %userenvs;
 my %run; # A multi-dimensional, nested hash, schema TBD
          # This hash documents what was run.
 my $redis_passwd = "flubber"; # TODO: make this cmdline setting
-my $rb_base_uuid = $run{'id'};
 my $rb_bin = "/usr/local/bin/roadblock.py";
 my $messages_ref;
 my $default_rb_timeout = 240;
@@ -104,6 +103,7 @@ my $abort_test_id;
 sub usage {
     print "\nusage:\n\n";
     print "--json-validator        Path to json schema validation utility\n";
+    print "--engine-dir            Directory where the engine project exists\n";
     print "--workshop-dir          Directory where workshop project exists\n";
     print "--packrat-dir           Directory where the packrat project exists\n";
     print "--roadblock-dir         Directory where workshop project exists\n";
@@ -344,7 +344,6 @@ sub build_container_image {
                             }
                         },
                         'config' => {
-                            #'entrypoint' => [ "/bin/sh", "-c", "/usr/local/bin/client-server-script" ]
                             'entrypoint' => [ "/bin/sh", "-c", "/usr/local/bin/bootstrap" ],
                             'labels' => [ 'quay.expires-after=2w' ],
                             'envs' => [ 'TOOLBOX_HOME=/opt/toolbox' ]
@@ -361,28 +360,11 @@ sub build_container_image {
                             {
                                 'name' => 'default',
                                     'requirements' => [
-                                        'bootstrap',
                                         'toolbox'
                                     ]
                             }
                         ],
                         'requirements' => [
-                            {
-                                'name' => 'bootstrap',
-                                'type' => 'files',
-                                'files_info' => {
-                                    'files' => [
-                                        {
-                                            'src' => $rickshaw_project_dir . "/bootstrap",
-                                            'dst' => '/usr/local/bin'
-                                        },
-                                        {
-                                            'src' => $rickshaw_project_dir . "/discover-cpu-partitioning.py",
-                                            'dst' => '/usr/local/bin'
-                                        }
-                                    ]
-                                }
-                            },
                             {
                                 'name' => 'toolbox',
                                 'type' => 'files',
@@ -426,7 +408,9 @@ sub build_container_image {
             " --config " . $cs_conf_file .
             " --userenv " . $rickshaw_project_dir . "/userenvs/" . $userenv . ".json" .
             " --requirements " . $run{'bench-dir'} . "/workshop.json" .
+            " --requirements " . $run{'engine-dir'} . "/workshop.json" .
             " --param %bench-dir%=" . $run{'bench-dir'} .
+            " --param %engine-dir%=" . $run{'engine-dir'} .
             " --param %rickshaw-dir%=" . $rickshaw_project_dir .
             " --requirements " . $cs_req_file .
             $workshop_roadblock_opt .
@@ -459,19 +443,51 @@ sub build_container_image {
         }
         splice(@config_analysis_output, 0, $break_line+1);
 
-        # The rest of the requirements come from the user-environment (base Linux OS),
-        # the benchmark, and tools
+        # create a list of files to include in hash calculation
         my @files = ($run{'workshop-dir'} . "/workshop.pl",
-                     $run{'workshop-dir'} . "/schema.json",
-                     $rickshaw_project_dir . "/bootstrap",
-                     $rickshaw_project_dir . "/discover-cpu-partitioning.py");
-        if ($use_roadblock) {
-            push(@files, $run{'roadblock-dir'} . "/roadblock.py");
+                     $run{'workshop-dir'} . "/schema.json");
+        # add to the file list all the files that workshop identifies
+        # as being copied into the userenv
+        ($cmd, $cmd_output, $cmd_rc) = run_cmd("$workshop_cmd --label files-listing --dump-files true");
+        my @files_dump_output = split(/\n/, $cmd_output);
+        if (open(FILES_DUMP_FH, ">", $run_dir . "/workshop.dump-files.out")) {
+            printf FILES_DUMP_FH "%s\n", join("\n", @files_dump_output);
+            close(FILES_DUMP_FH);
+        } else {
+            print "Failed to open %s/workshop.dump-files.out\n", $run_dir;
         }
-        push(@files, @{find_files($ENV{'TOOLBOX_HOME'})});
-        foreach my $tool_entry (@tools_params) {
-            push(@files, $run{'tools-dir'} . "/" . $$tool_entry{'tool'} . "/workshop.json");
+        $break_line = 0;
+        for (my $i=0; $i<scalar(@files_dump_output); $i++) {
+            if ($files_dump_output[$i] =~ /Files dump:/) {
+                $break_line = $i
+            }
         }
+        splice(@files_dump_output, 0, $break_line+1);
+        foreach my $dumped_file (@files_dump_output) {
+            if ($dumped_file !~ /^\[VERBOSE\]|^replacing/) {
+                debug_log(sprintf "found file from workshop [%s]\n", $dumped_file);
+
+                my $real_path = Cwd::realpath($dumped_file);
+                if ($real_path ne $dumped_file) {
+                    debug_log(sprintf "file from workshop [%s] is a link to [%s]\n", $dumped_file, $real_path);
+                    $dumped_file = $real_path;
+                }
+
+                if (-f $dumped_file) {
+                    push(@files, $dumped_file);
+                } elsif (-d $dumped_file) {
+                    debug_log(sprintf "file from workshop [%s] is actually a directory...\n", $dumped_file);
+                    my @found_files = @{find_files($dumped_file)};
+                    foreach my $found_file (@found_files) {
+                        debug_log(sprintf "found file [%s]\n", $found_file);
+                        push(@files, $found_file);
+                    }
+                }
+            }
+        }
+
+        # compute an md5 hash of relevant information to identify the
+        # userenv
         my $md5 = Digest::MD5->new;
         my $coder = JSON::XS->new->canonical;
         my $js = $coder->encode(\%cs_req);
@@ -503,6 +519,13 @@ sub build_container_image {
                 }
             }
         }
+        if (! exists $run{'reg-tls-verify'}) {
+            $run{'reg-tls-verify'} = "true";
+        } elsif ($run{'reg-tls-verify'} ne "true" && $run{'reg-tls-verify'} ne "false") {
+            printf "WARNING: Invalid value found for reg-tls-verify, defaulting to 'true'\n";
+            $run{'reg-tls-verify'} = "true";
+        }
+        my $tls_verify = "--tls-verify=" . $run{'reg-tls-verify'};
         if ($run{'reg-auth'} eq "") {
             printf "Disabling registry authorization due to empty 'reg-auth' variable\n";
             $skip_registry_auth = 1;
@@ -513,14 +536,14 @@ sub build_container_image {
         } else {
             $skopeo_url = "docker://" . $image_url;
         }
-        $cmd = "skopeo inspect " . $skopeo_url . " 2>&1";
+        $cmd = "skopeo inspect " . $tls_verify . " " . $skopeo_url . " 2>&1";
         debug_log(sprintf "running: %s\n", $cmd);
         ($cmd, $output, $cmd_rc) = run_cmd($cmd);
         my $push_cmd = "buildah";
         if (! $skip_registry_auth) {
             $push_cmd .= " --authfile " . $run{'reg-auth'};
         }
-        $push_cmd .= " push localhost/workshop/$workshop_image $image_url";
+        $push_cmd .= " push " . $tls_verify . " localhost/workshop/$workshop_image $image_url";
         my $rmi_cmd = "buildah rmi localhost/workshop/$workshop_image";
         if ($cmd_rc == 0) {
             printf "Image was found at %s:\n", $image_url;
@@ -686,7 +709,7 @@ sub run_tests {
 }
 
 # Apply envinronment variables
-foreach my $e (qw(RS_NAME RS_EMAIL RS_TAGS RS_DESC RS_REG_AUTH RS_REG_REPO)) {
+foreach my $e (qw(RS_NAME RS_EMAIL RS_TAGS RS_DESC RS_REG_AUTH RS_REG_REPO RS_REG_TLS_VERIFY)) {
     if (exists $ENV{$e}) {
         my $var = $e;
         $var =~ s/^RS_//;
@@ -725,8 +748,8 @@ sub process_cmdline() {
         } elsif ($arg =~ /^help$/) {
             usage;
             exit 0;
-        } elsif ($arg =~ /^base-run-dir$|^workshop-dir$|^packrat-dir$|^bench-dir$|^roadblock-dir$|^tools-dir$/ or
-                $arg =~ /^run-id$|^bench-params$|^tool-params$|^bench-params$|^max-rb-attempts$/ or
+        } elsif ($arg =~ /^base-run-dir$|^workshop-dir$|^packrat-dir$|^bench-dir$|^roadblock-dir$|^tools-dir$|^engine-dir$/ or
+                $arg =~ /^run-id$|^id$|^bench-params$|^tool-params$|^bench-params$|^max-rb-attempts$/ or
                 $arg =~ /^test-order$|^tool-group$|^num-samples$|^max-sample-failures$|^name$/ or
                 $arg =~ /^reg-(auth|repo)$/ or
                 $arg =~ /^email$|^desc$/) {
@@ -1139,7 +1162,7 @@ sub prepare_bench_tool_engines() {
         }
         debug_log(sprintf "controller pre-script output:\n%s", join("\n", $pre_cmd_output));
     }
-    copy($rickshaw_project_dir . "/client-server-script", $client_server_run_script)
+    copy($run{'engine-dir'} . "/client-server-script", $client_server_run_script)
         || die "Could not copy client-server-script to " . $client_server_run_script .
             "/client-server-script";
     chmod 0755, "$client_server_run_script";

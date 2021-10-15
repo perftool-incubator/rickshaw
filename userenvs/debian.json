@@ -46,7 +46,12 @@
           "hostname",
           "iputils-ping",
           "iproute2",
-          "numactl"
+          "numactl",
+          "libelf-dev",
+          "libssl-dev",
+          "liblzma-dev",
+          "libzstd-dev",
+          "libcap-dev"
         ]
       }
     },

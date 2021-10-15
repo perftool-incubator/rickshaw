@@ -45,7 +45,7 @@ my $coder = JSON::XS->new->canonical;
 my $result_schema_file;
 my $bench_metric_schema_file;
 my $file_rc;
-my %num_docs_submitted = ('run' => 0, 'iteration' => 0, 'param' => 0, 'tag' => 0, 'sample' => 0, 'period' => 0, 'metric_desc' => 0);
+my %num_docs_submitted = ('run' => 0, 'iteration' => 0, 'param' => 0, 'tag' => 0, 'sample' => 0, 'period' => 0);
 
 sub usage {
     print "\nusage:\n\n";
@@ -390,6 +390,28 @@ sub index_metrics {
         http_ndjson_request("POST", "localhost:9200", "/cdm" . $cdm{'ver'} . "-metric_data/_doc/_bulk", $ndjson);
     }
     close $metr_csv_fh;
+
+    # Verify these (and only these) specific metric docs are queryable in ES
+    my $attempts = 1;
+    my $max_attempts = 20;
+    my $submitted_metric_descs = scalar keys %uuid;
+    my $found_metric_descs = 0;
+    while ($found_metric_descs < $submitted_metric_descs) {
+        if ($attempts > $max_attempts) {
+            print "ERROR: could not ensure all ES metric_desc docs are indexed, exiting\n";
+            exit 1;
+        }
+        sleep 2;
+        my @terms = values %uuid;
+        my $resp_ref= http_request("POST", "localhost:9200", "/cdm" . $cdm{'ver'} . "-metric_desc/_doc/_count/",
+                                '{"query":{"terms":{"metric_desc.id": ' . $coder->encode(\@terms) . '}}}');
+        $found_metric_descs = $$resp_ref{'count'};
+        if ($found_metric_descs > $submitted_metric_descs) {
+            printf "Something went wrong, the number of metrics found (%d) in ES is greater than the number submitted (%d)\n", $found_metric_descs, $submitted_metric_descs;
+        }
+        $attempts++;
+    }
+
     if (defined $primary_metric) {
         return ($num_metric_docs_submitted, $earliest_begin, $latest_end);
     } else {
@@ -414,7 +436,7 @@ sub wait_for_docs {
             print "ERROR: could not ensure all ES docs are indexed, exiting\n";
             exit 1;
         }
-        printf "Confirming all documents are in elasticsearch (attempt #%d of %d)\n", $attempts, $max_attempts;
+        printf "wait_for_docs(): Confirming all documents are in elasticsearch (attempt #%d of %d)\n", $attempts, $max_attempts;
         my @these_doctypes = @doctypes;
         foreach my $doctype (@these_doctypes) {
             if ($num_docs_submitted{$doctype} == 0) {
@@ -431,6 +453,7 @@ sub wait_for_docs {
             print "\n";
             if ($found > $submitted) {
                 printf "ERROR: should not have more found than submitted, exiting\n";
+                exit 1;
             }
         }
         $attempts++;
@@ -580,10 +603,10 @@ if (-e $tool_dir) {
             if (opendir(COLLECTORDIR, $collector_dir)) {
                 my @numbers = grep (/\d+/, readdir(COLLECTORDIR));
                 for my $num (@numbers) {
+                    my @pids;
                     my $cd_id = $collector . "-" . $num;
                     my $num_dir = $collector_dir . "/" . $num; # $run_dir/tool-data/[client|server|worker|master]/[0-N]
                     printf "Indexing of tool data for %s starting\n", $cd_id;
-                    my @pids;
                     if (opendir(NUMDIR, $num_dir)) {
                         my @tools = grep(/\w+/, readdir(NUMDIR));
                         for my $tool (@tools) {
@@ -591,14 +614,17 @@ if (-e $tool_dir) {
                             if (opendir(TOOLDIR, $tool_dir)) {
                                 my @tool_files = grep(/metric-data-\S+\.json/, readdir(TOOLDIR));
                                 for my $tool_file (@tool_files) {
+                                
+
                                     $tool_file =~ s/(metric-data-\S+)\.json.*/$1/;
+                                    printf "Working on tool_file: %s\n", $tool_file;
                                     if (my $pid = fork) {
                                         push(@pids, $pid);
                                     } else {
                                         my $num_metric_docs_submitted = index_metrics($tool_dir . "/" . $tool_file, $collector, $num, $base_metric_doc_ref);
-                                        #printf "Child process %d for %s exiting with %d metric_desc documents indexed\n", $$, $tool_dir . "/" . $tool_file, $num_metric_docs_submitted;
-                                        exit $num_metric_docs_submitted;
+                                        exit 0;
                                     }
+
                                 }
                             }
                         }
@@ -606,12 +632,11 @@ if (-e $tool_dir) {
                     printf "Waiting for %d indexing jobs to complete\n", scalar @pids;
                     while (1) {
                         my $wait_return = wait(); 
-                        my $child_exit_code = $? >> 8;
-                        last if ($wait_return < 0);
-                        #printf "Child process %d had exit code %d\n", $wait_return, $child_exit_code;
-                        $num_docs_submitted{'metric_desc'} += $child_exit_code;
+                        if ($wait_return < 0) {
+                            last;
+                        }
                     }
-                    wait_for_docs;
+                    printf "%d indexing jobs have completed\n\n", scalar @pids;
                 }
             }
         }
@@ -746,7 +771,7 @@ if (exists $result{'iterations'}) {
                                                         # index_metric() to return the easliest-begin and latest-end for metric types matching the primary-metric
                                                         (my $num_metric_docs_submitted, $this_begin, $this_end) = index_metrics($metric_file_prefix, $cs_name, $cs_id, $base_metric_doc_ref, $primary_metric);
                                                         printf "A call to index_metrics() submitted %d metric_desc docs\n", $num_metric_docs_submitted;
-                                                        $num_docs_submitted{'metric_desc'} += $num_metric_docs_submitted;
+                                                        #$num_docs_submitted{'metric_desc'} += $num_metric_docs_submitted;
                                                         # From processing all metric files, get the very-earliest-begin and very-latest-end
                                                         if (not defined $earliest_begin or $earliest_begin > $this_begin) {
                                                             $earliest_begin = $this_begin;
@@ -782,7 +807,6 @@ if (exists $result{'iterations'}) {
                             index_es_doc("sample", $iter_idx, $sample_idx);
                             write_es_doc("sample", $run_dir . "/" . $this_samp_dir, $iter_idx, $sample_idx);
                             $sample_num++;
-                            #push(@samples, \%sample);
                         } #opendir samp
                     } #samp pass
                 } #samp_dirs
