@@ -111,7 +111,7 @@ function endpoint_k8s_test_start() {
     #
     # In the case of the k8s endpoint, there are two possible actions, and this depends on where
     # the client is in relation to the server.  If the client is within the same k8s cluster,
-    # we only need to create a k8s-service, so the client can use an IP which is more persistent
+    # we create a k8s-service, so the client can use an IP which is more persistent
     # than a pod's IP (this allows pods to come and go while keeping the same IP).  This is not
     # absolutely necessary for client-server benchnarks, but it is a best practice for cloud-native
     # aps, so we do it anyway.  If the client is not in the k8s cluster, then we must assume 
@@ -132,10 +132,6 @@ function endpoint_k8s_test_start() {
         # server-1 1.2.3.4 30002 30003
         cat $this_msg_file | jq -r '.received[] | if .payload.message.command == "user-object" and .payload.message."user-object".svc.ports then [ .payload.sender.id, .payload.message."user-object".svc.ip, .payload.message."user-object".svc.ports ] | flatten | tostring   else null end' | grep -v null | sed -e 's/"//g' -e 's/\[//' -e 's/\]//' -e 's/,/ /g' >"$endpoint_run_dir/ports.txt"
         while read -u 9 line; do
-            # Wether or not the client is hosted in this cluster, a service will be created
-            # for the server, and an endpoint will be created to ensure the service forwards
-            # connections to exactly the pod we want.
-            #
             # It is possible the server is sending IP/port info that is not for the
             # default network interface, like SRIOV.  In this case, an endpoint does
             # not need to be set up, and the orginial IP/port ifo should be forwarded.
@@ -162,83 +158,93 @@ function endpoint_k8s_test_start() {
             # Now that we have both the pod default network IP and the IP the server provided, we can figure out
             # if the server-provided IP is the default network, and if so, it is fine to create a k8s-service and
             # k8s-endpoint.
+# HN: step 1 -  Create "clusterIP-svc" that is only used in intranode
             if [ "$ip" == "$pod_ip" ]; then
-                local svc_json=$endpoint_run_dir/$name-svc.json
-                echo name: $name
-                echo ports: $ports
-                echo '{' >$svc_json
-                echo '    "apiVersion": "v1",' >>$svc_json
-                echo '    "kind": "Service",' >>$svc_json
-                echo '    "metadata": {' >>$svc_json
-                echo '        "name": "rickshaw-'$name'"' >>$svc_json
-                echo '    },' >>$svc_json
-                echo '    "spec": {' >>$svc_json
-                echo '        "ports": [' >>$svc_json
-                local count=1
-                for port in $ports; do
-                    for proto in TCP UDP; do
-                        if [ $count -gt 1 ]; then
-                            echo '            ,{' >>$svc_json
-                        else
-                            echo '            {' >>$svc_json
-                        fi
-                        lcproto=`echo $proto | tr [A-Z] [a-z]`
-                        echo '                "name": "port-'$port'-'$lcproto'",' >>$svc_json
-                        echo '                "port": '$port',' >>$svc_json
-                        echo '                "protocol": "'$proto'",' >>$svc_json
-                        echo '                "targetPort": '$port >>$svc_json
-                        echo '            }' >>$svc_json
-                        let count=$count+1
-                    done
-                done
-                echo '        ]' >>$svc_json
-                echo '    }' >>$svc_json
-                echo '}' >>$svc_json
-                cleanup_json "${svc_json}"
-                cat "$svc_json" | ssh $user@$host "kubectl create -f -" >"$endpoint_run_dir/create-svc-$name.txt"
-                # Debug info
-                ssh $user@$host "kubectl get svc/rickshaw-$name -o json" >"$endpoint_run_dir/get-svc-$name.json"
-                # Now that the service has been created, we can get the IP to contact the benchmark server
-                local svc_ip=`ssh $user@$host "kubectl get svc/rickshaw-$name -o json | jq -r .spec.clusterIP"`
-                # Instead of relying on k8s to make an association between the service and the pod, we explicitly
-                # connect the two by creating the endpoint, linking the service to the IP of the server pod
-                local svc_endp_json=$endpoint_run_dir/$name-endpoint.json
-                # While the server message does provide the IP, we just use the information we have from k8s
-                echo '{' >$svc_endp_json
-                echo '    "apiVersion": "v1",' >>$svc_endp_json
-                echo '    "kind": "Endpoints",' >>$svc_endp_json
-                echo '    "metadata": {' >>$svc_endp_json
-                echo '        "name": "rickshaw-'$name'"' >>$svc_endp_json
-                echo '    },' >>$svc_endp_json
-                echo '    "subsets": [{' >>$svc_endp_json
-                echo '        "addresses": [ { "ip": "'$pod_ip'" } ],' >>$svc_endp_json
-                echo '        "ports": [' >>$svc_endp_json
-                local count=1
-                for port in $ports; do
-                    for proto in TCP UDP; do
-                        if [ $count -gt 1 ]; then
-                            echo '            ,{' >>$svc_endp_json
-                        else
-                            echo '            {' >>$svc_endp_json
-                        fi
-                        lcproto=`echo $proto | tr [A-Z] [a-z]`
-                        echo '                "name": "port-'$port'-'$lcproto'", "protocol": "'$proto'", "port": '$port'}' >>$svc_endp_json
-                        let count=$count+1
-                    done
-                done
-                echo '        ]' >>$svc_endp_json
-                echo '    }]' >>$svc_endp_json
-                echo '}' >>$svc_endp_json
-                cleanup_json "${svc_endp_json}"
-                cat "$svc_endp_json" | ssh $user@$host "kubectl create -f -" >"$endpoint_run_dir/create-svc-endp-$name.txt"
-    
-    
                 local client_outside_cluster=0
                 local client_label=`echo $name | sed -e s/server/client/`
                 ssh $user@$host "kubectl get pods | grep -q ^rickshaw-$client_label" || client_outside_cluster=1
-                if [ "$client_outside_cluster" -eq 1 ]; then
-                    echo "Client is outside cluster, so creating ingress Nodeport"
-                    # We currently support a "NodePort" type of ingress
+                # If the client is hosted in this cluster, a clusterIP service will be created
+                # for the server, and an endpoint will be created to ensure the service forwards
+                # connections to exactly the pod we want.
+                #
+                if [ "$client_outside_cluster" -ne 1 ]; then
+                    local svc_json=$endpoint_run_dir/$name-svc.json
+                    echo name: $name
+                    echo ports: $ports
+                    echo '{' >$svc_json
+                    echo '    "apiVersion": "v1",' >>$svc_json
+                    echo '    "kind": "Service",' >>$svc_json
+                    echo '    "metadata": {' >>$svc_json
+                    echo '        "name": "rickshaw-'$name'"' >>$svc_json
+                    echo '    },' >>$svc_json
+                    echo '    "spec": {' >>$svc_json
+                    echo '        "ports": [' >>$svc_json
+                    local next=0
+                    for port in $ports; do
+                        for proto in TCP UDP; do
+                            if [ $next -eq 1 ]; then
+                                echo '            ,{' >>$svc_json
+                            else
+                                echo '            {' >>$svc_json
+                                let next=1
+                            fi
+                            lcproto=`echo $proto | tr [A-Z] [a-z]`
+                            echo '                "name": "port-'$port'-'$lcproto'",' >>$svc_json
+                            echo '                "port": '$port',' >>$svc_json
+                            echo '                "protocol": "'$proto'",' >>$svc_json
+                            echo '                "targetPort": '$port >>$svc_json
+                            echo '            }' >>$svc_json
+                        done
+                    done
+                    echo '        ]' >>$svc_json
+                    echo '    }' >>$svc_json
+                    echo '}' >>$svc_json
+                    cleanup_json "${svc_json}"
+                    cat "$svc_json" | ssh $user@$host "kubectl create -f -" >"$endpoint_run_dir/create-svc-$name.txt"
+                    # Debug info
+                    #ssh $user@$host "kubectl get svc/rickshaw-$name -o json" >"$endpoint_run_dir/get-svc-$name.json"
+                    # Now that the service has been created, we can get the IP to contact the benchmark server
+                    local svc_ip=`ssh $user@$host "kubectl get svc/rickshaw-$name -o json | jq -r .spec.clusterIP"`
+                    # Instead of relying on k8s to make an association between the service and the pod, we explicitly
+                    # connect the two by creating the endpoint, linking the service to the IP of the server pod
+    # HN Step 2: Create endpoint
+                    local svc_endp_json=$endpoint_run_dir/$name-endpoint.json
+                    # While the server message does provide the IP, we just use the information we have from k8s
+                    echo '{' >$svc_endp_json
+                    echo '    "apiVersion": "v1",' >>$svc_endp_json
+                    echo '    "kind": "Endpoints",' >>$svc_endp_json
+                    echo '    "metadata": {' >>$svc_endp_json
+                    echo '        "name": "rickshaw-'$name'"' >>$svc_endp_json
+                    echo '    },' >>$svc_endp_json
+                    echo '    "subsets": [{' >>$svc_endp_json
+                    echo '        "addresses": [ { "ip": "'$pod_ip'" } ],' >>$svc_endp_json
+                    echo '        "ports": [' >>$svc_endp_json
+                    local next=0
+                    for port in $ports; do
+                        for proto in TCP UDP; do
+                            if [ $next -eq 1 ]; then
+                                echo '            ,{' >>$svc_endp_json
+                            else
+                                echo '            {' >>$svc_endp_json
+                                let next=1
+                            fi
+                            lcproto=`echo $proto | tr [A-Z] [a-z]`
+                            echo '                "name": "port-'$port'-'$lcproto'", "protocol": "'$proto'", "port": '$port'}' >>$svc_endp_json
+                        done
+                    done
+                    echo '        ]' >>$svc_endp_json
+                    echo '    }]' >>$svc_endp_json
+                    echo '}' >>$svc_endp_json
+                    echo "HN dumping endp"
+                    cat $svc_endp_json
+                    cleanup_json "${svc_endp_json}"
+                    cat "$svc_endp_json" | ssh $user@$host "kubectl create -f -" >"$endpoint_run_dir/create-svc-endp-$name.txt"
+                    # client inside cluster
+                else
+    #HN Step 3: create nodePort-svc
+                    # client outside cluster
+                    echo "Client is outside cluster, so creating ingress NodePort Service"
+                    # We currently support a "NodePort" type of service
                     local nodep_json=$endpoint_run_dir/$name-nodep.json
                     echo name: $name
                     echo ports: $ports
@@ -251,29 +257,43 @@ function endpoint_k8s_test_start() {
                     echo '    "spec": {' >>$nodep_json
                     echo '        "type": "NodePort",' >>$nodep_json
                     echo '        "ports": [' >>$nodep_json
-                    local count=1
+                    local next=0
                     local port_list=""
                     for port in $ports; do
-                        if [ $count -gt 1 ]; then
+                        if [ $next -eq 1 ]; then
                             port_list+=", $port"
                             echo '            ,{' >>$nodep_json
                         else
                             port_list="$port"
                             echo '            {' >>$nodep_json
+                            let next=1
                         fi
-                        echo '                "name": "port-'$port'",' >>$nodep_json
+                        echo '                "name": "tcp-port-'$port'",' >>$nodep_json
                         echo '                "nodePort": '$port',' >>$nodep_json
                         echo '                "port": '$port',' >>$nodep_json
                         echo '                "protocol": "TCP",' >>$nodep_json
                         echo '                "targetPort": '$port >>$nodep_json
                         echo '            }' >>$nodep_json
-                        let count=$count+1
+                    done
+
+                    for port in $ports; do
+                        echo '            ,{' >>$nodep_json
+                        echo '                "name": "udp-port-'$port'",' >>$nodep_json
+                        echo '                "nodePort": '$port',' >>$nodep_json
+                        echo '                "port": '$port',' >>$nodep_json
+                        echo '                "protocol": "UDP",' >>$nodep_json
+                        echo '                "targetPort": '$port >>$nodep_json
+                        echo '            }' >>$nodep_json
                     done
                     echo '        ]' >>$nodep_json
                     echo '    }' >>$nodep_json
                     echo '}' >>$nodep_json
+                    echo "HNHN cat nodep svc"
+                    cat $nodep_json
+
                     cleanup_json "${nodep_json}"
                     cat "$nodep_json" | ssh $user@$host "kubectl create -f -" >"$endpoint_run_dir/create-svc-nodeport-$name.txt"
+#HN Step 4: create nodePort-endpoint
                     local endp_nodep_json=$endpoint_run_dir/$name-nodeport-endpoint.json
                     echo '{' >$endp_nodep_json
                     echo '    "apiVersion": "v1",' >>$endp_nodep_json
@@ -282,18 +302,22 @@ function endpoint_k8s_test_start() {
                     echo '        "name": "rickshaw-'$name'-nodeport"' >>$endp_nodep_json
                     echo '    },' >>$endp_nodep_json
                     echo '    "subsets": [{' >>$endp_nodep_json
-                    # We use the IP from the previously created service, not the pod's IP
-                    echo '        "addresses": [ { "ip": "'$svc_ip'" } ],' >>$endp_nodep_json
+                    # We use pod's IP
+                    echo '        "addresses": [ { "ip": "'$pod_ip'" } ],' >>$endp_nodep_json
                     echo '        "ports": [' >>$endp_nodep_json
-                    count=1
+                    local next=0
                     for port in $ports; do
-                        if [ $count -gt 1 ]; then
+                        if [ $next -eq 1 ]; then
                             echo '            ,{' >>$endp_nodep_json
                         else
                             echo '            {' >>$endp_nodep_json
+                            let next=1
                         fi
-                            echo '                "name": "port-'$port'", "port": '$port'}' >>$endp_nodep_json
-                        let count=$count+1
+                            echo '                "name": "tcp-port-'$port'", "protocol": "TCP", "port": '$port'}' >>$endp_nodep_json
+                    done
+                    for port in $ports; do
+                            echo '            ,{' >>$endp_nodep_json
+                            echo '                "name": "udp-port-'$port'", "protocol": "UDP", "port": '$port'}' >>$endp_nodep_json
                     done
                     echo '        ]' >>$endp_nodep_json
                     echo '    }]' >>$endp_nodep_json
@@ -322,15 +346,18 @@ function endpoint_k8s_test_start() {
         echo "Did not find $this_msg_file"
     fi
     sleep 10 # why?
-    echo "services:"
+    echo "HN: get services:"
     ssh $user@$host "kubectl get svc"
     ssh $user@$host kubectl get svc -o json >"$endpoint_run_dir/kubectl-get-services.json"
-    echo "endpoints:"
+    echo "HN get endpoints:"
     ssh $user@$host "kubectl get endpoints"
     ssh $user@$host kubectl get endpoints -o json >"$endpoint_run_dir/kubectl-get-endpoints.json"
-    echo "pods:"
+    echo "HN: get pods:"
     ssh $user@$host "kubectl get pods -o wide"
     ssh $user@$host kubectl get pods -o json >"$endpoint_run_dir/kubectl-get-pods.json"
+    #HN
+    ssh $user@$host "kubectl describe svc"
+    ssh $user@$host "kubectl describe endpoints"
 }
 
 function k8s_req_check() {
