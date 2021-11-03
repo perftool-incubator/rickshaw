@@ -158,7 +158,6 @@ function endpoint_k8s_test_start() {
             # Now that we have both the pod default network IP and the IP the server provided, we can figure out
             # if the server-provided IP is the default network, and if so, it is fine to create a k8s-service and
             # k8s-endpoint.
-# HN: step 1 -  Create "clusterIP-svc" that is only used in intranode
             if [ "$ip" == "$pod_ip" ]; then
                 local client_outside_cluster=0
                 local client_label=`echo $name | sed -e s/server/client/`
@@ -207,7 +206,6 @@ function endpoint_k8s_test_start() {
                     local svc_ip=`ssh $user@$host "kubectl get svc/rickshaw-$name -o json | jq -r .spec.clusterIP"`
                     # Instead of relying on k8s to make an association between the service and the pod, we explicitly
                     # connect the two by creating the endpoint, linking the service to the IP of the server pod
-    # HN Step 2: Create endpoint
                     local svc_endp_json=$endpoint_run_dir/$name-endpoint.json
                     # While the server message does provide the IP, we just use the information we have from k8s
                     echo '{' >$svc_endp_json
@@ -235,13 +233,10 @@ function endpoint_k8s_test_start() {
                     echo '        ]' >>$svc_endp_json
                     echo '    }]' >>$svc_endp_json
                     echo '}' >>$svc_endp_json
-                    echo "HN dumping endp"
-                    cat $svc_endp_json
                     cleanup_json "${svc_endp_json}"
                     cat "$svc_endp_json" | ssh $user@$host "kubectl create -f -" >"$endpoint_run_dir/create-svc-endp-$name.txt"
                     # client inside cluster
                 else
-    #HN Step 3: create nodePort-svc
                     # client outside cluster
                     echo "Client is outside cluster, so creating ingress NodePort Service"
                     # We currently support a "NodePort" type of service
@@ -288,12 +283,9 @@ function endpoint_k8s_test_start() {
                     echo '        ]' >>$nodep_json
                     echo '    }' >>$nodep_json
                     echo '}' >>$nodep_json
-                    echo "HNHN cat nodep svc"
-                    cat $nodep_json
 
                     cleanup_json "${nodep_json}"
                     cat "$nodep_json" | ssh $user@$host "kubectl create -f -" >"$endpoint_run_dir/create-svc-nodeport-$name.txt"
-#HN Step 4: create nodePort-endpoint
                     local endp_nodep_json=$endpoint_run_dir/$name-nodeport-endpoint.json
                     echo '{' >$endp_nodep_json
                     echo '    "apiVersion": "v1",' >>$endp_nodep_json
@@ -346,18 +338,15 @@ function endpoint_k8s_test_start() {
         echo "Did not find $this_msg_file"
     fi
     sleep 10 # why?
-    echo "HN: get services:"
+    echo "services:"
     ssh $user@$host "kubectl get svc"
     ssh $user@$host kubectl get svc -o json >"$endpoint_run_dir/kubectl-get-services.json"
-    echo "HN get endpoints:"
+    echo "endpoints:"
     ssh $user@$host "kubectl get endpoints"
     ssh $user@$host kubectl get endpoints -o json >"$endpoint_run_dir/kubectl-get-endpoints.json"
-    echo "HN: get pods:"
+    echo "pods:"
     ssh $user@$host "kubectl get pods -o wide"
     ssh $user@$host kubectl get pods -o json >"$endpoint_run_dir/kubectl-get-pods.json"
-    #HN
-    ssh $user@$host "kubectl describe svc"
-    ssh $user@$host "kubectl describe endpoints"
 }
 
 function k8s_req_check() {
