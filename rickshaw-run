@@ -540,6 +540,20 @@ sub push_local_image {
     my $image_tag = shift;
     my $source_image_url = delete_proto($run{'reg-repo'}) . ":" . $image_tag;
     my $dest_image_url = $run{'reg-repo'} . ":" . $image_tag;
+    if ($dest_image_url =~ /^dir:/) {
+        $dest_image_url =~ /^dir:(.*)/;
+        my $image_dir = $1;
+        if (! -d $image_dir) {
+            printf "Creating local registry directory: %s\n", $image_dir;
+            make_path($image_dir, { verbose => 1, error => \my $err } );
+            if ($err && @$err) {
+                print "make_path: encountered errors:\n";
+                for my $diag (@$err) {
+                    print Dumper $diag;
+                }
+            }
+        }
+    }
     my $tls_verify = "--tls-verify=" . $run{'reg-tls-verify'};
     if (!local_image_found($image_tag)) {
         die "ERROR: push_local_image(): could not find local image before push";
