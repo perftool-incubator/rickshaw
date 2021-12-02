@@ -474,11 +474,15 @@ sub workshop_build_image {
                $tag, $image_tag;
         exit 1;
     }
+    my $proj_arg = $run{'reg-proj'};
+    # Remove any proto heaer if any
+    $proj_arg =~ s/^.+:[\/]{0,1}(.+)$/$1/;
+    $proj_arg .= "--proj ";
     my $workshop_build_cmd = $workshop_base_cmd
                              . " --skip-update " . $skip_update
                              . " " . $userenv_arg
                              . " " . $req_args
-                             . " --proj " . $run{'reg-proj'}
+                             . " --proj " . $proj_arg
                              . " --label " . $run{'reg-label'}
                              . " --tag " . $image_tag;
     printf "Going to generate a new client-server container image with this workshop cmd:\n\n %s\n", $workshop_build_cmd;
