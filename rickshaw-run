@@ -442,11 +442,15 @@ sub remote_image_found {
     }
 }
 
+sub delete_proto {
+    my $line = shift;
+    $line =~ s/^[^\/]+:[\/]{0,1}(.+)$/$1/;
+    return $line;
+}
+
 sub local_image_found {
     my $image_tag = shift;
-    my $source_image_url = $run{'reg-repo'} . ":" . $image_tag;
-    # Remove any proto heaer if any
-    $source_image_url =~ s/^.+:[\/]{0,1}(.+)$/$1/;
+    my $source_image_url = delete_proto($run{'reg-repo'}) . ":" . $image_tag;
     printf "Checking for local workhop image: %s... ", $source_image_url;
     my $cmd = "buildah images " . $source_image_url;
     printf "cmd:\n%s\n\n", $cmd;
@@ -476,15 +480,14 @@ sub workshop_build_image {
                $tag, $image_tag;
         exit 1;
     }
-    my $proj_arg = $run{'reg-proj'};
+    my $proj = $run{'reg-proj'};
     # Remove any proto heaer if any
-    $proj_arg =~ s/^.+:[\/]{0,1}(.+)$/$1/;
-    $proj_arg .= "--proj ";
+    $proj =~ s/^.+:[\/]{0,1}(.+)$/$1/;
     my $workshop_build_cmd = $workshop_base_cmd
                              . " --skip-update " . $skip_update
                              . " " . $userenv_arg
                              . " " . $req_args
-                             . " --proj " . $proj_arg
+                             . " --proj " . $proj
                              . " --label " . $run{'reg-label'}
                              . " --tag " . $image_tag;
     printf "Going to generate a new client-server container image with this workshop cmd:\n\n %s\n", $workshop_build_cmd;
@@ -518,9 +521,7 @@ sub workshop_build_image {
 
 sub delete_local_image {
     my $image_tag = shift;
-    my $source_image_url = $run{'reg-repo'} . ":" . $image_tag;
-    # Remove any proto heaer if any
-    $source_image_url =~ s/^.+:[\/]{0,1}(.+)$/$1/;
+    my $source_image_url = delete_proto($run{'reg-repo'}) . ":" . $image_tag;
     my $tls_verify = "--tls-verify=" . $run{'reg-tls-verify'};
     if (!local_image_found($image_tag)) {
         die "ERROR: delete_local_image(): could not find local image before delete";
@@ -537,9 +538,7 @@ sub delete_local_image {
 
 sub push_local_image {
     my $image_tag = shift;
-    my $source_image_url = $run{'reg-repo'} . ":" . $image_tag;
-    # Remove any proto heaer if any
-    $source_image_url =~ s/^.+:[\/]{0,1}(.+)$/$1/;
+    my $source_image_url = delete_proto($run{'reg-repo'}) . ":" . $image_tag;
     my $dest_image_url = $run{'reg-repo'} . ":" . $image_tag;
     my $tls_verify = "--tls-verify=" . $run{'reg-tls-verify'};
     if (!local_image_found($image_tag)) {
