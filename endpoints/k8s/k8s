@@ -60,6 +60,7 @@ osruntime="pod"
 runtimeClassName=""
 masters_tool_collect="1"
 kubeconfig="1"
+user="kni"
 declare -A cpuPartitioning
 declare -A nodeSelector
 declare -A PsecurityContext
