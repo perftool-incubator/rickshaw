@@ -444,9 +444,11 @@ sub remote_image_found {
 
 sub local_image_found {
     my $image_tag = shift;
-    my $image_url = $run{'reg-repo'} . ":" . $image_tag;
-    printf "Checking for local workhop image: %s... ", $image_url;
-    my $cmd = "buildah images " . $image_url;
+    my $source_image_url = $run{'reg-repo'} . ":" . $image_tag;
+    # Remove any proto heaer if any
+    $source_image_url =~ s/^.+:[\/]{0,1}(.+)$/$1/;
+    printf "Checking for local workhop image: %s... ", $source_image_url;
+    my $cmd = "buildah images " . $source_image_url;
     printf "cmd:\n%s\n\n", $cmd;
     ($cmd, my $output, my $cmd_rc) = run_cmd($cmd);
     printf "output:\n%s\n\n", $output;
@@ -516,13 +518,15 @@ sub workshop_build_image {
 
 sub delete_local_image {
     my $image_tag = shift;
-    my $image_url = $run{'reg-repo'} . ":" . $image_tag;
+    my $source_image_url = $run{'reg-repo'} . ":" . $image_tag;
+    # Remove any proto heaer if any
+    $source_image_url =~ s/^.+:[\/]{0,1}(.+)$/$1/;
     my $tls_verify = "--tls-verify=" . $run{'reg-tls-verify'};
     if (!local_image_found($image_tag)) {
-        die "ERROR: push_local_image(): could not find local image before delete";
+        die "ERROR: delete_local_image(): could not find local image before delete";
     }
     my $cmd = "buildah";
-    $cmd .= " rmi " . " " . $image_url;
+    $cmd .= " rmi " . " " . $source_image_url;
     ($cmd, my $output, my $cmd_rc) = run_cmd($cmd);
     if ($cmd_rc != 0) {
         printf "ERROR: delete_local_image(): rmi command [%s] failed with %d\nOutput:\n%s\n\n",
@@ -533,17 +537,19 @@ sub delete_local_image {
 
 sub push_local_image {
     my $image_tag = shift;
-    my $image_url = $run{'reg-repo'} . ":" . $image_tag;
+    my $source_image_url = $run{'reg-repo'} . ":" . $image_tag;
+    # Remove any proto heaer if any
+    $source_image_url =~ s/^.+:[\/]{0,1}(.+)$/$1/;
+    my $dest_image_url = $run{'reg-repo'} . ":" . $image_tag;
     my $tls_verify = "--tls-verify=" . $run{'reg-tls-verify'};
     if (!local_image_found($image_tag)) {
         die "ERROR: push_local_image(): could not find local image before push";
     }
-    #my $remote_image_url = $run{'reg-repo'} . ":" . $image_tag;
     my $cmd = "buildah";
     if (! $skip_registry_auth) {
         $cmd .= " --authfile " . $run{'reg-auth'};
     }
-    $cmd .= " push " . $tls_verify . " " . $image_url . " " . $image_url;
+    $cmd .= " push " . $tls_verify . " " . $source_image_url . " " . $dest_image_url;
     ($cmd, my $output, my $cmd_rc) = run_cmd($cmd);
     if ($cmd_rc != 0) {
         printf "ERROR: push_local_image(): push command [%s] failed with %d\nOutput:\n%s\n\n",
