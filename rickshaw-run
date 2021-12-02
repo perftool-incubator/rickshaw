@@ -933,7 +933,7 @@ sub validate_controller_env() {
         if ( ! exists $run{'reg-auth'} ) {
             die "You must define a path to a authorizaton file (--reg-auth or RS_REG_AUTH) to use rickshaw with workshop"
         }
-        if ($run{'reg-repo'} =~ /^([^\/]+)\/([^\/]+)\/([^\/]+)$/) {
+        if ($run{'reg-repo'} =~ /^(.+)\/([^\/]+)\/([^\/]+)$/) {
             $run{'reg-proj'} = $1 . "/" . $2;
             $run{'reg-label'} = $3;
         } else {
