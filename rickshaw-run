@@ -1394,11 +1394,11 @@ sub prepare_bench_tool_engines() {
                 my $tool_cmd_file = $cs_tool_cmds_dir . "/" . $start_stop;
                 open(my $fh, ">" . $tool_cmd_file) ||
                     die "[ERROR]could not open cmd file for writing: [" . $tool_cmd_file . "]\n";
-                #my $cs_endpoint = $$cs_ref{'endpoint-type'};
                 foreach my $tool_entry (@tools_params) {
                     build_tool_cmd($tool_entry, $start_stop, $fh, $$cs_ref{'endpoint-type'});
                 }
-                close(TOOL_CMD_FH);
+                close($fh);
+                chmod 0755, $tool_cmd_file;
             }
         }
     }
