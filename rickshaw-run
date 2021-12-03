@@ -957,12 +957,15 @@ sub validate_controller_env() {
         if ($run{'reg-repo'} =~ /^(\w+:\/){0,1}([^\/]+\/){0,1}([^\/]+\/){0,1}([^\/]+)$/) {
             if (defined($1)) {
                 $run{'reg-proto'} = $1;
+                $run{'reg-proto'} =~ s/([^\/]+)\//$1/;
             }
             if (defined($2)) {
                 $run{'reg-host'} = $2;
+                $run{'reg-host'} =~ s/([^\/]+)\//$1/;
             }
             if (defined($3)) {
                 $run{'reg-proj'} = $3;
+                $run{'reg-proj'} =~ s/([^\/]+)\//$1/;
             }
             if (defined($4)) {
                 $run{'reg-label'} = $4;
