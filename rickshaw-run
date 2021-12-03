@@ -472,6 +472,7 @@ sub workshop_build_image {
     my $tag = shift;
     my $skip_update = shift;
     if (!defined $skip_update) {
+        printf "skip_update was not defined, so setting to false\n";
         $skip_update = "false";
     }
     my $image_tag = calc_image_md5($userenv_arg, $req_args);
@@ -484,7 +485,7 @@ sub workshop_build_image {
                              . " --skip-update " . $skip_update
                              . " " . $userenv_arg
                              . " " . $req_args
-                             . " --proj " . $run{'reg-proj'}
+                             . " --proj " . $run{'reg-host'} . $run{'reg-proj'}
                              . " --label " . $run{'reg-label'}
                              . " --tag " . $image_tag;
     printf "Going to generate a new client-server container image with this workshop cmd:\n\n %s\n", $workshop_build_cmd;
@@ -760,7 +761,7 @@ sub source_container_image {
     $i++;
     if ($i < scalar @workshop_args) {
         while ($i < scalar @workshop_args) {
-            workshop_build_image($workshop_args[$i]{'userenv'}, $workshop_args[$i]{'reqs'}, $workshop_args[$i]{'tag'}, $workshop_args[$i]{'skip_update'});
+            workshop_build_image($workshop_args[$i]{'userenv'}, $workshop_args[$i]{'reqs'}, $workshop_args[$i]{'tag'}, $workshop_args[$i]{'skip-update'});
             push_local_image($workshop_args[$i]{'tag'});
             push(@local_images, $workshop_args[$i]{'tag'});
             $image_url = $run{'reg-repo'} . ":" . $workshop_args[$i]{'tag'};
@@ -961,7 +962,9 @@ sub validate_controller_env() {
             }
             if (defined($2)) {
                 $run{'reg-host'} = $2;
-                $run{'reg-host'} =~ s/([^\/]+)\//$1/;
+                #$run{'reg-host'} =~ s/([^\/]+)\//$1/;
+            } else {
+                $run{'reg-host'} = '';
             }
             if (defined($3)) {
                 $run{'reg-proj'} = $3;
