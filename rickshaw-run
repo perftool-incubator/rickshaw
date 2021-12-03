@@ -719,7 +719,7 @@ sub source_container_image {
             $skip_update = "true";
         }
         my $tag = calc_image_md5($userenv_arg . " " . $req_arg);
-        my %args = ( 'userenv' => $userenv_arg, 'reqs' => $req_arg, 'tag' => $tag );
+        my %args = ( 'userenv' => $userenv_arg, 'reqs' => $req_arg, 'tag' => $tag, 'skip-update' => $skip_update );
         push (@workshop_args, \%args);
 
         $count++;
