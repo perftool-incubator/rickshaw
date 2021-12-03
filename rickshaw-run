@@ -481,11 +481,13 @@ sub workshop_build_image {
                $tag, $image_tag;
         exit 1;
     }
+    my $workshop_reg_host = $run{'reg-host'};
+    $workshop_reg_host =~ s/:\d+$//;
     my $workshop_build_cmd = $workshop_base_cmd
                              . " --skip-update " . $skip_update
                              . " " . $userenv_arg
                              . " " . $req_args
-                             . " --proj " . $run{'reg-host'} . $run{'reg-proj'}
+                             . " --proj " . $workshop_reg_host . "/" . $run{'reg-proj'}
                              . " --label " . $run{'reg-label'}
                              . " --tag " . $image_tag;
     printf "Going to generate a new client-server container image with this workshop cmd:\n\n %s\n", $workshop_build_cmd;
@@ -954,7 +956,6 @@ sub validate_controller_env() {
         if ( ! exists $run{'reg-auth'} ) {
             die "You must define a path to a authorizaton file (--reg-auth or RS_REG_AUTH) to use rickshaw with workshop"
         }
-        #if ($run{'reg-repo'} =~ /^(\w+:\/){0,1}([^\/^:]+\/){0,1}([^\/^:]+\/){0,1}([^\/^:]+\/)$/) {
         if ($run{'reg-repo'} =~ /^(\w+:\/){0,1}([^\/]+\/){0,1}([^\/]+\/){0,1}([^\/]+)$/) {
             if (defined($1)) {
                 $run{'reg-proto'} = $1;
@@ -962,7 +963,7 @@ sub validate_controller_env() {
             }
             if (defined($2)) {
                 $run{'reg-host'} = $2;
-                #$run{'reg-host'} =~ s/([^\/]+)\//$1/;
+                $run{'reg-host'} =~ s/([^\/]+)\//$1/;
             } else {
                 $run{'reg-host'} = '';
             }
