@@ -734,7 +734,7 @@ sub source_container_image {
             @$userenv_ref{'requirements'} = \@reqs;
             $$userenv_ref{'userenv'}{'name'} = "client-server";
             $$userenv_ref{'userenv'}{'label'} = "client-server";
-            $$userenv_ref{'userenv'}{'origin'}{'image'} = $run{'reg-repo'};
+            $$userenv_ref{'userenv'}{'origin'}{'image'} = delete_proto($run{'reg-repo'});
             $$userenv_ref{'userenv'}{'origin'}{'tag'} = $tag;
             my $userenv_file = $config_dir . "/userenv-" . $tag . ".json";
             put_json_file($userenv_file, $userenv_ref);
