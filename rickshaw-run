@@ -728,10 +728,16 @@ sub get_image_urls {
             $run{'reg-proj'} = $3;
             $run{'reg-proj'} =~ s/\/$//;
             debug_log(sprintf "reg-proj:      [%s]\n", $run{'reg-proj'});
-            $run{'source-image-url'} = $run{'reg-host'} . "/" . $run{'reg-proj'};
-        } else {
-            $run{'source-image-url'} = $run{'reg-host'};
         }
+        if (!defined $run{'reg-host'} and defined $run{'reg-proj'}) {
+            $run{'reg-host'} = $run{'reg-proj'};
+        } elsif (defined $run{'reg-host'} and !defined $run{'reg-proj'}) {
+            $run{'reg-proj'} = $run{'reg-host'};
+        } elsif (!defined $run{'reg-host'} and !defined $run{'reg-proj'}) {
+            die "At least one of the host or the project must be present in --reg-repo / REG_REPO";
+        }
+        $run{'source-image-url'} = $run{'reg-host'} . "/" . $run{'reg-proj'};
+            
         if (defined($4)) {
             $run{'reg-label'} = $4;
             debug_log(sprintf "reg-label:     [%s]\n", $run{'reg-label'});
