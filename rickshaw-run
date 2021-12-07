@@ -698,7 +698,6 @@ sub get_image_urls {
     if ($run{'reg-repo'} =~ /^(\w+:\/){0,1}([^\/]+\/){0,1}([^\/]+\/){0,1}([^\/]+)$/) {
         if (defined($1)) {
             $run{'reg-proto'} = $1;
-            $run{'reg-proto'} =~ s/\/$//;
             printf "reg-proto:     [%s]\n", $run{'reg-proto'};
         } else {
             $run{'reg-proto'} = '';
@@ -731,10 +730,13 @@ sub get_image_urls {
             die "At least one of the host or the project must be present in --reg-repo / REG_REPO";
         }
         $run{'source-image-url'} = $run{'reg-host'} . "/" . $run{'reg-proj'};
-        if (defined $run{'reg_port'}) {
-            $run{'dest-image-url'} = $run{'reg-host'} . $run{'reg_port'} . "/" . $run{'reg-proj'};
+        if (defined $run{'reg-host-port'}) {
+            $run{'dest-image-url'} = $run{'reg-host'} . $run{'reg-host-port'} . "/" . $run{'reg-proj'};
         } else {
             $run{'dest-image-url'} = $run{'reg-host'} . "/" . $run{'reg-proj'};
+        }
+        if (defined $run{'reg-proto'}) {
+            $run{'dest-image-url'} = $run{'reg-proto'} . $run{'dest-image-url'};
         }
             
         if (defined($4)) {
