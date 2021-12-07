@@ -417,7 +417,7 @@ sub calc_image_md5 {
 sub remote_image_found {
     my $image_tag = shift;
     my $image_url = $run{'reg-repo'} . ":" . $image_tag;
-    printf "Checking for remote workhop image: %s... ", $image_url;
+    printf "Checking for remote workshop image: %s... ", $image_url;
     if (! exists $run{'reg-tls-verify'}) {
         $run{'reg-tls-verify'} = "true";
     } elsif ($run{'reg-tls-verify'} ne "true" && $run{'reg-tls-verify'} ne "false") {
@@ -450,8 +450,8 @@ sub delete_proto {
 
 sub local_image_found {
     my $image_tag = shift;
-    my $source_image_url = delete_proto($run{'reg-repo'}) . ":" . $image_tag;
-    printf "Checking for local workhop image: %s... ", $source_image_url;
+    my $source_image_url = $run{'reg-host'} . "/" . $run{'reg-proj'} . "/" . $run{'reg-label'} . ":" . $image_tag;
+    printf "Checking for local workshop image: %s... ", $source_image_url;
     my $cmd = "buildah images " . $source_image_url;
     printf "cmd:\n%s\n\n", $cmd;
     ($cmd, my $output, my $cmd_rc) = run_cmd($cmd);
@@ -460,7 +460,11 @@ sub local_image_found {
         printf "found\n";
         return 1;
     } else {
-        printf "missing\n";
+        printf "missing\n\n";
+        my $cmd = "buildah images " . $source_image_url;
+        printf "cmd:\n%s\n\n", $cmd;
+        ($cmd, my $output, my $cmd_rc) = run_cmd($cmd);
+        printf "output:\n%s\n\n", $output;
         return 0;
     }
 }
@@ -481,13 +485,11 @@ sub workshop_build_image {
                $tag, $image_tag;
         exit 1;
     }
-    my $workshop_reg_host = $run{'reg-host'};
-    $workshop_reg_host =~ s/:\d+$//;
     my $workshop_build_cmd = $workshop_base_cmd
                              . " --skip-update " . $skip_update
                              . " " . $userenv_arg
                              . " " . $req_args
-                             . " --proj " . $workshop_reg_host . "/" . $run{'reg-proj'}
+                             . " --proj " . $run{'reg-host'} . "/" . $run{'reg-proj'}
                              . " --label " . $run{'reg-label'}
                              . " --tag " . $image_tag;
     printf "Going to generate a new client-server container image with this workshop cmd:\n\n %s\n", $workshop_build_cmd;
@@ -521,7 +523,7 @@ sub workshop_build_image {
 
 sub delete_local_image {
     my $image_tag = shift;
-    my $source_image_url = delete_proto($run{'reg-repo'}) . ":" . $image_tag;
+    my $source_image_url = $run{'reg-host'} . "/" . $run{'reg-proj'} . "/" . $run{'reg-label'} . ":" . $image_tag;
     my $tls_verify = "--tls-verify=" . $run{'reg-tls-verify'};
     if (!local_image_found($image_tag)) {
         die "ERROR: delete_local_image(): could not find local image before delete";
@@ -538,7 +540,7 @@ sub delete_local_image {
 
 sub push_local_image {
     my $image_tag = shift;
-    my $source_image_url = delete_proto($run{'reg-repo'}) . ":" . $image_tag;
+    my $source_image_url = $run{'reg-host'} . "/" . $run{'reg-proj'} . "/" . $run{'reg-label'} . ":" . $image_tag;
     my $dest_image_url = $run{'reg-repo'} . ":" . $image_tag;
     if ($dest_image_url =~ /^dir:/) {
         $dest_image_url =~ /^dir:(.*)/;
@@ -959,20 +961,34 @@ sub validate_controller_env() {
         if ($run{'reg-repo'} =~ /^(\w+:\/){0,1}([^\/]+\/){0,1}([^\/]+\/){0,1}([^\/]+)$/) {
             if (defined($1)) {
                 $run{'reg-proto'} = $1;
-                $run{'reg-proto'} =~ s/([^\/]+)\//$1/;
+                $run{'reg-proto'} =~ s/\/$//;
+                printf "reg-proto:     [%s]\n", $run{'reg-proto'};
+            } else {
+                $run{'reg-proto'} = '';
             }
             if (defined($2)) {
                 $run{'reg-host'} = $2;
-                $run{'reg-host'} =~ s/([^\/]+)\//$1/;
+                if ($run{'reg-host'} =~ /(\w+)(:\d+)/) {
+                    $run{'reg-host'} = $1;
+                    $run{'reg-host-port'} = $2;
+                    debug_log(sprintf "reg-host:      [%s]\n", $run{'reg-host'});
+                    debug_log(sprintf "reg-host-port: [%s]\n", $run{'reg-host-port'});
+                } else {
+                    $run{'reg-host'} =~ s/\/$//;
+                    $run{'reg-host-port'} = '';
+                    debug_log(sprintf "reg-host:      [%s]\n", $run{'reg-host'});
+                }
             } else {
                 $run{'reg-host'} = '';
             }
             if (defined($3)) {
                 $run{'reg-proj'} = $3;
-                $run{'reg-proj'} =~ s/([^\/]+)\//$1/;
+                $run{'reg-proj'} =~ s/\/$//;
+                debug_log(sprintf "reg-proj:      [%s]\n", $run{'reg-proj'});
             }
             if (defined($4)) {
                 $run{'reg-label'} = $4;
+                debug_log(sprintf "reg-label:     [%s]\n", $run{'reg-label'});
             } else {
                 print "The label/repo was not defined in --reg-repo or RS_REG_REPO: [%s]\n", $run{'reg-repo'};
             }
