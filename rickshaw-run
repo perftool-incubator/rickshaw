@@ -416,7 +416,7 @@ sub calc_image_md5 {
 
 sub remote_image_found {
     my $image_tag = shift;
-    my $full_url = $run{'reg-repo'} . ":" . $image_tag;
+    my $full_url = $run{'dest-image-url'} . ":" . $image_tag;
     printf "Checking for remote workshop image: %s... ", $full_url;
     if (! exists $run{'reg-tls-verify'}) {
         $run{'reg-tls-verify'} = "true";
@@ -542,7 +542,7 @@ sub delete_local_image {
 sub push_local_image {
     my $image_tag = shift;
     my $full_src_url = $run{'source-image-url'} . ":" . $image_tag;
-    my $full_dest_url = $run{'reg-repo'} . ":" . $image_tag;
+    my $full_dest_url = $run{'dest-image-url'} . ":" . $image_tag;
     if ($full_dest_url =~ /^dir:/) {
         $full_dest_url =~ /^dir:(.*)/;
         my $image_dir = $1;
@@ -731,11 +731,19 @@ sub get_image_urls {
             die "At least one of the host or the project must be present in --reg-repo / REG_REPO";
         }
         $run{'source-image-url'} = $run{'reg-host'} . "/" . $run{'reg-proj'};
+        if (defined $run{'reg_port'}) {
+            $run{'dest-image-url'} = $run{'reg-host'} . $run{'reg_port'} . "/" . $run{'reg-proj'};
+        } else {
+            $run{'dest-image-url'} = $run{'reg-host'} . "/" . $run{'reg-proj'};
+        }
             
         if (defined($4)) {
             $run{'reg-label'} = $4;
             debug_log(sprintf "reg-label:     [%s]\n", $run{'reg-label'});
             $run{'source-image-url'} .= "/" . $run{'reg-label'};
+            printf "source-image-url: [%s]\n", $run{'source-image-url'};
+            $run{'dest-image-url'} .= "/" . $run{'reg-label'};
+            printf "dest-image-url: [%s]\n", $run{'dest-image-url'};
         } else {
             print "The label/repo was not defined in --reg-repo or RS_REG_REPO: [%s]\n", $run{'reg-repo'};
         }
@@ -789,7 +797,7 @@ sub source_container_image {
             @$userenv_ref{'requirements'} = \@reqs;
             $$userenv_ref{'userenv'}{'name'} = "client-server";
             $$userenv_ref{'userenv'}{'label'} = "client-server";
-            $$userenv_ref{'userenv'}{'origin'}{'image'} = $run{'reg-repo'};
+            $$userenv_ref{'userenv'}{'origin'}{'image'} = $run{'dest-image-url'};
             $$userenv_ref{'userenv'}{'origin'}{'tag'} = $tag;
             my $userenv_file = $config_dir . "/userenv-" . $tag . ".json";
             put_json_file($userenv_file, $userenv_ref);
@@ -1011,41 +1019,7 @@ sub validate_controller_env() {
         if ( ! exists $run{'reg-auth'} ) {
             die "You must define a path to a authorizaton file (--reg-auth or RS_REG_AUTH) to use rickshaw with workshop"
         }
-        if ($run{'reg-repo'} =~ /^(\w+:\/){0,1}([^\/]+\/){0,1}([^\/]+\/){0,1}([^\/]+)$/) {
-            if (defined($1)) {
-                $run{'reg-proto'} = $1;
-                $run{'reg-proto'} =~ s/\/$//;
-                printf "reg-proto:     [%s]\n", $run{'reg-proto'};
-            } else {
-                $run{'reg-proto'} = '';
-            }
-            if (defined($2)) {
-                $run{'reg-host'} = $2;
-                if ($run{'reg-host'} =~ /(\w+)(:\d+)/) {
-                    $run{'reg-host'} = $1;
-                    $run{'reg-host-port'} = $2;
-                    debug_log(sprintf "reg-host:      [%s]\n", $run{'reg-host'});
-                    debug_log(sprintf "reg-host-port: [%s]\n", $run{'reg-host-port'});
-                } else {
-                    $run{'reg-host'} =~ s/\/$//;
-                    $run{'reg-host-port'} = '';
-                    debug_log(sprintf "reg-host:      [%s]\n", $run{'reg-host'});
-                }
-            } else {
-                $run{'reg-host'} = '';
-            }
-            if (defined($3)) {
-                $run{'reg-proj'} = $3;
-                $run{'reg-proj'} =~ s/\/$//;
-                debug_log(sprintf "reg-proj:      [%s]\n", $run{'reg-proj'});
-            }
-            if (defined($4)) {
-                $run{'reg-label'} = $4;
-                debug_log(sprintf "reg-label:     [%s]\n", $run{'reg-label'});
-            } else {
-                print "The label/repo was not defined in --reg-repo or RS_REG_REPO: [%s]\n", $run{'reg-repo'};
-            }
-        } else {
+        if (!$run{'reg-repo'} =~ /^(\w+:\/){0,1}([^\/]+\/){0,1}([^\/]+\/){0,1}([^\/]+)$/) {
             die "The --reg-repo or RS_REG_REPO does not match the pattern [protocol:][host[:port]][/<project>]/<repo>: " . $run{'reg-repo'};
         }
     }
