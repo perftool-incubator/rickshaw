@@ -460,8 +460,9 @@ sub local_image_found {
         printf "found\n";
         return 1;
     } else {
-        printf "missing\n\n";
-        my $cmd = "buildah images " . $full_url;
+        printf "missing\n";
+        printf "All buildah images:\n";
+        my $cmd = "buildah images";
         printf "cmd:\n%s\n\n", $cmd;
         ($cmd, my $output, my $cmd_rc) = run_cmd($cmd);
         printf "output:\n%s\n\n", $output;
