@@ -416,8 +416,8 @@ sub calc_image_md5 {
 
 sub remote_image_found {
     my $image_tag = shift;
-    my $image_url = $run{'reg-repo'} . ":" . $image_tag;
-    printf "Checking for remote workshop image: %s... ", $image_url;
+    my $full_url = $run{'reg-repo'} . ":" . $image_tag;
+    printf "Checking for remote workshop image: %s... ", $full_url;
     if (! exists $run{'reg-tls-verify'}) {
         $run{'reg-tls-verify'} = "true";
     } elsif ($run{'reg-tls-verify'} ne "true" && $run{'reg-tls-verify'} ne "false") {
@@ -425,10 +425,10 @@ sub remote_image_found {
         $run{'reg-tls-verify'} = "true";
     }
     my $skopeo_url;
-    if (($image_url =~ /^dir:/) || ($image_url =~ /^docker:\/\//)) {
-        $skopeo_url = $image_url;
+    if (($full_url =~ /^dir:/) || ($full_url =~ /^docker:\/\//)) {
+        $skopeo_url = $full_url;
     } else {
-        $skopeo_url = "docker://" . $image_url;
+        $skopeo_url = "docker://" . $full_url;
     }
     my $cmd = "skopeo inspect " . "--tls-verify=" . $run{'reg-tls-verify'} . " " . $skopeo_url . " 2>&1";
     debug_log(sprintf "running: %s\n", $cmd);
@@ -450,9 +450,9 @@ sub delete_proto {
 
 sub local_image_found {
     my $image_tag = shift;
-    my $source_image_url = $run{'reg-host'} . "/" . $run{'reg-proj'} . "/" . $run{'reg-label'} . ":" . $image_tag;
-    printf "Checking for local workshop image: %s... ", $source_image_url;
-    my $cmd = "buildah images " . $source_image_url;
+    my $full_url = $run{'source-image-url'} . ":" . $image_tag;
+    printf "Checking for local workshop image: %s... ", $full_url;
+    my $cmd = "buildah images " . $full_url;
     printf "cmd:\n%s\n\n", $cmd;
     ($cmd, my $output, my $cmd_rc) = run_cmd($cmd);
     printf "output:\n%s\n\n", $output;
@@ -461,7 +461,7 @@ sub local_image_found {
         return 1;
     } else {
         printf "missing\n\n";
-        my $cmd = "buildah images " . $source_image_url;
+        my $cmd = "buildah images " . $full_url;
         printf "cmd:\n%s\n\n", $cmd;
         ($cmd, my $output, my $cmd_rc) = run_cmd($cmd);
         printf "output:\n%s\n\n", $output;
@@ -523,13 +523,13 @@ sub workshop_build_image {
 
 sub delete_local_image {
     my $image_tag = shift;
-    my $source_image_url = $run{'reg-host'} . "/" . $run{'reg-proj'} . "/" . $run{'reg-label'} . ":" . $image_tag;
+    my $full_url = $run{'source-image-url'} . ":" . $image_tag;
     my $tls_verify = "--tls-verify=" . $run{'reg-tls-verify'};
     if (!local_image_found($image_tag)) {
         die "ERROR: delete_local_image(): could not find local image before delete";
     }
     my $cmd = "buildah";
-    $cmd .= " rmi " . " " . $source_image_url;
+    $cmd .= " rmi " . " " . $full_url;
     ($cmd, my $output, my $cmd_rc) = run_cmd($cmd);
     if ($cmd_rc != 0) {
         printf "ERROR: delete_local_image(): rmi command [%s] failed with %d\nOutput:\n%s\n\n",
@@ -540,10 +540,10 @@ sub delete_local_image {
 
 sub push_local_image {
     my $image_tag = shift;
-    my $source_image_url = $run{'reg-host'} . "/" . $run{'reg-proj'} . "/" . $run{'reg-label'} . ":" . $image_tag;
-    my $dest_image_url = $run{'reg-repo'} . ":" . $image_tag;
-    if ($dest_image_url =~ /^dir:/) {
-        $dest_image_url =~ /^dir:(.*)/;
+    my $full_src_url = $run{'source-image-url'} . ":" . $image_tag;
+    my $full_dest_url = $run{'reg-repo'} . ":" . $image_tag;
+    if ($full_dest_url =~ /^dir:/) {
+        $full_dest_url =~ /^dir:(.*)/;
         my $image_dir = $1;
         if (! -d $image_dir) {
             printf "Creating local registry directory: %s\n", $image_dir;
@@ -564,7 +564,7 @@ sub push_local_image {
     if (! $skip_registry_auth) {
         $cmd .= " --authfile " . $run{'reg-auth'};
     }
-    $cmd .= " push " . $tls_verify . " " . $source_image_url . " " . $dest_image_url;
+    $cmd .= " push " . $tls_verify . " " . $full_src_url . " " . $full_dest_url;
     ($cmd, my $output, my $cmd_rc) = run_cmd($cmd);
     if ($cmd_rc != 0) {
         printf "ERROR: push_local_image(): push command [%s] failed with %d\nOutput:\n%s\n\n",
@@ -693,12 +693,58 @@ sub build_reqs {
     }
 }
 
+sub get_image_urls {
+    if ($run{'reg-repo'} =~ /^(\w+:\/){0,1}([^\/]+\/){0,1}([^\/]+\/){0,1}([^\/]+)$/) {
+        if (defined($1)) {
+            $run{'reg-proto'} = $1;
+            $run{'reg-proto'} =~ s/\/$//;
+            printf "reg-proto:     [%s]\n", $run{'reg-proto'};
+        } else {
+            $run{'reg-proto'} = '';
+        }
+        if (defined($2)) {
+            $run{'reg-host'} = $2;
+            if ($run{'reg-host'} =~ /(\w+)(:\d+)/) {
+                $run{'reg-host'} = $1;
+                $run{'reg-host-port'} = $2;
+                debug_log(sprintf "reg-host:      [%s]\n", $run{'reg-host'});
+                debug_log(sprintf "reg-host-port: [%s]\n", $run{'reg-host-port'});
+            } else {
+                $run{'reg-host'} =~ s/\/$//;
+                $run{'reg-host-port'} = '';
+                debug_log(sprintf "reg-host:      [%s]\n", $run{'reg-host'});
+            }
+        } else {
+            $run{'reg-host'} = '';
+        }
+        if (defined($3)) {
+            $run{'reg-proj'} = $3;
+            $run{'reg-proj'} =~ s/\/$//;
+            debug_log(sprintf "reg-proj:      [%s]\n", $run{'reg-proj'});
+            $run{'source-image-url'} = $run{'reg-host'} . "/" . $run{'reg-proj'};
+        } else {
+            $run{'source-image-url'} = $run{'reg-host'};
+        }
+        if (defined($4)) {
+            $run{'reg-label'} = $4;
+            debug_log(sprintf "reg-label:     [%s]\n", $run{'reg-label'});
+            $run{'source-image-url'} .= "/" . $run{'reg-label'};
+        } else {
+            print "The label/repo was not defined in --reg-repo or RS_REG_REPO: [%s]\n", $run{'reg-repo'};
+        }
+    } else {
+        die "The --reg-repo or RS_REG_REPO does not match the pattern [protocol:][host[:port]][/<project>]/<repo>: " . $run{'reg-repo'};
+    }
+}
+
 sub source_container_image {
     # Ensure that the container image we need is either already in the container registry,
     # or build and push the image to the registry
     my $userenv = shift;
-    my $image_url; # What gets returned
+    my $image; # What gets returned
     my @local_images;
+
+    get_image_urls;
 
     my @requirements;
     build_reqs(\@requirements, $userenv);
@@ -759,7 +805,7 @@ sub source_container_image {
             last;
         }
     }
-    $image_url = $run{'reg-repo'} . ":" . $workshop_args[$i]{'tag'};
+    $image = $run{'reg-repo'} . ":" . $workshop_args[$i]{'tag'};
     # After finding the most complete image, build any "more" complete images until "most"
     # complete is built.
     $i++;
@@ -768,14 +814,14 @@ sub source_container_image {
             workshop_build_image($workshop_args[$i]{'userenv'}, $workshop_args[$i]{'reqs'}, $workshop_args[$i]{'tag'}, $workshop_args[$i]{'skip-update'});
             push_local_image($workshop_args[$i]{'tag'});
             push(@local_images, $workshop_args[$i]{'tag'});
-            $image_url = $run{'reg-repo'} . ":" . $workshop_args[$i]{'tag'};
+            $image = $run{'reg-repo'} . ":" . $workshop_args[$i]{'tag'};
             $i++;
         }
     }
     while (scalar @local_images) {
         delete_local_image(pop(@local_images));
     }
-    return $image_url;
+    return $image;
 }
 
 sub run_tests {
