@@ -485,11 +485,17 @@ sub workshop_build_image {
                $tag, $image_tag;
         exit 1;
     }
+    my $proj;
+    if (defined $run{'reg-proj'}) {
+        $proj = $run{'reg-host'} . "/" . $run{'reg-proj'};
+    } else {
+        $proj = $run{'reg-host'};
+    }
     my $workshop_build_cmd = $workshop_base_cmd
                              . " --skip-update " . $skip_update
                              . " " . $userenv_arg
                              . " " . $req_args
-                             . " --proj " . $run{'reg-host'} . "/" . $run{'reg-proj'}
+                             . " --proj " . $proj
                              . " --label " . $run{'reg-label'}
                              . " --tag " . $image_tag;
     printf "Going to generate a new client-server container image with this workshop cmd:\n\n %s\n", $workshop_build_cmd;
