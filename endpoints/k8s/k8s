@@ -843,7 +843,9 @@ function verify_pods_running() {
     local abort=0
     local num_nonzero_exit=0
     local max_nonzero_exit=3
-    local err_msg="Failed to verify pods are running\n"
+    local err_file="$endpoint_run_dir/kubectl-verify-pods-error.txt"
+    local err_msg="Failed to verify pods are running::"
+    echo $err_msg >$err_file
     until [ ${#unverified_pods[@]} -eq 0 -o $count -gt $max_attempts -o $abort -gt 0 ]; do
         sleep 10
         ssh $user@$host kubectl get pods -o wide | grep $pod_prefix >$kubectl_get_pods
@@ -865,11 +867,10 @@ function verify_pods_running() {
             if echo "$this_status" | grep -q -i error; then
                 # If just 1 pod is in error bail immediately
                 abort=1
-                err_msg+="Pod $this_pod has this error: $this_status\n"
-                err_msg+="Getting 'describe pod' for $pod_prefix-$this_pod\n"
+                echo "Pod $this_pod has this error: $this_status::" >>"$err_file"
+                echo "Getting 'describe pod' for $pod_prefix-$this_pod::" >>"$err_file"
                 ssh $user@$host kubectl describe pod $pod_prefix-$this_pod >"$endpoint_run_dir/kubectl-describe-pod-$this_pod.txt"
-                err_msg+=$(cat $endpoint_run_dir/kubectl-describe-pod-$this_pod.txt)
-                echo -e "$err_msg"
+                cat "$endpoint_run_dir/kubectl-describe-pod-$this_pod.txt" >>"$err_file"
                 break
             fi
             if [ "$this_status" == "Running" ]; then
@@ -880,8 +881,8 @@ function verify_pods_running() {
         let count=$count+1
     done
     if [ $abort -eq 1 -o $count -gt $max_attempts ]; then
-        echo "abort: $abort count: $count"
-        abort_error "abort: $abort count: $count $err_msg" endpoint-deploy
+        echo "abort: $abort count: $count" >>"$err_file"
+        abort_error "file:$err_file" endpoint-deploy
     fi
     declare -A nodes
     for i in ${verified_pods[@]}; do

@@ -29,9 +29,19 @@ declare -A servers
 function abort_error() {
     local msg="$1"; shift
     local sync="$1"; shift
-    echo "[ERROR]$msg"
     local msg_file=error.json
-    echo '[{"recipient":{"type":"all","id":"all"},"user-object":{"error":"'$msg'"}}]' >$msg_file
+    echo '[{"recipient":{"type":"all","id":"all"},"user-object":{"error":"' >$msg_file
+    echo -e "[ERROR]"
+    if echo $msg | grep -q "^file:"; then
+        local file=`echo $msg | sed -e s/^file://`
+        echo "Found 'file:' in msg, using file [$file]"
+        cat $file >>$msg_file
+        cat $file
+    else
+        echo "$msg" >>$msg_file
+        echo "$msg"
+    fi
+    echo '"}}]' >$msg_file
     do_roadblock "$sync" "follower" "abort" "$msg_file"
     abort=1
 }
