@@ -784,13 +784,13 @@ sub source_container_image {
             # Create a new userenv which just refers to the image just verified/built,,
             # which will be used as the userenv for the next image in this loop.
             #
-            # We need some info from the original userenv, mainly package manager settings
+            # We need some info from the original userenv, primarily
+            # userenv.name and userenv.properties.packages, but we'll
+            # copy all of it and only change what we need.
             my $userenv_ref = get_json_file($rickshaw_project_dir . "/userenvs/" . $userenv . ".json");
             delete $$userenv_ref{'requirements'};
             my @reqs = ();
             @$userenv_ref{'requirements'} = \@reqs;
-            $$userenv_ref{'userenv'}{'name'} = "client-server";
-            $$userenv_ref{'userenv'}{'label'} = "client-server";
             $$userenv_ref{'userenv'}{'origin'}{'image'} = $run{'dest-image-url'};
             $$userenv_ref{'userenv'}{'origin'}{'tag'} = $tag;
             my $userenv_file = $config_dir . "/userenv-" . $tag . ".json";
