@@ -869,7 +869,7 @@ function verify_pods_running() {
                 err_msg+="Getting 'describe pod' for $pod_prefix-$this_pod\n"
                 ssh $user@$host kubectl describe pod $pod_prefix-$this_pod >"$endpoint_run_dir/kubectl-describe-pod-$this_pod.txt"
                 err_msg+=$(cat $endpoint_run_dir/kubectl-describe-pod-$this_pod.txt)
-                echo -e "$msg"
+                echo -e "$err_msg"
                 break
             fi
             if [ "$this_status" == "Running" ]; then
@@ -881,7 +881,7 @@ function verify_pods_running() {
     done
     if [ $abort -eq 1 -o $count -gt $max_attempts ]; then
         echo "abort: $abort count: $count"
-        abort_error "$err_msg" endpoint-deploy
+        abort_error "abort: $abort count: $count $err_msg" endpoint-deploy
     fi
     declare -A nodes
     for i in ${verified_pods[@]}; do
