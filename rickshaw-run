@@ -418,12 +418,6 @@ sub remote_image_found {
     my $image_tag = shift;
     my $full_url = $run{'dest-image-url'} . ":" . $image_tag;
     printf "Checking for remote workshop image: %s... ", $full_url;
-    if (! exists $run{'reg-tls-verify'}) {
-        $run{'reg-tls-verify'} = "true";
-    } elsif ($run{'reg-tls-verify'} ne "true" && $run{'reg-tls-verify'} ne "false") {
-        printf "WARNING: Invalid value found for reg-tls-verify, defaulting to 'true'\n";
-        $run{'reg-tls-verify'} = "true";
-    }
     my $skopeo_url;
     if (($full_url =~ /^dir:/) || ($full_url =~ /^docker:\/\//)) {
         $skopeo_url = $full_url;
@@ -525,7 +519,6 @@ sub workshop_build_image {
 sub delete_local_image {
     my $image_tag = shift;
     my $full_url = $run{'source-image-url'} . ":" . $image_tag;
-    my $tls_verify = "--tls-verify=" . $run{'reg-tls-verify'};
     if (!local_image_found($image_tag)) {
         die "ERROR: delete_local_image(): could not find local image before delete";
     }
@@ -557,7 +550,6 @@ sub push_local_image {
             }
         }
     }
-    my $tls_verify = "--tls-verify=" . $run{'reg-tls-verify'};
     if (!local_image_found($image_tag)) {
         die "ERROR: push_local_image(): could not find local image before push";
     }
@@ -565,7 +557,7 @@ sub push_local_image {
     if (! $skip_registry_auth) {
         $cmd .= " --authfile " . $run{'reg-auth'};
     }
-    $cmd .= " push " . $tls_verify . " " . $full_src_url . " " . $full_dest_url;
+    $cmd .= " push --tls-verify=" . $run{'reg-tls-verify'} . " " . $full_src_url . " " . $full_dest_url;
     ($cmd, my $output, my $cmd_rc) = run_cmd($cmd);
     if ($cmd_rc != 0) {
         printf "ERROR: push_local_image(): push command [%s] failed with %d\nOutput:\n%s\n\n",
@@ -1023,6 +1015,12 @@ sub validate_controller_env() {
         }
         if (!$run{'reg-repo'} =~ /^(\w+:\/){0,1}([^\/]+\/){0,1}([^\/]+\/){0,1}([^\/]+)$/) {
             die "The --reg-repo or RS_REG_REPO does not match the pattern [protocol:][host[:port]][/<project>]/<repo>: " . $run{'reg-repo'};
+        }
+        if (! exists $run{'reg-tls-verify'}) {
+            $run{'reg-tls-verify'} = "true";
+        } elsif ($run{'reg-tls-verify'} ne "true" && $run{'reg-tls-verify'} ne "false") {
+            printf "WARNING: Invalid value found for reg-tls-verify, defaulting to 'true'\n";
+            $run{'reg-tls-verify'} = "true";
         }
     }
     exists $run{'tools-dir'} || die "[ERROR]You must use " .
@@ -1798,6 +1796,7 @@ $workshop_base_cmd =
     " --param %bench-dir%=" . $run{'bench-dir'} .
     " --param %engine-dir%=" . $run{'engine-dir'} .
     " --param %rickshaw-dir%=" . $rickshaw_project_dir .
+    " --reg-tls-verify=" . $run{'reg-tls-verify'} .
     " 2>&1";
 save_config_info();
 validate_endpoints();
