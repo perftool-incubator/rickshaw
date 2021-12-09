@@ -882,6 +882,16 @@ function verify_pods_running() {
     done
     if [ $abort -eq 1 -o $count -gt $max_attempts ]; then
         echo "abort: $abort count: $count" >>"$err_file"
+        echo "kubectl-get-pods:" >>$err_file
+        echo "$kubectl_get_pods" >> $err_file
+        echo "describe-pods:" >>$err_file
+        while read line; do
+            local this_status=`echo $line | awk '{print $3}'`
+            local this_pod=`echo $line | awk '{print $1}' | sed -e s/^$pod_prefix-//`
+            local node=`echo $line | awk '{print $7}'`
+            ssh $user@$host kubectl describe pod $pod_prefix-$this_pod >>$err_file
+        done <$kubectl_get_pods
+        let count=$count+1
         abort_error "file:$err_file" endpoint-deploy
     fi
     declare -A nodes
