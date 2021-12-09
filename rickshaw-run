@@ -522,6 +522,7 @@ sub delete_local_image {
     if (!local_image_found($image_tag)) {
         die "ERROR: delete_local_image(): could not find local image before delete";
     }
+    printf "Deleting local image %s\n", $full_url;
     my $cmd = "buildah";
     $cmd .= " rmi " . " " . $full_url;
     ($cmd, my $output, my $cmd_rc) = run_cmd($cmd);
