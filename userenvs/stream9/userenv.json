@@ -1,0 +1,14 @@
+  "userenv": {
+    "name": "stream9",
+    "label": "CentOS Stream 9",
+    "origin": {
+      "image": "quay.io/centos/centos",
+      "tag": "stream9"
+    },
+    "properties": {
+      "packages": {
+        "type": "rpm",
+        "manager": "dnf"
+      }
+    }
+  },
