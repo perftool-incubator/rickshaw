@@ -3,7 +3,6 @@
 # vim: autoindent tabstop=4 shiftwidth=4 expandtab softtabstop=4 filetype=bash
 set -u
 
-
 # This script implements the 'remotehost' endpoint for rickshaw.  It runs 1 or more
 # clients and servers for as many benchmark interations/samples as required
 # for a single invocation of rickshaw.
@@ -20,7 +19,7 @@ set -u
 # --roadblock-server
 # --roadblock-id
 # --roadblock-passwd
-# --endpoint-opts=client:n-m,o-p,server:n-m,o-p,host:<remote-host>,userenv:<distro>
+# --endpoint-opts=client:n-m,o-p,server:n-m,o-p,host:<remote-host>,userenv:<distro>,host-mount:<dirpath>
 #
 # Note: When specifying a remotehost endpoint on an invocation of rickshaw-run
 # (or crucible run <benchmark>) the following format is used:
@@ -49,6 +48,7 @@ userenv="rhubi8"
 user="root"
 declare -A cpuPartitioning
 declare -A numaNode
+host_mounts=""
 
 function endpoint_remotehost_test_stop() {
     echo "Running endpoint_remotehost_test_stop"
@@ -228,6 +228,9 @@ function process_remotehost_opts() {
             user)
                 user=$val
                 ;;
+            host-mount)
+                host_mounts+=" $val"
+                ;;
             cpu-partitioning)
                 # cpu-partitioning is per engine:
                 # option format:: cpu-partitioning:<engine-name>:<value>
@@ -312,6 +315,14 @@ function launch_osruntime() {
             do_ssh $user@$host mkdir -p $container_mount/tmp
             do_ssh $user@$host mount --verbose --options bind $remote_data_dir $container_mount/tmp
             echo "Adding host directories to container mount"
+            if [ "$host_mounts" != "" ]; then
+                local oldIFS=$IFS
+                IFS=" "
+                for fs in $host_mounts; do
+                    chroot_rbind_mounts+=" $fs"
+                done
+                IFS=$oldIFS
+            fi
             for fs in ${chroot_rbind_mounts}; do
                 echo "Adding ${fs} to ${container_mount}"
                 do_ssh $user@$host mkdir -p $container_mount/$fs
@@ -435,6 +446,14 @@ function launch_osruntime() {
             cs_cmd+=" --mount=type=bind,source=${remote_data_dir},destination=/tmp"
             cs_cmd+=" --mount=type=bind,source=/lib/modules,destination=/lib/modules"
             cs_cmd+=" --mount=type=bind,source=/usr/src,destination=/usr/src"
+            if [ "$host_mounts" != "" ]; then
+                local oldIFS=$IFS
+                IFS=" "
+                for fs in $host_mounts; do
+                   cs_cmd+=" --mount=type=bind,source=$fs,destination=$fs"
+                done
+                IFS=$oldIFS
+            fi
             cs_cmd+=" ${image}"
         fi
 
