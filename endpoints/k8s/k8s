@@ -217,7 +217,7 @@ function endpoint_k8s_test_start() {
                     echo '    "kind": "Endpoints",' >>$svc_endp_json
                     echo '    "metadata": {' >>$svc_endp_json
                     echo '        "name": "rickshaw-'$name'"' >>$svc_endp_json
-                    echo '        "namespace": '$project_name'"' >>$svc_endp_json
+                    echo '        "namespace": '$project_name'' >>$svc_endp_json
                     echo '    },' >>$svc_endp_json
                     echo '    "subsets": [{' >>$svc_endp_json
                     echo '        "addresses": [ { "ip": "'$pod_ip'" } ],' >>$svc_endp_json
@@ -578,7 +578,7 @@ function build_pod_spec() {
     echo "  \"apiVersion\": \"v1\"," >>$json
     echo "  \"kind\": \"Pod\"," >>$json
     echo "  \"metadata\": {" >>$json
-    echo "    \"name\": \"$pod_prefix-$name\"" >>$json
+    echo "    \"name\": \"$pod_prefix-$name\"," >>$json
     echo "    \"namespace\": \"$project_name\"" >>$json
     if [ "$type" == "cs" ]; then
         set +u
