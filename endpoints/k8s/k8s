@@ -575,6 +575,7 @@ function build_pod_spec() {
     echo "  \"kind\": \"Pod\"," >>$json
     echo "  \"metadata\": {" >>$json
     echo "    \"name\": \"$pod_prefix-$name\"" >>$json
+    echo "    \"namespace\": \"$project_name\"" >>$json
     if [ "$type" == "cs" ]; then
         set +u
         if [ ! -z "${annotations[$name]}" ]; then
@@ -970,6 +971,7 @@ function create_k8s_project() {
 function endpoint_k8s_cleanup() {
     get_pod_logs $all_pods
     delete_pods $all_pods
+    do_ssh $user@$host kubectl delete namespace $project_name
 }
 
 process_opts "$@"
@@ -977,6 +979,7 @@ process_k8s_opts "$endpoint_opts"
 init_common_dirs
 load_settings
 k8s_req_check
+create_k8s_project
 base_req_check
 get_k8s_config
 delete_old_pods
