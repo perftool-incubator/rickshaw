@@ -53,6 +53,7 @@ fi
 endpoint_name="k8s"
 # TODO: instead of using a prefix in the pods' names, use a unique k8s project
 pod_prefix="rickshaw"
+project_name="crucible-rickshaw"
 userenv="rhubi8"
 hostNetwork="0"
 hugepage="0"
@@ -963,6 +964,9 @@ function get_k8s_config() {
     echo "$masters" >"$endpoint_run_dir/master-nodes.txt"
 }
 
+function create_k8s_project() {
+    do_ssh $user@$host kubectl create namespace $project_name
+}
 function endpoint_k8s_cleanup() {
     get_pod_logs $all_pods
     delete_pods $all_pods
