@@ -177,8 +177,8 @@ function endpoint_k8s_test_start() {
                     echo '    "apiVersion": "v1",' >>$svc_json
                     echo '    "kind": "Service",' >>$svc_json
                     echo '    "metadata": {' >>$svc_json
-                    echo '        "name": "rickshaw-'$name'"' >>$svc_json
-                    echo '        "namespace": '$project_name'' >>$svc_json
+                    echo '        "name": "rickshaw-'$name'",' >>$svc_json
+                    echo '        "namespace": "'$project_name'"' >>$svc_json
                     echo '    },' >>$svc_json
                     echo '    "spec": {' >>$svc_json
                     echo '        "ports": [' >>$svc_json
@@ -216,8 +216,8 @@ function endpoint_k8s_test_start() {
                     echo '    "apiVersion": "v1",' >>$svc_endp_json
                     echo '    "kind": "Endpoints",' >>$svc_endp_json
                     echo '    "metadata": {' >>$svc_endp_json
-                    echo '        "name": "rickshaw-'$name'"' >>$svc_endp_json
-                    echo '        "namespace": '$project_name'' >>$svc_endp_json
+                    echo '        "name": "rickshaw-'$name'",' >>$svc_endp_json
+                    echo '        "namespace": "'$project_name'"' >>$svc_endp_json
                     echo '    },' >>$svc_endp_json
                     echo '    "subsets": [{' >>$svc_endp_json
                     echo '        "addresses": [ { "ip": "'$pod_ip'" } ],' >>$svc_endp_json
@@ -252,8 +252,8 @@ function endpoint_k8s_test_start() {
                     echo '    "apiVersion": "v1",' >>$nodep_json
                     echo '    "kind": "Service",' >>$nodep_json
                     echo '    "metadata": {' >>$nodep_json
-                    echo '        "name": "rickshaw-'$name'-nodeport"' >>$nodep_json
-                    echo '        "namespace": '$project_name'' >>$nodep_json
+                    echo '        "name": "rickshaw-'$name'-nodeport",' >>$nodep_json
+                    echo '        "namespace": "'$project_name'"' >>$nodep_json
                     echo '    },' >>$nodep_json
                     echo '    "spec": {' >>$nodep_json
                     echo '        "type": "NodePort",' >>$nodep_json
@@ -297,8 +297,8 @@ function endpoint_k8s_test_start() {
                     echo '    "apiVersion": "v1",' >>$endp_nodep_json
                     echo '    "kind": "Endpoints",' >>$endp_nodep_json
                     echo '    "metadata": {' >>$endp_nodep_json
-                    echo '        "name": "rickshaw-'$name'-nodeport"' >>$endp_nodep_json
-                    echo '        "namespace": '$project_name'' >>$endp_nodep_json
+                    echo '        "name": "rickshaw-'$name'-nodeport",' >>$endp_nodep_json
+                    echo '        "namespace": "'$project_name'"' >>$endp_nodep_json
                     echo '    },' >>$endp_nodep_json
                     echo '    "subsets": [{' >>$endp_nodep_json
                     # We use pod's IP
