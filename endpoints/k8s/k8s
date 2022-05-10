@@ -703,6 +703,9 @@ function build_pod_spec() {
         echo '       ,"volumeMounts": [' >>$json
         echo '          { "mountPath": "/var/run",' >>$json
         echo '            "name": "hostfs-run"' >>$json
+        echo '          },' >>$json
+        echo '          { "mountPath": "/lib/modules",' >>$json
+        echo '            "name": "hostfs-modules"' >>$json
         echo '          }' >>$json
         echo "        ]" >>$json
     fi
@@ -746,6 +749,12 @@ function build_pod_spec() {
         echo '          { "name": "hostfs-run",' >>$json
         echo '            "hostPath": {' >>$json
         echo '              "path": "/var/run",' >>$json
+        echo '              "type": "Directory"' >>$json
+        echo '            }' >>$json
+        echo '          },' >>$json
+        echo '          { "name": "hostfs-modules",' >>$json
+        echo '            "hostPath": {' >>$json
+        echo '              "path": "/lib/modules",' >>$json
         echo '              "type": "Directory"' >>$json
         echo '            }' >>$json
         echo '          }' >>$json
