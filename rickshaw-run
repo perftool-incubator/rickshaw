@@ -78,6 +78,7 @@ my $client_server_run_dir;
 my $client_server_logs_dir;
 my $client_server_archives_dir;
 my $client_server_run_script;
+my $client_server_library_script;
 my $iterations_dir;
 my $rickshaw_project_dir;
 my $roadblock_msgs_dir;
@@ -110,6 +111,7 @@ my %clients_servers;
 my @rb_cs_ids; # unique IDs for roadblock
 my $abort_test_id;
 my $skip_registry_auth;
+my @active_followers;
 
 
 sub usage {
@@ -162,13 +164,14 @@ sub find_files {
     return(\@files);
 }
 
-sub roadblock_leader {
+sub do_roadblock {
     if ($use_roadblock) {
         my $attempts = 0;
         my $rc = 99;
         my $file_rc;
         my $label = shift;
         my $timeout = shift;
+        my $output;
         my $role = "leader";
         my $uuid = $run{'id'} . ":" . $label;
         # save $_[0] for by ref later to store json ref
@@ -176,7 +179,7 @@ sub roadblock_leader {
         for (my $i=1; $i < scalar @_; $i++) {
             $follower_param .= " --followers=" . $_[$i];
         }
-        my $msgs_file = $roadblock_msgs_dir . "/" . $label . ".json";
+        my $msgs_log_file = $roadblock_msgs_dir . "/" . $label . ".json";
         (my $date_cmd, my $date, my $date_rc) = run_cmd('date');
         chomp $date;
         printf "Roadblock: %s ", $date;
@@ -190,20 +193,20 @@ sub roadblock_leader {
                     " --leader-id=controller" .
                     " --uuid=" . $this_uuid .
                     " --timeout=" . $timeout .
-                    " --message-log=" . $msgs_file .
+                    " --message-log=" . $msgs_log_file .
                     $follower_param;
             debug_log(sprintf "roadblock leader command:%s\n", $cmd);
-            ($cmd, my $output, $rc) = run_cmd($cmd);
+            ($cmd, $output, $rc) = run_cmd($cmd);
             debug_log(sprintf "roadblock leader rc:%s\n", $rc);
-            debug_log(sprintf "roadblock leader output:\n%s\n", join("\n", $output));
-            ($file_rc, $_[0]) = get_json_file($msgs_file);
+            debug_log(sprintf "roadblock leader output:\n%s\n", $output);
+            ($file_rc, $_[0]) = get_json_file($msgs_log_file);
             if ($file_rc > 0 or ! defined $_[0]) {
                 print "Could not open the message file\n";
                 exit 1;
             }
             if ( $rc != $roadblock_exit_success) {
                 printf "roadblock output BEGIN\n";
-                printf "%s", join("\n", $output);
+                printf "%s", $output;
                 printf "roadblock rc: %d\n", $rc;
                 printf "roadblock output END\n";
             }
@@ -217,16 +220,22 @@ sub roadblock_leader {
             }
         }
         if ($rc == $roadblock_exit_abort or $rc == $roadblock_exit_success) {
-            ($file_rc, $_[0]) = get_json_file($msgs_file);
+            ($file_rc, $_[0]) = get_json_file($msgs_log_file);
             if ($file_rc > 0 or ! defined $_[0]) {
                 print "Could not open the message file\n";
                 exit 1;
             }
             return $rc;
         } else {
-            # These fatal errors where we can't clean up with sending roadblocks.
-            # TODO: try to signal endpoints to clean up what they can.
-            exit 1;
+            my @dropped_followers = ();
+            foreach my $line (split(/\n/, $output)) {
+                if ($line =~ /These followers/) {
+                    my @line_pieces = split(/: /, $line);
+                    push @dropped_followers, split(/\s/, $line_pieces[1]);
+                }
+            }
+            debug_log(sprintf "roadblock dropped followers: %s\n", join(" ", @dropped_followers));
+            return $rc, @dropped_followers;
         }
     } else {
         return 0;
@@ -960,92 +969,183 @@ sub source_container_image {
     return $image;
 }
 
-sub run_tests {
+sub process_bench_roadblocks {
     my $quit = 0;
-    my $abort_run_on_iter_fail = 0;
-    my @sample_failures;
+    my $abort;
+    my @sample_data;
+
     for (my $tid = 0; $tid < scalar @tests; $tid++) {
         last if ($quit > 0);
+
         my $iter_id = $tests[$tid]{'iteration-id'};
         my $samp_id = $tests[$tid]{'sample-id'};
-        my $iter_array_idx = $iter_id - 1;
+        my $iter_array_idx = $tid;
+
+        if (! defined $sample_data[$iter_array_idx]) {
+            $sample_data[$iter_array_idx] = {
+                'iteration-id' => $iter_id,
+                'sample-id' => $samp_id,
+                'failures' => 0,
+                'complete' => 0,
+                'attempt-num' => 0,
+                'attempt-fail' => 0
+            };
+        }
+
         my $test_id = $iter_id . "-" . $samp_id;
         my $timeout = $default_rb_timeout;
-        my $this_attempt_num = 1;
-        my $sample_complete = 0;
-        if (! defined $sample_failures[$iter_array_idx]) {
-            $sample_failures[$iter_array_idx] = 0;
-        }
-        while ($sample_complete == 0 and $sample_failures[$iter_array_idx] < $run{'max-sample-failures'}) {
-            my $this_attempt_fail = 0;
-            printf "Iteration %d sample %d (test %d of %d) attempt number %d\n", $iter_id, $samp_id, $tid+1, scalar(@tests), $this_attempt_num;
-            my @syncs;
-            my @stop_syncs;
-            for my $start_stop (qw(start stop)) {
-                if ($start_stop eq "start") {
-                    @syncs = (qw(infra server endpoint client));
-                } else {
-                    @syncs = @stop_syncs;
+
+        $abort = 0;
+        while (($quit == 0) and
+               ($abort == 0) and
+               ($sample_data[$iter_array_idx]{'complete'} == 0) and
+               ($sample_data[$iter_array_idx]{'failures'} < $run{'max-sample-failures'})) {
+
+            $sample_data[$iter_array_idx]{'attempt-fail'} = 0;
+            $sample_data[$iter_array_idx]{'attempt-num'}++;
+
+            printf "Starting iteration %d sample %d (test %d of %d) attempt number %d of %d\n",
+                $iter_id,
+                $samp_id,
+                $tid+1,
+                scalar(@tests),
+                $sample_data[$iter_array_idx]{'attempt-num'},
+                $run{'max-sample-failures'};
+
+            my $messages_ref;
+            my $roadblock_rc;
+            my @dropped_followers;
+            my $rb_name;
+            my $test_id = $sample_data[$iter_array_idx]{'iteration-id'} . '-' . $sample_data[$iter_array_idx]{'sample-id'} . '-' . $sample_data[$iter_array_idx]{'attempt-num'};
+            my $rb_prefix =  $test_id . ':';
+
+            ####################################################################
+            $rb_name = $rb_prefix . "infra-start-begin";
+            ($roadblock_rc, @dropped_followers) = do_roadblock($rb_name, $timeout, $messages_ref, @active_followers);
+            ($abort, $quit) = evaluate_test_roadblock($rb_name, $roadblock_rc, \$sample_data[$iter_array_idx], \@active_followers, \@dropped_followers, $abort, $quit);
+            remove_dropped_followers(\@active_followers, \@dropped_followers);
+
+            $rb_name = $rb_prefix . "infra-start-end";
+            ($roadblock_rc, @dropped_followers) = do_roadblock($rb_name, $timeout, $messages_ref, @active_followers);
+            ($abort, $quit) = evaluate_test_roadblock($rb_name, $roadblock_rc, \$sample_data[$iter_array_idx], \@active_followers, \@dropped_followers, $abort, $quit);
+            remove_dropped_followers(\@active_followers, \@dropped_followers);
+            ####################################################################
+            $rb_name = $rb_prefix . "server-start-begin";
+            ($roadblock_rc, @dropped_followers) = do_roadblock($rb_name, $timeout, $messages_ref, @active_followers);
+            ($abort, $quit) = evaluate_test_roadblock($rb_name, $roadblock_rc, \$sample_data[$iter_array_idx], \@active_followers, \@dropped_followers, $abort, $quit);
+            remove_dropped_followers(\@active_followers, \@dropped_followers);
+
+            $rb_name = $rb_prefix . "server-start-end";
+            ($roadblock_rc, @dropped_followers) = do_roadblock($rb_name, $timeout, $messages_ref, @active_followers);
+            ($abort, $quit) = evaluate_test_roadblock($rb_name, $roadblock_rc, \$sample_data[$iter_array_idx], \@active_followers, \@dropped_followers, $abort, $quit);
+            remove_dropped_followers(\@active_followers, \@dropped_followers);
+            ####################################################################
+            $rb_name = $rb_prefix . "endpoint-start-begin";
+            ($roadblock_rc, @dropped_followers) = do_roadblock($rb_name, $timeout, $messages_ref, @active_followers);
+            ($abort, $quit) = evaluate_test_roadblock($rb_name, $roadblock_rc, \$sample_data[$iter_array_idx], \@active_followers, \@dropped_followers, $abort, $quit);
+            remove_dropped_followers(\@active_followers, \@dropped_followers);
+
+            $rb_name = $rb_prefix . "endpoint-start-end";
+            ($roadblock_rc, @dropped_followers) = do_roadblock($rb_name, $timeout, $messages_ref, @active_followers);
+            ($abort, $quit) = evaluate_test_roadblock($rb_name, $roadblock_rc, \$sample_data[$iter_array_idx], \@active_followers, \@dropped_followers, $abort, $quit);
+            remove_dropped_followers(\@active_followers, \@dropped_followers);
+            ####################################################################
+            $rb_name = $rb_prefix . "client-start-begin";
+            ($roadblock_rc, @dropped_followers) = do_roadblock($rb_name, $timeout, $messages_ref, @active_followers);
+            ($abort, $quit) = evaluate_test_roadblock($rb_name, $roadblock_rc, \$sample_data[$iter_array_idx], \@active_followers, \@dropped_followers, $abort, $quit);
+            remove_dropped_followers(\@active_followers, \@dropped_followers);
+
+            my %messages = %{ $messages_ref };
+            if (exists $messages{'received'}) {
+                for my $message (@{ $messages{'received'} }) {
+                    if (exists $$message{'payload'}{'message'}{'user-object'}{'timeout'}) {
+                        $timeout = $$message{'payload'}{'message'}{'user-object'}{'timeout'};
+                        printf "Found new client-start-end timeout value: %s\n", $timeout;
+                    }
                 }
-                for my $sync (@syncs) {
-                    my $sync_point = $sync . "-" . $start_stop;
-                    if ($start_stop eq "start") {
-                        # Build the stop syncs as we go.  If during the start syncs we abort early,
-                        # we will only have to do a portion of stop syncs.
-                        unshift(@stop_syncs, $sync);
-                    }
-                    my $messages_ref;
-                    my $label = $test_id . "-" . $this_attempt_num . ":" . $sync_point;
-                    my $rc = roadblock_leader($label, $timeout, $messages_ref, (@rb_cs_ids, dump_endpoint_labels(\@endpoints)));
-                    if ($rc > 0) {
-                        if ($rc == $roadblock_exit_abort) {
-                            printf "[WARNING]iteration %d sample %d had an abort from %s\n", $iter_id, $samp_id, $sync_point;
-                            $this_attempt_fail = 1;
-                            $sample_failures[$iter_array_idx]++;
-                            printf "sample_failures[%d] is now: %d\n", $iter_array_idx, $sample_failures[$iter_array_idx];
-                            if ($sample_failures[$iter_array_idx] >= $run{'max-sample-failures'}) {
-                                printf "setting sample_complete to 1\n";
-                                $sample_complete = 1;
-                                printf "[ERROR]All A maximum of %d failures for iteration %d have been " .
-                                    "reached, failing this iteration\n", $run{'max-sample-failures'},
-                                    $iter_id;
-                            }
-                            if ($abort_run_on_iter_fail == 1) {
-                                $abort_test_id = $tid;
-                                $tid = scalar @tests; # Force break from outer loop
-                                        $quit = 1;
-                            }
-                            # Don't continue with remaining syncs if this is start.
-                            # Stop syncs are automatically reduced because that array is built
-                            # as progression is made with start syncs.
-                            last if ($start_stop eq "start");
-                        } else {
-                            # If a roadblock fails, this is fatal and the run cannot continue
-                            printf "[ERROR]roadblock for %s failed, exiting\n", $sync_point;
-                            exit 1;
-                        }
-                    } else {
-                        if ($this_attempt_fail == 0 and $sync_point eq "server-stop") {
-                            $sample_complete = 1;
-                            printf "Sample %d completed successfully with %d failed attempts " .
-                                "(%d total sample failures for this iteration)\n",
-                                $samp_id, $this_attempt_num - 1, $sample_failures[$iter_array_idx];
-                        }
-                        $timeout = $default_rb_timeout;
-                        my %messages = %{ $messages_ref };
-                        if ( $sync_point eq "client-start" and exists $messages{'received'} ) {
-                            for my $message (@{ $messages{'received'} }) {
-                                if (exists $$message{'payload'}{'message'}{'user-object'}{'timeout'}) {
-                                    printf "found new timeout value: %s\n", $$message{'payload'}{'message'}{'user-object'}{'timeout'};
-                                    $timeout = $$message{'payload'}{'message'}{'user-object'}{'timeout'};
-                                    printf "Assigning new timeout with padding for next roadblock: %d\n", $timeout;
-                                }
-                            }
-                        }
-                    }
+            } else {
+                printf "No messages received\n";
+            }
+
+            $rb_name = $rb_prefix . "client-start-end";
+            ($roadblock_rc, @dropped_followers) = do_roadblock($rb_name, $timeout, $messages_ref, @active_followers);
+            ($abort, $quit) = evaluate_test_roadblock($rb_name, $roadblock_rc, \$sample_data[$iter_array_idx], \@active_followers, \@dropped_followers, $abort, $quit);
+            remove_dropped_followers(\@active_followers, \@dropped_followers);
+            ####################################################################
+            # reset the timeout value in case it was changed
+            if ($timeout != $default_rb_timeout) {
+                $timeout = $default_rb_timeout;
+                printf "Resetting timeout value: %s\n", $timeout;
+            }
+
+            $rb_name = $rb_prefix . "client-stop-begin";
+            ($roadblock_rc, @dropped_followers) = do_roadblock($rb_name, $timeout, $messages_ref, @active_followers);
+            ($abort, $quit) = evaluate_test_roadblock($rb_name, $roadblock_rc, \$sample_data[$iter_array_idx], \@active_followers, \@dropped_followers, $abort, $quit);
+            remove_dropped_followers(\@active_followers, \@dropped_followers);
+
+            $rb_name = $rb_prefix . "client-stop-end";
+            ($roadblock_rc, @dropped_followers) = do_roadblock($rb_name, $timeout, $messages_ref, @active_followers);
+            ($abort, $quit) = evaluate_test_roadblock($rb_name, $roadblock_rc, \$sample_data[$iter_array_idx], \@active_followers, \@dropped_followers, $abort, $quit);
+            remove_dropped_followers(\@active_followers, \@dropped_followers);
+            ####################################################################
+            $rb_name = $rb_prefix . "endpoint-stop-begin";
+            ($roadblock_rc, @dropped_followers) = do_roadblock($rb_name, $timeout, $messages_ref, @active_followers);
+            ($abort, $quit) = evaluate_test_roadblock($rb_name, $roadblock_rc, \$sample_data[$iter_array_idx], \@active_followers, \@dropped_followers, $abort, $quit);
+            remove_dropped_followers(\@active_followers, \@dropped_followers);
+
+            $rb_name = $rb_prefix . "endpoint-stop-end";
+            ($roadblock_rc, @dropped_followers) = do_roadblock($rb_name, $timeout, $messages_ref, @active_followers);
+            ($abort, $quit) = evaluate_test_roadblock($rb_name, $roadblock_rc, \$sample_data[$iter_array_idx], \@active_followers, \@dropped_followers, $abort, $quit);
+            remove_dropped_followers(\@active_followers, \@dropped_followers);
+            ####################################################################
+            $rb_name = $rb_prefix . "server-stop-begin";
+            ($roadblock_rc, @dropped_followers) = do_roadblock($rb_name, $timeout, $messages_ref, @active_followers);
+            ($abort, $quit) = evaluate_test_roadblock($rb_name, $roadblock_rc, \$sample_data[$iter_array_idx], \@active_followers, \@dropped_followers, $abort, $quit);
+            remove_dropped_followers(\@active_followers, \@dropped_followers);
+
+            $rb_name = $rb_prefix . "server-stop-end";
+            ($roadblock_rc, @dropped_followers) = do_roadblock($rb_name, $timeout, $messages_ref, @active_followers);
+            ($abort, $quit) = evaluate_test_roadblock($rb_name, $roadblock_rc, \$sample_data[$iter_array_idx], \@active_followers, \@dropped_followers, $abort, $quit);
+            remove_dropped_followers(\@active_followers, \@dropped_followers);
+            ####################################################################
+            $rb_name = $rb_prefix . "infra-stop-begin";
+            ($roadblock_rc, @dropped_followers) = do_roadblock($rb_name, $timeout, $messages_ref, @active_followers);
+            ($abort, $quit) = evaluate_test_roadblock($rb_name, $roadblock_rc, \$sample_data[$iter_array_idx], \@active_followers, \@dropped_followers, $abort, $quit);
+            remove_dropped_followers(\@active_followers, \@dropped_followers);
+
+            $rb_name = $rb_prefix . "infra-stop-end";
+            ($roadblock_rc, @dropped_followers) = do_roadblock($rb_name, $timeout, $messages_ref, @active_followers);
+            ($abort, $quit) = evaluate_test_roadblock($rb_name, $roadblock_rc, \$sample_data[$iter_array_idx], \@active_followers, \@dropped_followers, $abort, $quit);
+            remove_dropped_followers(\@active_followers, \@dropped_followers);
+            ####################################################################
+
+            my $sample_result;
+            if (($sample_data[$iter_array_idx]{'attempt-fail'} == 0) &&
+                ($abort == 0) &&
+                ($quit == 0)) {
+                $sample_data[$iter_array_idx]{'complete'} = 1;
+
+                $sample_result = "successfully";
+            } else {
+                $sample_result = "unsuccessfully";
+
+                if ($abort != 0) {
+                    printf "[WARNING] An abort signal has been encountered!\n";
+                }
+
+                if ($quit != 0) {
+                    printf "[ERROR] A quit signal has been encountered!\n";
                 }
             }
-            $this_attempt_num++;
+
+            printf "Completed iteration %d sample %d (test %d of %d) attempt number %d of %d %s\n",
+                $iter_id,
+                $samp_id,
+                $tid+1,
+                scalar(@tests),
+                $sample_data[$iter_array_idx]{'attempt-num'},
+                $run{'max-sample-failures'},
+                $sample_result;
         }
     }
 }
@@ -1294,6 +1394,7 @@ sub make_run_dirs() {
     $client_server_archives_dir = $client_server_run_dir . "/archives/";
     mkdir($client_server_archives_dir);
     $client_server_run_script = $client_server_config_dir . "/client-server-script";
+    $client_server_library_script = $client_server_config_dir . "/client-server-script-library";
     $iterations_dir = $run_dir . "/iterations";
     mkdir($iterations_dir);
     $roadblock_msgs_dir = $run_dir . "/roadblock-msgs";
@@ -1599,9 +1700,11 @@ sub prepare_bench_tool_engines() {
         debug_log(sprintf "controller pre-script output:\n%s", join("\n", $pre_cmd_output));
     }
     copy($rickshaw_project_dir . "/engine/client-server-script", $client_server_run_script)
-        || die "Could not copy client-server-script to " . $client_server_run_script .
-            "/client-server-script";
+        || die "Could not copy client-server-script to " . $client_server_run_script;
     chmod 0755, "$client_server_run_script";
+    copy($rickshaw_project_dir . "/engine/client-server-script-library", $client_server_library_script)
+        || die "Could not copy client-server-script-library to " . $client_server_library_script;
+    chmod 0755, "$client_server_library_script";
     # Each tool may specify, for specific endpoints, that it needs to run somewhere other than a client
     # or server (a "collector").  This preference is in the "whitelist" section.  Check each tool used
     # to see if we need to build a command file for any of these collectors.
@@ -1841,47 +1944,79 @@ sub deploy_endpoints() {
 }
 
 sub process_roadblocks() {
-    # Work progresses in the following way: pre-test-setup, tests, post-tests-cleanup
-    # The number of actions taken in post-tests-cleanup depends on how far pre-test-setup
-    # progressed.  If at any point the pre-test-setup aborts, it is important to 
-    # cleanup properly.  All roadblock particpants need the same conditional approach.
-    # First confirm endpoints are deployed (all osruntimes have launched client-server-script)
+    my $roadblock_rc;
     my @new_followers;
-    if (roadblock_leader("endpoint-deploy", $endpoint_deploy_timeout, $messages_ref, dump_endpoint_labels(\@endpoints)) == 0) {
-        # Endpoints may introduce new followers for remaining roadblocks.  These followers are typically osruntimes which
-        # are only running tools.
-        if (defined $messages_ref) {
-            foreach my $msg (@{ $$messages_ref{'received'} })  {
-                if (exists $$msg{'payload'}{'message'}{'user-object'}{'new-followers'}) {
-                    @new_followers = @{ $$msg{'payload'}{'message'}{'user-object'}{'new-followers'} };
-                    printf "Endpoint created followers: %s\n", join(" ", sort(@new_followers));
-                    @rb_cs_ids = (@rb_cs_ids, @new_followers);
-                }
+    my @dropped_followers;
+
+    @active_followers = (dump_endpoint_labels(\@endpoints));
+
+    ####################################################################
+    $roadblock_rc = do_roadblock("endpoint-deploy-begin", $endpoint_deploy_timeout, $messages_ref, @active_followers);
+    roadblock_exit_on_error($roadblock_rc);
+
+    if (defined $messages_ref) {
+        foreach my $msg (@{ $$messages_ref{'received'} })  {
+            if (exists $$msg{'payload'}{'message'}{'user-object'}{'new-followers'}) {
+                @new_followers = @{ $$msg{'payload'}{'message'}{'user-object'}{'new-followers'} };
+                printf "Endpoint created followers: %s\n", join(" ", sort(@new_followers));
+                last;
             }
         }
-        # Next step all client-servers through pre-test preparation
-        if (roadblock_leader("client-server-script-start", $client_server_script_start_timeout, $messages_ref, (@rb_cs_ids, dump_endpoint_labels(\@endpoints))) == 0) {
-            if (roadblock_leader("client-server-get-data", $client_server_script_start_timeout, $messages_ref, (@rb_cs_ids, dump_endpoint_labels(\@endpoints))) == 0) {
-                if (roadblock_leader("client-server-collect-sysinfo", $client_server_script_start_timeout, $messages_ref, (@rb_cs_ids, dump_endpoint_labels(\@endpoints))) == 0) {
-                    if (roadblock_leader("client-server-start-tools", $default_rb_timeout, $messages_ref, (@rb_cs_ids, dump_endpoint_labels(\@endpoints))) == 0) {
-                        if (roadblock_leader("client-server-start-tests", $default_rb_timeout, $messages_ref, (@rb_cs_ids, dump_endpoint_labels(\@endpoints))) == 0) {
-                            # Now cycle through all tests
-                            printf "Running tests:\n";
-                            run_tests;
-                        }
-                        # Finally step through shutdown, cleanup, and sending data back
-                        roadblock_leader("client-server-stop-tests", $default_rb_timeout, $messages_ref, (@rb_cs_ids, dump_endpoint_labels(\@endpoints)));
-                        roadblock_leader("client-server-stop-tools", $default_rb_timeout, $messages_ref, (@rb_cs_ids, dump_endpoint_labels(\@endpoints)));
-                    }
-                    roadblock_leader("client-server-send-data", $default_rb_timeout, $messages_ref, (@rb_cs_ids, dump_endpoint_labels(\@endpoints)));
-                }
-            }
-            roadblock_leader("client-server-script-stop", $default_rb_timeout, $messages_ref, (@rb_cs_ids, dump_endpoint_labels(\@endpoints)));
-        }
-        # Endpoints can now "un"-deploy, removing osruntimes
-        roadblock_leader("endpoint-move-data", $endpoint_move_data_rb_timeout, $messages_ref, dump_endpoint_labels(\@endpoints));
     }
-    roadblock_leader("endpoint-finish", $default_rb_timeout, $messages_ref, dump_endpoint_labels(\@endpoints));
+
+    $roadblock_rc = do_roadblock("endpoint-deploy-end", $endpoint_deploy_timeout, $messages_ref, @active_followers);
+    roadblock_exit_on_error($roadblock_rc);
+
+    push @active_followers, @new_followers, @rb_cs_ids;
+    ####################################################################
+    $roadblock_rc = do_roadblock("engine-init-begin", $client_server_script_start_timeout, $messages_ref, @active_followers);
+    roadblock_exit_on_error($roadblock_rc);
+
+    $roadblock_rc = do_roadblock("engine-init-end", $client_server_script_start_timeout, $messages_ref, @active_followers);
+    roadblock_exit_on_error($roadblock_rc);
+    ####################################################################
+    $roadblock_rc = do_roadblock("get-data-begin", $default_rb_timeout, $messages_ref, @active_followers);
+    roadblock_exit_on_error($roadblock_rc);
+
+    $roadblock_rc = do_roadblock("get-data-end", $default_rb_timeout, $messages_ref, @active_followers);
+    roadblock_exit_on_error($roadblock_rc);
+    ####################################################################
+    $roadblock_rc = do_roadblock("collect-sysinfo-begin", $default_rb_timeout, $messages_ref, @active_followers);
+    roadblock_exit_on_error($roadblock_rc);
+
+    $roadblock_rc = do_roadblock("collect-sysinfo-end", $default_rb_timeout, $messages_ref, @active_followers);
+    roadblock_exit_on_error($roadblock_rc);
+    ####################################################################
+    $roadblock_rc = do_roadblock("start-tools-begin", $default_rb_timeout, $messages_ref, @active_followers);
+    roadblock_exit_on_error($roadblock_rc);
+
+    $roadblock_rc = do_roadblock("start-tools-end", $default_rb_timeout, $messages_ref, @active_followers);
+    roadblock_exit_on_error($roadblock_rc);
+    ####################################################################
+    process_bench_roadblocks;
+    ####################################################################
+    ($roadblock_rc, @dropped_followers) = do_roadblock("stop-tools-begin", $default_rb_timeout, $messages_ref, @active_followers);
+    remove_dropped_followers(\@active_followers, \@dropped_followers);
+
+    ($roadblock_rc, @dropped_followers) = do_roadblock("stop-tools-end", $default_rb_timeout, $messages_ref, @active_followers);
+    remove_dropped_followers(\@active_followers, \@dropped_followers);
+    ####################################################################
+    ($roadblock_rc, @dropped_followers) = do_roadblock("send-data-begin", $default_rb_timeout, $messages_ref, @active_followers);
+    remove_dropped_followers(\@active_followers, \@dropped_followers);
+
+    ($roadblock_rc, @dropped_followers) = do_roadblock("send-data-end", $default_rb_timeout, $messages_ref, @active_followers);
+    remove_dropped_followers(\@active_followers, \@dropped_followers);
+    ####################################################################
+    # we always drop the engines here since they should have exited
+    remove_engine_followers(\@active_followers, \@new_followers);
+    remove_engine_followers(\@active_followers, \@rb_cs_ids);
+
+    ($roadblock_rc, @dropped_followers) = do_roadblock("endpoint-cleanup-begin", $default_rb_timeout, $messages_ref, @active_followers);
+    remove_dropped_followers(\@active_followers, \@dropped_followers);
+
+    ($roadblock_rc, @dropped_followers) = do_roadblock("endpoint-cleanup-end", $default_rb_timeout, $messages_ref, @active_followers);
+    remove_dropped_followers(\@active_followers, \@dropped_followers);
+    ####################################################################
 }
 
 sub organize_run_data() {
@@ -1951,7 +2086,97 @@ sub organize_run_data() {
     rmdir($tmp_data_dir);
 }
 
+sub evaluate_test_roadblock {
+    my $roadblock_name = shift;
+    my $roadblock_rc = shift;
+    my $sample_info = shift;
+    my $active_followers = shift;
+    my $dropped_followers = shift;
+    my $abort = shift;
+    my $quit = shift;
 
+    if ($roadblock_rc != 0) {
+        # something bad happened...
+        if ($roadblock_rc == $roadblock_exit_timeout) {
+            printf "[ERROR] roadblock '%s' timed out, attempting to exit and cleanly finish the run\n", $roadblock_name;
+
+            remove_dropped_followers($active_followers, $dropped_followers);
+
+            $quit = 1;
+        } elsif ($roadblock_rc == $roadblock_exit_abort) {
+            printf "[WARNING] roadblock '%s' received an abort, stopping sample\n", $roadblock_name;
+            $sample_info->{'attempt-fail'} = 1;
+
+            $sample_info->{'failures'}++;
+            printf "sample failures is now: %d\n", $sample_info->{'failures'};
+
+            if ($sample_info->{'failures'} >= $run{'max-sample-failures'}) {
+                $sample_info->{'complete'} = 1;
+                printf "[ERROR] A maximum of %d failures for iteration %d has been reached\n",
+                    $sample_info->{'failures'},
+                    $sample_info->{'iteration-id'};
+            }
+
+            $abort = 1;
+        } else {
+            printf "[ERROR] roadblock '%s' has reached an unknown state with RC=%d\n", $roadblock_name, $roadblock_rc;
+
+            $abort = 1;
+            $quit = 1;
+        }
+    }
+
+    return ($abort, $quit);
+}
+
+sub roadblock_exit_on_error {
+    my $roadblock_rc = shift;
+
+    if ($roadblock_rc != 0) {
+        printf "roadblock_exit_on_error()\n";
+        exit $roadblock_rc;
+    }
+}
+
+sub remove_dropped_followers {
+    my $active_followers = shift;
+    my $dropped_followers = shift;
+
+    return remove_followers($active_followers, $dropped_followers, 1);
+}
+
+sub remove_engine_followers {
+    my $active_followers = shift;
+    my $dropped_followers = shift;
+
+    return remove_followers($active_followers, $dropped_followers, 0);
+}
+
+sub remove_followers {
+    my $active_followers = shift;
+    my $dropped_followers = shift;
+    my $drop_msg = shift;
+
+    my %followers;
+
+    for (my $i=0; $i<@{$active_followers}; $i++) {
+        $followers{$$active_followers[$i]} = 0;
+    }
+    for (my $i=0; $i<@{$dropped_followers}; $i++) {
+        if (exists $followers{$$dropped_followers[$i]}) {
+            if ($drop_msg) {
+                printf "Dropping follower '%s' in an attempt to gracefully continue\n", $$dropped_followers[$i];
+            }
+            delete $followers{$$dropped_followers[$i]};
+        }
+    }
+    @{$active_followers} = ();
+    foreach my $key (keys %followers) {
+        push @{$active_followers}, $key;
+    }
+
+    return 0;
+}
 
 process_cmdline();
 validate_controller_env();

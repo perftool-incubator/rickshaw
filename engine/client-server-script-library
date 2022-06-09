@@ -1,0 +1,1063 @@
+#!/usr/local/bin/bash
+# -*- mode: sh; indent-tabs-mode: nil; sh-basic-offset: 4 -*-
+# vim: autoindent tabstop=4 shiftwidth=4 expandtab softtabstop=4 filetype=bash
+
+roadblock_bin="/usr/local/bin/roadblock.py"
+use_roadblock=1
+rb_exit_success=0
+rb_exit_timeout=3
+rb_exit_abort=4
+rb_exit_input=2
+runtime_padding=180
+abort=0
+
+# Exits without sending any roadblock message
+function exit_error() {
+    local msg=$1; shift
+    local sync=$1; shift
+    local leader=$1; shift
+    echo -e "[ERROR]client-server-script: $msg\n"
+    echo "Exiting"
+    exit 1
+}
+
+# Sends abort message on roadblock but does not exit
+function abort_error() {
+    local msg=$1; shift
+    local sync=$1; shift
+    local leader=$1; shift
+    echo -e "[ERROR]client-server-script: $msg\n"
+    local msg_file=error.json
+    echo '[{"recipient":{"type":"all","id":"all"},"user-object":{"error":"'$msg'"}}]' >$msg_file
+    do_roadblock $sync $leader 90 "--abort --user-message $msg_file"
+    abort=1
+}
+
+function do_roadblock() {
+    local label=$1; shift
+    local leader=$1; shift
+    local timeout=$1; shift
+    local message=""
+    if [ ${#} -gt 0 ]; then
+        if [ -n "${1}" ]; then
+            local message="${1}"; shift
+            echo "Going to send this user message file: ${message}"
+        fi
+    fi
+    if [ -z "${message}" ]; then
+        echo "Not going to send a user message file"
+    fi
+    if [ -z "$label" ]; then
+        exit_error "[ERROR]do_roadblock() label not provided"
+    fi
+    if [ -z "$timeout" ]; then
+        exit_error "[ERROR]do_roadblock() timeout not provided"
+    fi
+    local msgs_log_file="$roadblock_msgs_dir/$label.json"
+    local cmd=""
+    local role="follower"
+    ping -c 4 $rickshaw_host || exit_error "Could not ping controller"
+    cmd="$cmd $roadblock_bin --role=follower --redis-server=$rickshaw_host"
+    cmd="$cmd --leader-id=$leader --timeout=$timeout --redis-password=$roadblock_passwd"
+    cmd="$cmd --follower-id=$cs_label --message-log=$msgs_log_file"
+    if [ -n "${message}" ]; then
+        cmd="${cmd} --user-message ${message}"
+    fi
+    local uuid="$roadblock_id:$label"
+    printf "\n\n"
+    echo "Starting roadblock [`date`]"
+    echo "server: $rickshaw_host"
+    echo "role: $role"
+    echo "uuid (without attempt ID embedded): $uuid"
+    echo "timeout: $timeout"
+
+    local attempts=0
+    local rc=99
+    if [ "$use_roadblock" == "1" ]; then
+        while [ $attempts -lt $max_rb_attempts -a $rc -ne $rb_exit_success -a $rc -ne $rb_exit_abort ]; do
+            let attempts=$attempts+1
+            echo "attempt number: $attempts"
+            echo "uuid: $attempts:$uuid"
+            local rb_cmd="$cmd --uuid=$attempts:$uuid"
+            echo "going to run this roadblock command: ${rb_cmd}"
+            echo "roadblock output BEGIN"
+            ${rb_cmd}
+            rc=$?
+            echo "roadblock output END"
+            echo "roadblock exit code: $rc"
+            if [ -f ${msgs_log_file} ]; then
+                echo "messages from roadblock:"
+                cat ${msgs_log_file}
+            fi
+        done
+
+        echo "total attempts: $attempts"
+        echo "Completed roadblock [`date`]"
+        printf "\n\n"
+
+    else
+        echo "since use_roadblock = 0, not using roadblock"
+        return 0
+    fi
+
+    echo "returning $rc"
+    return $rc
+}
+
+function roadblock_exit_on_error() {
+    local roadblock_rc=$1; shift
+
+    if [ ${roadblock_rc} != 0 ]; then
+        echo "roadblock_exit_on_error()"
+        exit ${roadblock_rc}
+    fi
+}
+
+function archive_to_controller() {
+    local ssh_id_file=$1; shift
+    local src=$1; shift # a directory to archive from
+    local dest=$1; shift # a destination directory to write archive
+    local ssh_attempts=1
+    local ssh_rc=1
+    local max_attempts=10
+    if [ -z "$ssh_id_file" ]; then
+        exit_error "archive_to_controller(): ssh_id_file not defined"
+    fi
+    if [ -z "$src" ]; then
+        exit_error "archive_to_controller(): src_file not defined"
+    fi
+    if [ -z "$dest" ]; then
+        exit_error "archive_to_controller(): destination is not defined"
+    fi
+    pushd $src || exit_error "Could not chdir to $src"
+    while [ $ssh_rc -gt 0 -a $ssh_attempts -lt $max_attempts ]; do
+        echo "Trying to tar/ssh fron $src to $rickshaw_host:$dest"
+        tar czf - . | ssh \
+                       -o StrictHostKeyChecking=no \
+                       -o ConnectionAttempts=10 \
+                       -i "/tmp/rickshaw_id.rsa" \
+                       $rickshaw_host "dd of=$dest"
+        ssh_rc=$?
+        echo "ssh exit code: $ssh_rc"
+        if [ $ssh_rc -gt 0 ]; then
+            echo "tar/ssh failed, trying again"
+            sleep $ssh_attempts
+        fi
+        let ssh_attempts=$ssh_attempts+1
+    done
+    popd >/dev/null
+    if [ $ssh_attempts -ge $max_attempts ]; then
+        exit_error "Could not archive $src to $rickshaw_host:$dest"
+    fi
+}
+
+function process_opts() {
+    longopts="rickshaw-host:,base-run-dir:,endpoint-run-dir:,cs-label:,roadblock-server:"
+    longopts+=",roadblock-passwd:,roadblock-id:,disable-tools:,endpoint:,osruntime:,max-sample-failures:"
+    longopts+=",max-rb-attempts:,client-server-script-start-timeout:"
+    opts=$(getopt -q -o "" --longoptions "$longopts" -n "getopt.sh" -- "$@");
+    eval set -- "$opts";
+    while true; do
+        case "$1" in
+            --osruntime)
+                shift;
+                osruntime="$1"
+                shift;
+                ;;
+            --endpoint)
+                shift;
+                endpoint="$1"
+                shift;
+                ;;
+            --rickshaw-host)
+                shift;
+                rickshaw_host="$1"
+                shift;
+                ;;
+            --base-run-dir)
+                shift;
+                base_run_dir=$1
+                shift;
+                ;;
+            --cs-label)
+                shift;
+                cs_label="$1"
+                shift;
+                ;;
+            --endpoint-run-dir)
+                shift;
+                endpoint_run_dir="$1"
+                shift;
+                ;;
+            --roadblock-passwd)
+                shift;
+                roadblock_passwd="$1"
+                shift;
+                ;;
+            --roadblock-id)
+                shift;
+                roadblock_id="$1"
+                shift;
+                ;;
+            --disable-tools)
+                shift;
+                disable_tools="$1"
+                shift;
+                ;;
+            --max-sample-failures)
+                shift;
+                max_sample_failures="$1"
+                shift;
+                ;;
+            --max-rb-attempts)
+                shift;
+                max_rb_attempts="$1"
+                shift;
+                ;;
+            --client-server-script-start-timeout)
+                shift;
+                client_server_script_start_timeout="$1"
+                echo "setting client_server_script_start_timeout to $client_server_script_start_timeout"
+                shift;
+                ;;
+            --)
+                shift;
+                break;
+                ;;
+            *)
+                exit_error "Unexpected argument [$1]"
+                shift;
+                break;
+                ;;
+        esac
+    done
+    if [ -z "$client_server_script_start_timeout" ]; then
+        load_json_setting "roadblock.timeouts.client-server-start" client_server_script_start_timeout
+    fi
+}
+
+function validate_core_env() {
+    echo
+    echo "core environment:"
+    if [ -z "$rickshaw_host" ]; then
+	exit_error "Exiting due to rickshaw host not being set"
+    else
+	echo "rickshaw_host=${rickshaw_host}"
+    fi
+    if [ -z "$roadblock_id" ]; then
+        echo "Cannot use roadblock for synchronizaton because an ID was not provided"
+        use_roadblock=0
+    fi
+    if [ -z "$roadblock_passwd" ]; then
+        echo "Cannot use roadblock for synchronizaton because a password was not provided"
+        use_roadblock=0
+    fi
+    echo "use_roadblock=${use_roadblock}"
+    if [ "$use_roadblock" == "1" ]; then
+        if [ ! -e $roadblock_bin ]; then
+            exit_error "Could not find roadblock binary: $roadblock_bin"
+        fi
+    fi
+    if [ -z "$cs_label" ]; then
+        exit_error "The client/server label (--cs-label) was not defined"
+    fi
+    if echo $cs_label | grep -q -P '^(\w+)-\d+$'; then
+        echo "client-server-label \"$cs_label\" is valid"
+    else
+        exit_error 'cs_label "'$cs_label'" does not adhere to regex /^(\w+)-\d+$/'
+    fi
+
+    if [ -z "${max_rb_attempts}" ]; then
+	max_rb_attempts=1
+	echo "[WARNING] --max-rb-attempts was not used, so setting to default of $max_rb_attempts"
+    else
+	echo "max_rb_attempts=${max_rb_attempts}"
+    fi
+    if [ -z "$max_sample_failures" ]; then
+        max_sample_failures=3
+        echo "[WARNING] --max-sample-failures was not used, so seeting to default of $max_sample_failures"
+    else
+	echo "max_sample_failures=${max_sample_failures}"
+    fi
+    if [ -z "$endpoint_run_dir" ]; then
+        exit_error "The endpoint run directory (--endpoint-run-dir) was not defined"
+    else
+	echo "endpoint_run_dir=${endpoint_run_dir}"
+    fi
+    echo
+    echo "client_server_script_start_timeout: $client_server_script_start_timeout"
+}
+
+function setup_core_env() {
+    export RS_CS_LABEL=$cs_label
+    cs_type=`echo $cs_label | awk -F- '{print $1}'`
+    cs_id=`echo $cs_label | awk -F- '{print $2}'`
+
+    # Directories on the client/server
+    cs_dir="`mktemp -d`"
+    echo "cs_dir: $cs_dir"
+    tool_start_cmds="$cs_dir/tool-start"
+    tool_stop_cmds="$cs_dir/tool-stop"
+    roadblock_msgs_dir="$cs_dir/roadblock-msgs"
+    mkdir -p "$roadblock_msgs_dir"
+    sysinfo_dir="$cs_dir/sysinfo"
+    mkdir -p "$sysinfo_dir"
+
+    # Directories on the controller
+    config_dir="$base_run_dir/config"
+    client_server_config_dir="$config_dir/client-server"
+    tool_cmds_dir="$config_dir/tool-cmds/$cs_type"
+    tool_cmds_dir="$config_dir/tool-cmds/$cs_type"
+    run_dir="$base_run_dir/run"
+    archives_dir="$run_dir/client-server/archives"
+    sync_prefix=client-server
+    sync=$sync_prefix-script-start
+}
+
+function get_data() {
+    # Get files required to run benchmark and tools
+    cs_files_list="$cs_type-files-list"
+    # First get the file that tells us what other files to get
+    scp_from_controller "$ssh_id_file" "$client_server_config_dir/$cs_files_list" "$cs_files_list"
+    if [ ! -e "$cs_files_list" ]; then
+        abort_error "Could not find $cs_files_list" $sync $leader
+    fi
+    dest_file=""
+    src_file=""
+    # Now we know what files to get
+    while read -u 9 line; do
+        # $cs_files_list has line like:
+        # src=<file>
+        # dest=<file>
+        # (then repeat)
+        if [ -z "$src_file" ]; then
+            src_file=`echo $line | grep "^src=" | awk -F= '{print $2}'`
+            if [ -z "$src_file" ]; then
+                abort_error "source file not found in $cs_type-file-list" $sync $leader
+            fi
+        else
+            dest_file=`echo $line | grep "^dest=" | awk -F= '{print $2}'`
+            if [ -z "$dest_file" ]; then
+                abort_error "dest file not found in $cs_type-file-list" $sync $leader
+            fi
+            scp_from_controller "$ssh_id_file" "$src_file" "$dest_file"
+            dest_file=""
+            src_file=""
+        fi
+    done 9< "$cs_files_list"
+
+    # Get the benchmark and tool commands
+    cs_start_bench_cmds="$cs_label-start-bench.cmds"
+    # Everyone gets the bench-start-cmds (the client's start cmds) because that tells everyone how many tests there are
+    if [ "$cs_type" == "client" -o "$cs_type" == "server" ]; then
+        scp_from_controller "$ssh_id_file" "$client_server_config_dir/bench-cmds/$cs_type/$cs_id/start" "bench-start-cmds"
+    else
+        # All tool-only osruntimes just copy from client-1
+        scp_from_controller "$ssh_id_file" "$client_server_config_dir/bench-cmds/client/1/start" "bench-start-cmds"
+    fi
+    if [ ! -e "bench-start-cmds" ]; then
+        abort_error "bench cmds file bench-start-cmds not found. PWD: `/bin/pwd`  LS: `/bin/ls`" $sync $leader
+    fi
+    if [ "$cs_type" == "client" -o "$cs_type" == "server" ]; then
+        if [ "$cs_type" == "client" ]; then
+            scp_from_controller "$ssh_id_file" "$client_server_config_dir/bench-cmds/$cs_type/$cs_id/infra" "bench-infra-cmds"
+            if [ "$cs_id" == "1" ]; then
+                scp_from_controller "$ssh_id_file" "$client_server_config_dir/bench-cmds/$cs_type/$cs_id/runtime" "bench-runtime-cmds"
+            fi
+        fi
+        if [ "$cs_type" == "server" ]; then
+            scp_from_controller "$ssh_id_file" "$client_server_config_dir/bench-cmds/$cs_type/$cs_id/stop" "bench-stop-cmds"
+            if [ ! -e "bench-stop-cmds" ]; then
+                abort_error "bench cmds file bench-stop-cmds not found. PWD: `/bin/pwd`  LS: `/bin/ls`" $sync $leader
+            fi
+        fi
+        scp_from_controller "$ssh_id_file" "$tool_cmds_dir/$cs_id/start" "$tool_start_cmds"
+        scp_from_controller "$ssh_id_file" "$tool_cmds_dir/$cs_id/stop" "$tool_stop_cmds"
+    else
+        # non-client/server get tool cmds based on endpoint-specific collector = $cs_label like "worker"
+        scp_from_controller "$ssh_id_file" "$tool_cmds_dir/start" "$tool_start_cmds"
+        scp_from_controller "$ssh_id_file" "$tool_cmds_dir/stop" "$tool_stop_cmds"
+    fi
+}
+
+function collect_sysinfo() {
+    echo
+    echo "Collecting sysinfo"
+
+    packrat_bin=$(command -v packrat)
+    if [ ! -z "${packrat_bin}" ]; then
+        echo "Running packrat..."
+        ${packrat_bin} ${sysinfo_dir}
+        echo "Packrat is finished"
+    else
+        echo "Packrat is not available"
+    fi
+
+    echo "Contents of ${sysinfo_dir}:"
+    ls -l ${sysinfo_dir}
+
+    echo
+}
+
+function start_tools() {
+    echo "running start_tools()"
+
+    mkdir -p tool-data
+    if [ "$disable_tools" == "1" ]; then
+        echo "Not running tools because --disable-tools=1 was used"
+    else
+        for this_tool_cmds in "$tool_start_cmds" "$tool_stop_cmds"; do
+            if [ ! -e $this_tool_cmds ]; then
+                abort_error "Tool cmd file $this_tool_cmd was not found" $sync $leader
+            fi
+        done
+
+        if pushd tool-data >/dev/null; then
+            while read -u 9 line; do
+                tool_name=`echo $line | awk -F: '{print $1}'`
+                tool_cmd=`echo $line | sed -e s/^$tool_name://`
+                /bin/mkdir -p $tool_name
+                if pushd $tool_name >/dev/null; then
+                    echo "Starting tool '${tool_name}' with command '${tool_cmd}'"
+                    eval $tool_cmd
+
+                    popd >/dev/null
+                else
+                    abort_error "start_tools: Failed to pushd to ${tool_name}" $sync $leader
+                fi
+            done 9<"$tool_start_cmds"
+
+            popd >/dev/null
+        else
+            abort_error "start_tools: Failed to pushd to tool-data" $sync $leader
+        fi
+    fi
+}
+
+function prepare_roadblock_user_msgs_file {
+    local iteration_sample_directory=$1; shift
+    local roadblock_name=$1; shift
+
+    local pending_tx_msgs=$(/bin/ls -1 ${cs_tx_msgs_dir})
+    if [ ! -z "${pending_tx_msgs}" ]; then
+        echo "Found queued messages in ${cs_tx_msgs_dir}, preparing them to send"
+
+        mkdir -p ${cs_tx_msgs_dir}-sent
+        user_msgs_file="${iteration_sample_directory}/rb-msgs-${roadblock_name}.json"
+
+        echo "[" > "${user_msgs_file}"
+        for msg in ${pending_tx_msgs}; do
+            # TODO validate JSON schema
+            echo "Adding ${msg} to ${user_msgs_file}"
+            cat "${cs_tx_msgs_dir}/${msg}" >> "${user_msgs_file}"
+            /bin/mv "${cs_tx_msgs_dir}/${msg}" "${cs_tx_msgs_dir}-sent"
+            echo "," >> "${user_msgs_file}"
+        done
+        echo '{"recipient":{"type":"all","id":"all"},"user-object":{"sync":"'${roadblock_name}'"}}]' >> "${user_msgs_file}"
+
+        echo "Contents of ${user_msgs_file}:"
+        cat "${user_msgs_file}"
+    else
+        echo "No queued messages found in ${cs_tx_msgs_dir}"
+        user_msgs_file=""
+    fi
+}
+
+function evaluate_test_roadblock {
+    local roadblock_name=$1; shift;
+    local roadblock_rc=$1; shift;
+    local iter_array_idx=$1; shift;
+
+    if [ ${roadblock_rc} != 0 ]; then
+        # something bad happened
+        if [ ${roadblock_rc} == ${rb_exit_timeout} ]; then
+            printf "[ERROR] roadblock '%s' timed out, attempting to exit and cleanly finish the run\n" "${roadblock_name}"
+
+            quit=1
+        elif [ ${roadblock_rc} == ${rb_exit_abort} ]; then
+            printf "[WARNING] roadblock '%s' received an abort, stopping sample\n" "${roadblock_name}"
+            sample_data_attempt_fail[${iter_array_idx}]=1;
+
+            (( sample_data_failures[${iter_array_idx}]++ ))
+            printf "sample failures is now: %d\n", ${sample_data_failures[${iter_array_idx}]}
+
+            if [ ${sample_data_failures[${iter_array_idx}]} -ge ${max_sample_failures} ]; then
+                sample_data_complete[${iter_array_idx}]=1
+
+                printf "[ERROR] A maximum of %d failures for iteration %d has been reached\n" \
+                       ${sample_data_failures[${iter_array_idx}]} \
+                       ${sample_data_iteration_id[${iter_array_idx}]}
+            fi
+
+            abort=1
+        fi
+    fi
+
+    local msgs_log_file="${roadblock_msgs_dir}/${roadblock_name}.json"
+    if [ -f "${msgs_log_file}" ]; then
+        echo "Found received messages file: ${msgs_log_file}"
+
+        if [ "${cs_type}" == "client" -o "${cs_type}" == "server" ]; then
+            echo "Processing message file:"
+
+            local cs_buddy=""
+            local count=0
+            local roadblock_label=$(echo "${roadblock_name}" | awk -F: '{ print $2 }')
+
+            case "${cs_type}" in
+                "client")
+                    cs_buddy="server-${cs_id}"
+                    ;;
+                "server")
+                    cs_buddy="client-${cs_id}"
+                    ;;
+            esac
+
+            echo "My cs_buddy=${cs_buddy}"
+
+            # First look for a message to "all" but sent by my client-server buddy
+            # (to be deprecated)
+            local tmp_message_file=$(mktemp)
+            jq -cr '.received[] | select(.payload.sender.id == "'${cs_buddy}'" and
+                    .payload.message.command == "user-object") | .payload.message' ${msgs_log_file} \
+                   > ${tmp_message_file}
+            while read -u 9 line; do
+                let count=${count}+1
+                local msg="${roadblock_label}:${count}"
+                local outfile="${cs_rx_msgs_dir}/${msg}"
+
+                echo "Found user-object message from ${cs_buddy} sent to 'all':"
+                echo -e "\tMessage:  ${line}"
+                echo -e "\tSaved to: ${outfile}"
+
+                echo "${line}" | jq '."user-object"' > "${outfile}"
+            done 9< ${tmp_message_file}
+            rm ${tmp_message_file}
+
+            # Next look for a message sent specifically to this client/server
+            local tmp_message_file=$(mktemp)
+            jq -cr '.received[] | select(.payload.recipient.id == "'${cs_label}'" and
+                    .payload.message.command == "user-object") | .payload.message' ${msgs_log_file} \
+                   > ${tmp_message_file}
+            while read -u 9 line; do
+                let count=${count}+1
+                local msg="${roadblock_label}:${count}"
+                local outfile="${cs_rx_msgs_dir}/${msg}"
+
+                echo "Found user-object message sent to 'me':"
+                echo -e "\tMessage:  ${line}"
+                echo -e "\tSaved to: ${outfile}"
+
+                echo "${line}" | jq '."user-object"' > "${outfile}"
+            done 9< ${tmp_message_file}
+            rm ${tmp_message_file}
+
+            echo "Found ${count} message(s) for me"
+        else
+            echo "Skipping message file processing because I am not a 'client' or a 'server'"
+        fi
+    fi
+}
+
+function run_bench_cmd() {
+    local matching_cs_type
+    local cmd_type
+    local abort_status
+    local quit_status
+    local force_cmd
+    local cmd
+    local ret_val
+    local cmd_rc
+
+    matching_cs_type="${1}"; shift
+    cmd_type="${1}"; shift
+    abort_status="${1}"; shift
+    quit_status="${1}"; shift
+    force_cmd="${1}"; shift
+    cmd="${1}"; shift
+    ret_val=0
+
+    if [ "${cs_type}" == "${matching_cs_type}" ]; then
+        if [ "${force_cmd}" == "1" ] || [ "${abort_status}" == "0" -a "${quit_status}" == "0" ]; then
+            if [ ! -z "${cmd}" ]; then
+                echo "Running ${cmd_type} command: ${cmd}"
+                ${cmd}
+                cmd_rc=$?
+
+                if [ "${cmd_rc}" != "0" ]; then
+                    echo "The ${cmd_type} command exited with a non-zero return code, aborting"
+                    ret_val=1
+                fi
+            else
+                echo "There is no ${cmd_type} command to run"
+            fi
+        else
+            echo -n "Skipping ${cmd_type} command because"
+            if [ "${abort_status}" != "0" -a "${quit_status}" != "0" ]; then
+                echo -n " the iteration sample is being aborted and the run is being quit"
+            elif [ "${quit_status}" != "0" ]; then
+                echo -n " the run is being quit"
+            elif [ "${abort_status}" != "0" ]; then
+                echo -n " the iteration sample is being aborted"
+            fi
+            echo " and it was not forced"
+        fi
+    fi
+
+    return ${ret_val}
+}
+
+function process_bench_roadblocks() {
+    echo "Starting run_tests()"
+
+    # Take the files generated by rickshaw controller
+    # that includes all of the benchmark commands
+    # and put them in an array to later use.  At a
+    # minimum, all clients and servers need a start
+    # command, and all servers need a stop command
+
+    declare -A bench_runtime_cmds
+    declare -A bench_infra_cmds
+    declare -A bench_start_cmds
+    declare -A bench_stop_cmds
+
+    echo "Processing bench cmds"
+    local count=0
+    if [ -e bench-start-cmds ]; then
+        while read -u 9 line; do
+            bench_start_cmds[$count]="$line"
+            let count=$count+1
+        done 9< bench-start-cmds
+    else
+        abort_error "bench-start-cmds not found" $sync $leader
+    fi
+
+    if [ "$cs_type" == "client" ]; then
+        # Only the clients need a runtime and infra cmd
+
+        count=0
+        # Only generate runtime cmds for first client
+        # as we assume all clients have the same runtime
+        if [ -e bench-runtime-cmds -a "$cs_id" == 1 ]; then
+            echo "Loading bench runtime cmds"
+
+            while read -u 9 line; do
+                bench_runtime_cmds[$count]="$line"
+                let count=$count+1
+            done 9< bench-runtime-cmds
+        fi
+
+        count=0
+        # Infra cmds are for clients that want/need
+        # to do some work before the server starts
+        if [ -e bench-infra-cmds ]; then
+            echo "Loading bench infra cmds"
+
+            while read -u 9 line; do
+                bench_infra_cmds[$count]="$line"
+                let count=$count+1
+            done 9< bench-infra-cmds
+        else
+            echo "There are no bench infra cmds to load"
+        fi
+    elif [ "$cs_type" == "server" ]; then
+        # Only the server needs a cmd to stop
+        # Clients run until the benchmark-client
+        # program finishes
+
+        if [ -e bench-stop-cmds ]; then
+            echo "Loading bench server cmds"
+
+            count=0
+            while read -u 9 line; do
+                bench_stop_cmds[$count]="$line"
+                let count=$count+1
+            done 9< bench-stop-cmds
+        else
+            abort_error "bench-stop-cmds not found" $sync $leader
+        fi
+    fi
+
+    local quit=0
+    local abort
+    local timeout=${default_timeout}
+    local total_tests=${#bench_start_cmds[@]}
+
+    declare -A sample_data_iteration_id
+    declare -A sample_data_sample_id
+    declare -A sample_data_failures
+    declare -A sample_data_complete
+    declare -A sample_data_attempt_num
+    declare -A sample_data_attempt_fail
+
+    echo "Initializing data structures:"
+    for (( i=0; i<${total_tests}; i++ )); do
+        local iter_samp=`echo ${bench_start_cmds[$i]} | awk '{print $1}'`
+        local iter_id=`echo ${iter_samp} | awk -F- '{print $1}'`
+        local samp_id=`echo ${iter_samp} | awk -F- '{print $2}'`
+        iter_array_idx=${i}
+        echo "iter_samp=${iter_samp} iter_id=${iter_id} samp_id=${samp_id} iter_array_idx=${iter_array_idx}"
+
+        sample_data_iteration_id[${iter_array_idx}]=${iter_id}
+        sample_data_sample_id[${iter_array_idx}]=${samp_id}
+        sample_data_failures[${iter_array_idx}]=0
+        sample_data_complete[${iter_array_idx}]=0
+        sample_data_attempt_num[${iter_array_idx}]=0
+        sample_data_attempt_fail[${iter_array_idx}]=0
+    done
+
+    echo "Total tests: ${total_tests}"
+
+    local current_test=0
+    for (( i=0; i<${total_tests}; i++ )); do
+        if [ $quit -gt 0 ]; then
+            break
+        fi
+
+        (( current_test += 1 ))
+
+        iter_samp=`echo ${bench_start_cmds[$i]} | awk '{print $1}'`
+        iter_id=`echo ${iter_samp} | awk -F- '{print $1}'`
+        samp_id=`echo ${iter_samp} | awk -F- '{print $2}'`
+        let iter_array_idx=${i}
+        #echo "iter_samp=${iter_samp} iter_id=${iter_id} samp_id=${samp_id} iter_array_idx=${iter_array_idx}"
+
+        local iter_samp_dir="${cs_dir}/iteration-${iter_id}/sample-${samp_id}"
+        local cs_msgs_dir="${iter_samp_dir}/msgs"
+        local cs_tx_msgs_dir="${cs_msgs_dir}/tx" # Messages a client or server wants to transmit
+        local cs_rx_msgs_dir="${cs_msgs_dir}/rx" # Messages a client or server has received
+        for this_dir in "${iter_samp_dir}" "${cs_msgs_dir}" "${cs_tx_msgs_dir}" "${cs_rx_msgs_dir}"; do
+            echo "mkdir -p ${this_dir}"
+            mkdir -p "${this_dir}" || exit_error "Could not mkdir ${this_dir}"
+        done
+
+        if [ "${cs_type}" == "client" ]; then
+            local start_cmd=`echo ${bench_start_cmds[${i}]} | sed -e s/^${iter_samp}//`
+            local runtime_cmd=`echo ${bench_runtime_cmds[${i}]} | sed -e s/^${iter_samp}//`
+            local infra_cmd=`echo ${bench_infra_cmds[${i}]} | sed -e s/^${iter_samp}//`
+        elif [ "${cs_type}" == "server" ]; then
+            local start_cmd=`echo ${bench_start_cmds[${i}]} | sed -e s/^${iter_samp}//`
+            local stop_cmd=`echo ${bench_stop_cmds[${i}]} | sed -e s/^${iter_samp}//`
+        fi
+
+        abort=0
+        while [ ${quit} -eq 0 -a \
+                ${abort} -eq 0 -a \
+                ${sample_data_complete[${iter_array_idx}]} -eq 0 -a \
+                ${sample_data_failures[${iter_array_idx}]} -lt ${max_sample_failures} ]; do
+
+            sample_data_attempt_fail[${iter_array_idx}]=0
+            (( sample_data_attempt_num[${iter_array_idx}]++ ))
+
+            printf "Starting iteration %d sample %d (test %d of %d) attempt number %d of %d\n" \
+                  ${iter_id} \
+                  ${samp_id} \
+                  ${current_test} \
+                  ${total_tests} \
+                  ${sample_data_attempt_num[${iter_array_idx}]} \
+                  ${max_sample_failures}
+
+            # The following should be replaced by creating hardlinks in each sample
+            # dir for each file in $cs_file_list
+            if [ "${cs_type}" == "client" -o "${cs_type}" == "server" ]; then
+                find . -mindepth 1 -maxdepth 1 -type f | grep -v -- "${cs_label}-stderrout.txt" | \
+                    grep -v -- "${cs_label}-bench.cmds" | grep -v -- "${cs_label}-tool.cmds" | \
+                    grep -v -- "${cs_files_list}" | \
+                    cpio -pdum "iteration-${iter_id}/sample-${samp_id}"/ ||
+                    exit_error "Could not copy files from ${cs_dir} to ${iter_samp_dir} with find & cpio"
+            fi
+
+            if pushd ${iter_samp_dir}; then
+                echo PWD: `/bin/pwd`
+
+                user_msgs_file=""
+                rb_name=""
+                test_id=$(printf "%d-%d-%d" ${sample_data_iteration_id[${iter_array_idx}]} ${sample_data_sample_id[${iter_array_idx}]} ${sample_data_attempt_num[${iter_array_idx}]})
+                rb_prefix=$(printf "%s:" ${test_id})
+
+                local force_server_stop=0
+
+                ####################################################################
+                rb_name=$(printf "%s%s" ${rb_prefix} "infra-start-begin")
+                prepare_roadblock_user_msgs_file "${iter_samp_dir}" "${rb_name}"
+                do_roadblock "${rb_name}" "controller" ${timeout} "${user_msgs_file}"
+                roadblock_rc=$?
+                evaluate_test_roadblock "${rb_name}" ${roadblock_rc} ${iter_array_idx}
+
+                run_bench_cmd "client" "infra" "${abort}" "${quit}" "0" "${infra_cmd}"
+                abort=$?
+
+                rb_name=$(printf "%s%s" ${rb_prefix} "infra-start-end")
+                prepare_roadblock_user_msgs_file "${iter_samp_dir}" "${rb_name}"
+                do_roadblock "${rb_name}" "controller" ${timeout} "${user_msgs_file}"
+                roadblock_rc=$?
+                evaluate_test_roadblock "${rb_name}" ${roadblock_rc} ${iter_array_idx}
+                ####################################################################
+                rb_name=$(printf "%s%s" ${rb_prefix} "server-start-begin")
+                prepare_roadblock_user_msgs_file "${iter_samp_dir}" "${rb_name}"
+                do_roadblock "${rb_name}" "controller" ${timeout} "${user_msgs_file}"
+                roadblock_rc=$?
+                evaluate_test_roadblock "${rb_name}" ${roadblock_rc} ${iter_array_idx}
+
+                run_bench_cmd "server" "server" "${abort}" "${quit}" "0" "${start_cmd}"
+                abort=$?
+                force_server_stop=1
+
+                rb_name=$(printf "%s%s" ${rb_prefix} "server-start-end")
+                prepare_roadblock_user_msgs_file "${iter_samp_dir}" "${rb_name}"
+                do_roadblock "${rb_name}" "controller" ${timeout} "${user_msgs_file}"
+                roadblock_rc=$?
+                evaluate_test_roadblock "${rb_name}" ${roadblock_rc} ${iter_array_idx}
+                ####################################################################
+                rb_name=$(printf "%s%s" ${rb_prefix} "endpoint-start-begin")
+                prepare_roadblock_user_msgs_file "${iter_samp_dir}" "${rb_name}"
+                do_roadblock "${rb_name}" "controller" ${timeout} "${user_msgs_file}"
+                roadblock_rc=$?
+                evaluate_test_roadblock "${rb_name}" ${roadblock_rc} ${iter_array_idx}
+
+                rb_name=$(printf "%s%s" ${rb_prefix} "endpoint-start-end")
+                prepare_roadblock_user_msgs_file "${iter_samp_dir}" "${rb_name}"
+                do_roadblock "${rb_name}" "controller" ${timeout} "${user_msgs_file}"
+                roadblock_rc=$?
+                evaluate_test_roadblock "${rb_name}" ${roadblock_rc} ${iter_array_idx}
+                ####################################################################
+                if [ "${abort}" == "0" -a \
+                     "${quit}" == "0" -a \
+                     "${cs_type}" == "client" -a \
+                     "${cs_id}" == "1" -a \
+                     -n "${runtime_cmd}" ]; then
+                    echo "Going to run this command to get the estimated runtime: ${runtime_cmd}"
+
+                    local runtime runtime_rc tmp_timeout
+
+                    runtime=$(${runtime_cmd})
+                    runtime_rc=$?
+
+                    if [ "${runtime_rc}" -eq 0 -a \
+                         -n "${runtime}" ]; then
+                        # add padding to benchmark runtime so that
+                        # there is flexibility on benchmark end
+                        # behavior
+                        let tmp_timeout=${runtime}+${runtime_padding}
+                        echo "updated timeout value is ${tmp_timeout}"
+
+                        echo "adding timeout message to ${cs_tx_msgs_dir}"
+                        echo '{"recipient":{"type":"all","id":"all"},"user-object":{"timeout":"'${tmp_timeout}'"}}' > "${cs_tx_msgs_dir}/timeout"
+                    fi
+                fi
+
+                rb_name=$(printf "%s%s" ${rb_prefix} "client-start-begin")
+                prepare_roadblock_user_msgs_file "${iter_samp_dir}" "${rb_name}"
+                do_roadblock "${rb_name}" "controller" ${timeout} "${user_msgs_file}"
+                roadblock_rc=$?
+                evaluate_test_roadblock "${rb_name}" ${roadblock_rc} ${iter_array_idx}
+
+                if [ -n "${tmp_timeout}" ]; then
+                    timeout=${tmp_timeout}
+                    printf "Using self discovered new client-start-end timeout value: %s\n" ${timeout}
+                else
+                    msgs_log_file="${roadblock_msgs_dir}/${rb_name}.json"
+                    if [ -f ${msgs_log_file} ]; then
+                        next_timeout=`jq -r '.received[] | .payload.message."user-object".timeout ' ${msgs_log_file} | grep -v null`
+                        if [ ! -z "${next_timeout}" ]; then
+                            timeout=${next_timeout}
+                            printf "Found new client-start-end timeout value: %s\n" ${timeout}
+                        else
+                            printf "Could not find new client-start-end timeout value!\n"
+                        fi
+                    else
+                        printf "Could not find %s\n" ${msgs_log_file}
+                    fi
+                fi
+
+                run_bench_cmd "client" "client" "${abort}" "${abort}" "0" "${start_cmd}"
+                abort=$?
+
+                rb_name=$(printf "%s%s" ${rb_prefix} "client-start-end")
+                prepare_roadblock_user_msgs_file "${iter_samp_dir}" "${rb_name}"
+                do_roadblock "${rb_name}" "controller" ${timeout} "${user_msgs_file}"
+                roadblock_rc=$?
+                evaluate_test_roadblock "${rb_name}" ${roadblock_rc} ${iter_array_idx}
+                ####################################################################
+                # reset the timeout value in case it was changed
+                if [ ${timeout} != ${default_timeout} ]; then
+                    timeout=${default_timeout}
+                    printf "Resetting timeout value: %s\n" ${timeout}
+                fi
+
+                rb_name=$(printf "%s%s" ${rb_prefix} "client-stop-begin")
+                prepare_roadblock_user_msgs_file "${iter_samp_dir}" "${rb_name}"
+                do_roadblock "${rb_name}" "controller" ${timeout} "${user_msgs_file}"
+                roadblock_rc=$?
+                evaluate_test_roadblock "${rb_name}" ${roadblock_rc} ${iter_array_idx}
+
+                rb_name=$(printf "%s%s" ${rb_prefix} "client-stop-end")
+                prepare_roadblock_user_msgs_file "${iter_samp_dir}" "${rb_name}"
+                do_roadblock "${rb_name}" "controller" ${timeout} "${user_msgs_file}"
+                roadblock_rc=$?
+                evaluate_test_roadblock "${rb_name}" ${roadblock_rc} ${iter_array_idx}
+                ####################################################################
+                rb_name=$(printf "%s%s" ${rb_prefix} "endpoint-stop-begin")
+                prepare_roadblock_user_msgs_file "${iter_samp_dir}" "${rb_name}"
+                do_roadblock "${rb_name}" "controller" ${timeout} "${user_msgs_file}"
+                roadblock_rc=$?
+                evaluate_test_roadblock "${rb_name}" ${roadblock_rc} ${iter_array_idx}
+
+                rb_name=$(printf "%s%s" ${rb_prefix} "endpoint-stop-end")
+                prepare_roadblock_user_msgs_file "${iter_samp_dir}" "${rb_name}"
+                do_roadblock "${rb_name}" "controller" ${timeout} "${user_msgs_file}"
+                roadblock_rc=$?
+                evaluate_test_roadblock "${rb_name}" ${roadblock_rc} ${iter_array_idx}
+                ####################################################################
+                rb_name=$(printf "%s%s" ${rb_prefix} "server-stop-begin")
+                prepare_roadblock_user_msgs_file "${iter_samp_dir}" "${rb_name}"
+                do_roadblock "${rb_name}" "controller" ${timeout} "${user_msgs_file}"
+                roadblock_rc=$?
+                evaluate_test_roadblock "${rb_name}" ${roadblock_rc} ${iter_array_idx}
+
+                run_bench_cmd "server" "server" "${abort}" "${quit}" "${force_server_stop}" "${stop_cmd}"
+                abort=$?
+
+                rb_name=$(printf "%s%s" ${rb_prefix} "server-stop-end")
+                prepare_roadblock_user_msgs_file "${iter_samp_dir}" "${rb_name}"
+                do_roadblock "${rb_name}" "controller" ${timeout} "${user_msgs_file}"
+                roadblock_rc=$?
+                evaluate_test_roadblock "${rb_name}" ${roadblock_rc} ${iter_array_idx}
+                ####################################################################
+                rb_name=$(printf "%s%s" ${rb_prefix} "infra-stop-begin")
+                prepare_roadblock_user_msgs_file "${iter_samp_dir}" "${rb_name}"
+                do_roadblock "${rb_name}" "controller" ${timeout} "${user_msgs_file}"
+                roadblock_rc=$?
+                evaluate_test_roadblock "${rb_name}" ${roadblock_rc} ${iter_array_idx}
+
+                rb_name=$(printf "%s%s" ${rb_prefix} "infra-stop-end")
+                prepare_roadblock_user_msgs_file "${iter_samp_dir}" "${rb_name}"
+                do_roadblock "${rb_name}" "controller" ${timeout} "${user_msgs_file}"
+                roadblock_rc=$?
+                evaluate_test_roadblock "${rb_name}" ${roadblock_rc} ${iter_array_idx}
+                ####################################################################
+
+                popd
+            else
+                exit_error "Could not chdir to ${iter_samp_dir}"
+            fi
+
+            local sample_result
+            if [ ${sample_data_attempt_fail[${iter_array_idx}]} -eq 0 -a \
+                 $abort == 0 -a \
+                 $quit == 0 ]; then
+                sample_data_complete[${iter_array_idx}]=1
+
+                sample_result="successfully"
+            else
+                sample_result="unsuccessfully"
+
+                if [ $abort != 0 ]; then
+                    printf "[WARNING] An abort signal has been encountered for this sample!\n";
+                fi
+
+                if [ $quit != 0 ]; then
+                    printf "[ERROR] A quit signal has been encountered!\n";
+                fi
+            fi
+
+            printf "Completed iteration %d sample %d (test %d of %d) attempt number %d of %d %s\n" \
+                   ${iter_id} \
+                   ${samp_id} \
+                   ${current_test} \
+                   ${total_tests} \
+                   ${sample_data_attempt_num[${iter_array_idx}]} \
+                   ${max_sample_failures} \
+                   ${sample_result}
+        done
+    done
+}
+
+function stop_tools() {
+    echo "running stop_tools()"
+
+    if [ "$disable_tools" == "1" ]; then
+        echo "Not running tools because --disable-tools=1 was used"
+    else
+        if pushd tool-data >/dev/null; then
+            while read -u 9 line; do
+                tool_name=`echo $line | awk -F: '{print $1}'`
+                tool_cmd=`echo $line | sed -e s/^$tool_name://`
+                if pushd $tool_name >/dev/null; then
+                    echo "Stopping tool '${tool_name}' with command '${tool_cmd}'"
+                    eval $tool_cmd
+
+                    popd >/dev/null
+                else
+                    abort_error "stop_tools: Failed to pushd to ${tool_name}" $sync $leader
+                fi
+            done 9<"$tool_stop_cmds"
+
+            popd >/dev/null
+        else
+            abort_error "stop_tools: Failed to pushd to tool-data" $sync $leader
+        fi
+    fi
+}
+
+function send_data() {
+    echo -e "\nCopying data back to controller"
+    # Send all of the test data to the controller and remove local data
+    archive_to_controller "$ssh_id_file" "$cs_dir" "$archives_dir/$cs_label-data.tgz"
+}
+
+function load_json_setting() {
+    local query var value
+
+    query="$1"
+    typeset -n var=$2
+
+    echo "load_json_setting():"
+
+    value=$(${TOOLBOX_HOME}/bin/get-json-settings.pl --settings ${json_settings_file} --query ${query})
+    if [ $? != 0 ]; then
+        echo "available json settings:"
+        xzcat ${json_settings_file}
+        exit_error "query '${query}' failed to load a json setting"
+    else
+        var=${value}
+        echo "json setting query '${query}' returned '${var}'"
+    fi
+
+    return 0
+}
+
+# this function provides an interface for an external caller to
+# directly invoke one of the functions defined in this file
+#
+# this allows functions to be defined in this file and used by either
+# another script that sources this file or by a discrete caller from
+# the command line or similar
+#
+# ex. 'client-server-script-library <function-name> <function-args>'
+function direct_script_function_call() {
+    local func
+
+    if [ $# -gt 0 ]; then
+        func=${1}
+        shift
+        # check if the first argument is a defined function that can
+        # be called
+        if declare -F "${func}" > /dev/null; then
+            # since it is a defined function, call it with remaining
+            # arguments
+            ${func} "$@"
+            return $?
+        else
+            echo "ERROR: direct_script_function_call(): undefined function '${func}'"
+            return 1
+        fi
+    else
+        return 0
+    fi
+}
+
+# always invoke 'direct_script_function_call' to determine if
+# something needs to be handled; when this file is sourced this should
+# effectively be a noop
+direct_script_function_call "$@"

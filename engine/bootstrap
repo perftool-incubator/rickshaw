@@ -226,9 +226,10 @@ if [ ! -e ${json_settings_file} ]; then
 fi
 
 scp_from_controller "$ssh_id_file" "$client_server_config_dir/client-server-script" /usr/local/bin/
-if [ -e /usr/local/bin/client-server-script ]; then
+scp_from_controller "$ssh_id_file" "$client_server_config_dir/client-server-script-library" /usr/local/bin/
+if [ -e /usr/local/bin/client-server-script -a -e /usr/local/bin/client-server-script-library ]; then
     echo "Execing client-server-script:"
     exec /usr/local/bin/client-server-script
 else
-    exit_error "Could not find client-server-script"
+    exit_error "Could not find client-server-script or client-server-script-library"
 fi
