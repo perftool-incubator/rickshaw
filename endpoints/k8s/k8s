@@ -126,6 +126,10 @@ function endpoint_k8s_test_start() {
     local test_id="$1"; shift
     local tx_msgs_dir="$1"; shift
     echo "Running endpoint_k8s_test_start"
+    if [ "$hostNetwork" != "0"  ]; then
+        echo "hostNetwork is enabled. Skip svc creation"
+        return
+    fi
     # Creating any service or ingress only works if any servers provided information about its
     # IP and ports.
     local this_msg_file="${msgs_dir}/${test_id}:server-start-end.json"
