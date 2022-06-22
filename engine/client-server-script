@@ -10,7 +10,9 @@ test -e /etc/profile && . /etc/profile
 if [ ! -e /usr/local/bin/client-server-script-library ]; then
     echo "ERROR: Could not location client-server-script-library"
 else
+    echo "source client-server-script-library: BEGIN"
     source client-server-script-library
+    echo "source client-server-script-library: END"
 fi
 
 # Depending on how client-server-script is started, "/usr/local/bin" is not
@@ -42,44 +44,44 @@ if ! pushd $cs_dir; then
     abort_error "Could not chdir to $cs_dir" engine-init-begin $leader
     exit 1
 else
-    do_roadblock engine-init-begin $leader $client_server_script_start_timeout
+    do_roadblock engine-init-begin ${client_server_script_start_timeout}
     roadblock_rc=$?
     roadblock_exit_on_error ${roadblock_rc}
 fi
-do_roadblock engine-init-end $leader $client_server_script_start_timeout
+do_roadblock engine-init-end ${client_server_script_start_timeout}
 roadblock_rc=$?
 roadblock_exit_on_error ${roadblock_rc}
 
 
-do_roadblock get-data-begin $leader $default_timeout
+do_roadblock get-data-begin ${default_timeout}
 roadblock_rc=$?
 roadblock_exit_on_error ${roadblock_rc}
 
 get_data
 
-do_roadblock get-data-end $leader $default_timeout
+do_roadblock get-data-end ${default_timeout}
 roadblock_rc=$?
 roadblock_exit_on_error ${roadblock_rc}
 
 
-do_roadblock collect-sysinfo-begin $leader $default_timeout
+do_roadblock collect-sysinfo-begin ${default_timeout}
 roadblock_rc=$?
 roadblock_exit_on_error ${roadblock_rc}
 
 collect_sysinfo
 
-do_roadblock collect-sysinfo-end $leader $default_timeout
+do_roadblock collect-sysinfo-end ${default_timeout}
 roadblock_rc=$?
 roadblock_exit_on_error ${roadblock_rc}
 
 
-do_roadblock start-tools-begin $leader $default_timeout
+do_roadblock start-tools-begin ${default_timeout}
 roadblock_rc=$?
 roadblock_exit_on_error ${roadblock_rc}
 
 start_tools
 
-do_roadblock start-tools-end $leader $default_timeout
+do_roadblock start-tools-end ${default_timeout}
 roadblock_rc=$?
 roadblock_exit_on_error ${roadblock_rc}
 
@@ -87,14 +89,13 @@ roadblock_exit_on_error ${roadblock_rc}
 process_bench_roadblocks
 
 
-do_roadblock stop-tools-begin $leader $default_timeout
+do_roadblock stop-tools-begin ${default_timeout}
 stop_tools
-do_roadblock stop-tools-end $leader $default_timeout
+do_roadblock stop-tools-end ${default_timeout}
 
 
-do_roadblock send-data-begin $leader $default_timeout
-send_data
-do_roadblock send-data-end $leader $default_timeout
+do_roadblock send-data-begin ${default_timeout}
+do_roadblock send-data-end ${default_timeout} wait-for "/usr/local/bin/client-server-script-library send_data '${ssh_id_file}' '${cs_dir}' '${rickshaw_host}' '${archives_dir}/${cs_label}-data.tgz'"
 
 
 echo -e "\nAll client/server scripts are finished"

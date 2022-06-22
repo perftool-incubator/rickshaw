@@ -172,3 +172,57 @@ jobs:
         scenarios: "uperf"
         userenvs: "all"
         ci_endpoint: "k8s"
+
+  crucible-ci-all-userenvs-iperf-remotehost:
+    name: crucible-ci-all-userenvs-iperf-remotehost
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout rickshaw
+      uses: actions/checkout@v2
+      with:
+        path: rickshaw
+
+    - name: Checkout crucible-ci
+      uses: actions/checkout@v2
+      with:
+        repository: perftool-incubator/crucible-ci
+        ref: main
+        path: crucible-ci
+
+    - name: Run crucible-ci->integration-tests
+      uses: ./crucible-ci/.github/actions/integration-tests
+      with:
+        artifact_tag: "iperf-remotehost"
+        ci_target: "rickshaw"
+        ci_target_dir: ${{ github.workspace }}/rickshaw
+        scenarios: "iperf"
+        userenvs: "all"
+        ci_endpoint: "remotehost"
+
+  crucible-ci-all-userenvs-iperf-k8s:
+    name: crucible-ci-all-userenvs-iperf-k8s
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout rickshaw
+      uses: actions/checkout@v2
+      with:
+        path: rickshaw
+
+    - name: Checkout crucible-ci
+      uses: actions/checkout@v2
+      with:
+        repository: perftool-incubator/crucible-ci
+        ref: main
+        path: crucible-ci
+
+    - name: Run crucible-ci->integration-tests
+      uses: ./crucible-ci/.github/actions/integration-tests
+      with:
+        artifact_tag: "iperf-k8s"
+        ci_target: "rickshaw"
+        ci_target_dir: ${{ github.workspace }}/rickshaw
+        scenarios: "iperf"
+        userenvs: "all"
+        ci_endpoint: "k8s"

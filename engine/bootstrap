@@ -227,6 +227,7 @@ fi
 
 scp_from_controller "$ssh_id_file" "$client_server_config_dir/client-server-script" /usr/local/bin/
 scp_from_controller "$ssh_id_file" "$client_server_config_dir/client-server-script-library" /usr/local/bin/
+scp_from_controller "$ssh_id_file" "$client_server_config_dir/roadblock.py" /usr/local/bin
 if [ -e /usr/local/bin/client-server-script -a -e /usr/local/bin/client-server-script-library ]; then
     echo "Execing client-server-script:"
     exec /usr/local/bin/client-server-script

@@ -208,6 +208,18 @@ dump_images();
 
 printf "Image cache usage: %d of %d\n", $cache_size, $max_cache_size;
 
+print "Pruning dangling images:\n";
+if (open(FH, "ssh $ssh_opts $remotehost 'podman image prune -f'|")) {
+    while (<FH>) {
+        print $_;
+    }
+} else {
+    print "ERROR: failed to prune dangling images!\n";
+    exit 1;
+}
+
+dump_images();
+
 exit;
 
 sub remove_image {

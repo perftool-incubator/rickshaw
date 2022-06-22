@@ -44,6 +44,7 @@ chroot_rbind_mounts="proc dev sys lib/modules usr/src boot var/run"
 
 endpoint_name="remotehost"
 osruntime="chroot"
+image_cache_size=3
 userenv="rhubi8"
 user="root"
 declare -A cpuPartitioning
@@ -163,7 +164,7 @@ function cleanup_osruntime() {
 
     # manage container image cache on the host
     echo "Performing container image cache management:"
-    $endpoint_base_dir/remotehost/container-image-manager --remote-host $user@$host --debug 0
+    ${endpoint_base_dir}/remotehost/container-image-manager --remote-host ${user}@${host} --cache-size ${image_cache_size} --debug 0
     echo
 
     echo "Remaining containers on this remote host:"
@@ -192,7 +193,7 @@ function process_remotehost_opts() {
                 ;;
             osruntime)
                 case "$val" in
-                    builtin|chroot|podman)
+                    chroot|podman)
                         osruntime=$val
                         ;;
                     *)
@@ -246,6 +247,9 @@ function process_remotehost_opts() {
                 ;;
             disable-tools)
                 disable_tools="$val"
+                ;;
+            image-cache-size)
+                image_cache_size=$val
                 ;;
             *)
                 if echo $arg | grep -q -- "="; then
