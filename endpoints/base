@@ -268,36 +268,39 @@ function do_scp() {
     # no password prompt required.
     local src dst dst_sudo_cmd dst_path dst_user_host dst_user dst_cmd
     local src_sudo_cmd src_path src_user_host src_user src_sudo_cmd src_cmd
-    src=$1; shift # [<user>@<host>:]<source> source can be a dir or file
-                        # If a dir, the full dir is used when copied to the destination
-    dst=$1; shift # [<user>@<host>:]<destination> destination should be a dir, not a file
+    src_userhost=$1; shift # [<user>@<host>]
+    src_path=$1; shift # <path> path can be a dir or file
+                       # If a dir, the full dir is used when copied to the destination
+    dst_userhost=$1; shift # [<user>@<host>]
+    dst_path=$1; shift # <path> path can be a dir or file
+                       # if src_path is a dir, dst_path must also be a dir
 
-    if echo $dst | grep -q -- "@"; then
+    if echo $dst_userhost | grep -q -- "@"; then
         dst_sudo_cmd=""
-        dst_path=`echo $dst | awk -F: '{print $2}'`
-        dst_user_host=`echo $dst | awk -F: '{print $1}'`
-        dst_user=`echo $dst_user_host | awk -F@ '{print $1}'`
+        dst_user=`echo $dst_userhost | awk -F@ '{print $1}'`
         if [ "$dst_user" != "root" ]; then
             local dst_sudo_cmd="sudo"
         fi
-        dst_cmd="ssh $ssh_opts $dst_user_host $dst_sudo_cmd tar -C $dst_path -xf -"
+        dst_host=`echo $dst_userhost | awk -F@ '{print $2}'`
+        dst_cmd="ssh $ssh_opts ${dst_user}@$dst_host $dst_sudo_cmd tar -C $dst_path -xf -"
     else
-        dst_cmd="tar -C $dst -xf -"
+        dst_cmd="tar -C $dst_path -xf -"
     fi
 
-    if echo $src | grep -q -- "@"; then
+    if echo $src_userhost | grep -q -- "@"; then
         src_sudo_cmd=""
-        src_path=`echo $src | awk -F: '{print $2}'`
-        src_user_host=`echo $src | awk -F: '{print $1}'`
-        src_user=`echo $src_user_host | awk -F@ '{print $1}'`
+        src_user=`echo $src_userhost | awk -F@ '{print $1}'`
         if [ "$src_user" != "root" ]; then
             src_sudo_cmd="sudo"
         fi
-        src_cmd="ssh $ssh_opts $src_user_host $src_sudo_cmd tar -cf - $src_path"
+        src_host=`echo $src_userhost | awk -F@ '{print $2}'`
+        src_cmd="ssh $ssh_opts ${src_user}@$src_host $src_sudo_cmd tar -cf - $src_path"
     else
-        src_cmd="tar -cf - $src"
+        src_cmd="tar -cf - $src_path"
     fi
 
+    echo "Going to run:"
+    echo "$src_cmd | $dst_cmd"
     $src_cmd | $dst_cmd
 }
 
@@ -825,6 +828,8 @@ function is_ip() {
     local ip=$1; shift
 
     if echo "$ip" | egrep --silent '[[:digit:]]{1,3}\.[[:digit:]]{1,3}\.[[:digit:]]{1,3}\.[[:digit:]]{1,3}'; then
+        return 0
+    elif echo "$ip" | egrep --silent '[[:xdigit:]]{1,4}\:[[:xdigit:]]{1,4}\:[[:xdigit:]]{1,4}\:[[:xdigit:]]{1,4}\:[[:xdigit:]]{1,4}\:[[:xdigit:]]{1,4}\:[[:xdigit:]]{1,4}\:[[:xdigit:]]'; then
         return 0
     else
         return 1

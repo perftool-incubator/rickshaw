@@ -337,7 +337,7 @@ function launch_osruntime() {
             # for chroot osruntime we can also simply copy the ssh key
             echo "Copying ssh key to $user@$host:$container_mount/tmp/ for chroot runtime"
             pushd "$config_dir" >/dev/null
-            do_scp "rickshaw_id.rsa" "$user@$host:$container_mount/tmp/"
+            do_scp "" "rickshaw_id.rsa" "$user@$host" "$container_mount/tmp/"
             popd >/dev/null
             do_ssh $user@$host /bin/cp /etc/hosts $container_mount/etc/
             do_ssh $user@$host /bin/cp /etc/resolv.conf $container_mount/etc/
@@ -430,7 +430,7 @@ function launch_osruntime() {
 
             if pushd ${endpoint_run_dir} >/dev/null; then
                 echo "Copying ${endpoint_run_dir}/${env_file} to ${user}@${host}:${remote_cfg_dir}"
-                do_scp "${env_file}" "${user}@${host}:${remote_cfg_dir}"
+                do_scp "" "${env_file}" "${user}@${host}" "${remote_cfg_dir}"
 
                 popd >/dev/null
             else
@@ -482,7 +482,7 @@ function move_remotehost_logs() {
         if [ "${osruntime}" == "chroot" ]; then
             remote_cs_log_file="$remote_logs_dir/$this_cs_label.txt"
             pushd / >/dev/null
-            do_scp "$user@$host:$remote_cs_log_file" / && \
+            do_scp "$user@$host" "$remote_cs_log_file" "" / && \
                 mv $remote_cs_log_file $client_server_logs_dir && \
                 do_ssh $user@$host /bin/rm -r $remote_dir
             popd >/dev/null

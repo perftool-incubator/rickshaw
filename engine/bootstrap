@@ -47,7 +47,11 @@ function scp_from_controller() {
     scp_cmd+=" -v"
     scp_cmd+=" -o ConnectionAttempts=10"
     scp_cmd+=" -i $ssh_id_file"
-    scp_cmd+=" -r $rickshaw_host:$src $dest"
+    if echo $rickshaw_host | grep -q ":"; then
+        scp_cmd+=" -r -6 [$rickshaw_host]:$src $dest"
+    else
+        scp_cmd+=" -r $rickshaw_host:$src $dest"
+    fi
     while [ $scp_rc -gt 0 -a $scp_attempts -lt $max_attempts ]; do
         echo "Trying to scp $rickshaw_host:$src $dest"
         scp_output=`$scp_cmd 2>&1`
