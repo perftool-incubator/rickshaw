@@ -143,25 +143,26 @@ function cleanup_osruntime() {
     if [ "$osruntime" == "chroot" ]; then
 
         if [ -e $endpoint_run_dir/chroot-container-mount.txt ]; then
-            container_mount=`cat $endpoint_run_dir/chroot-container-mount.txt`
-            for fs in ${chroot_rbind_mounts}; do
-                echo "Removing ${fs} from ${container_mount}"
-                do_ssh $user@$host umount --verbose --recursive ${container_mount}/${fs}
-                echo
+            for container_mount in `cat $endpoint_run_dir/chroot-container-mount.txt`; do
+                for fs in ${chroot_rbind_mounts}; do
+                    echo "Removing ${fs} from ${container_mount}"
+                    do_ssh $user@$host umount --verbose --recursive ${container_mount}/${fs}
+                    echo
+                done
             done
-            echo "Unmounting container base mount [$container_mount] for chroot using container [$container_name]"
-            do_ssh $user@$host podman umount $container_name
         else
             echo "WARNING: the file with container base mount [$endpoint_run_dir/chroot-container-mount.txt] could not be found"
         fi
-    #elif [ "${osruntime}" == "podman" ]; then
-        # podman specific things would go here...
+
+        if [ -e $endpoint_run_dir/chroot-container-id.txt ]; then
+            for container_id in `cat $endpoint_run_dir/chroot-container-id.txt`; do
+                echo "Removing container with id [$container_id]"
+                do_ssh $user@$host podman rm $container_id
+            done
+        else
+            echo "WARNING: the file with container base mount [$endpoint_run_dir/chroot-container-id.txt] could not be found"
+        fi
     fi
-
-    echo "Removing container with name [$container_name]"
-    do_ssh $user@$host podman rm $container_name
-    echo
-
     # manage container image cache on the host
     echo "Performing container image cache management:"
     ${endpoint_base_dir}/remotehost/container-image-manager --remote-host ${user}@${host} --cache-size ${image_cache_size} --debug 0
@@ -298,58 +299,17 @@ function launch_osruntime() {
     echo "Recording container image usage"
     do_ssh $user@$host "echo '$image $(date -u +%s)' >> ${remote_base_dir}/remotehost-container-image-census"
 
-    container_name="${endpoint_label}_${run_id}"
-    existing_container=`do_ssh $user@$host podman ps --all --format "{{.Names}}" | grep ^$container_name$`
-    if [ ! -z "$existing_container" ]; then
-        echo "WARNING: found existing container '$existing_container', deleting"
-        do_ssh $user@$host podman rm $container_name
-    fi
     echo "$image" >$endpoint_run_dir/chroot-container-image.txt
-    if [ "$osruntime" == "chroot" ]; then
-        echo "Adding mount for chroot osruntime"
-        container_id=`do_ssh $user@$host podman create --name $container_name $image`
-        echo "$container_id"
-        container_mount=`do_ssh $user@$host podman mount "$container_id"`
-        echo "$container_id" >$endpoint_run_dir/chroot-container-id.txt
-        echo "$container_mount" >$endpoint_run_dir/chroot-container-mount.txt
-        if [ ! -z "$container_mount" ]; then
-            echo "Container mount: $container_mount"
-            # Allow the user to more easily inspect failed runs
-            echo "Mapping container /tmp to host $remote_data_dir"
-            do_ssh $user@$host mkdir -p $container_mount/tmp
-            do_ssh $user@$host mount --verbose --options bind $remote_data_dir $container_mount/tmp
-            echo "Adding host directories to container mount"
-            if [ "$host_mounts" != "" ]; then
-                local oldIFS=$IFS
-                IFS=" "
-                for fs in $host_mounts; do
-                    chroot_rbind_mounts+=" $fs"
-                done
-                IFS=$oldIFS
-            fi
-            for fs in ${chroot_rbind_mounts}; do
-                echo "Adding ${fs} to ${container_mount}"
-                do_ssh $user@$host mkdir -p $container_mount/$fs
-                do_ssh $user@$host mount --verbose --options rbind /$fs $container_mount/$fs
-                do_ssh $user@$host mount --verbose --make-rslave $container_mount/$fs
-                echo
-            done
-            # for chroot osruntime we can also simply copy the ssh key
-            echo "Copying ssh key to $user@$host:$container_mount/tmp/ for chroot runtime"
-            pushd "$config_dir" >/dev/null
-            do_scp "" "rickshaw_id.rsa" "$user@$host" "$container_mount/tmp/"
-            popd >/dev/null
-            do_ssh $user@$host /bin/cp /etc/hosts $container_mount/etc/
-            do_ssh $user@$host /bin/cp /etc/resolv.conf $container_mount/etc/
-        else
-            echo "Container mount not found, exiting"
-            exit 1
-        fi
-    fi
 
     # For each client and server launch the actual script which will run it.
     count=1
     for this_cs_label in ${clients[@]} ${servers[@]}; do
+        container_name="${endpoint_label}_${run_id}_${this_cs_label}"
+        existing_container=`do_ssh $user@$host podman ps --all --format "{{.Names}}" | grep ^$container_name$`
+        if [ ! -z "$existing_container" ]; then
+            echo "WARNING: found existing container '$existing_container', deleting"
+            do_ssh $user@$host podman rm $container_name
+        fi
         this_cs_log_file="$this_cs_label.txt"
 
         set +u
@@ -380,6 +340,51 @@ function launch_osruntime() {
 
         if [ "$osruntime" == "chroot" ]; then
             echo "using chroot"
+
+            if [ "$osruntime" == "chroot" ]; then
+                echo "Adding mount for chroot osruntime"
+                container_id=`do_ssh $user@$host podman create --name $container_name $image`
+                echo "container_id: $container_id"
+                echo "$container_id" >>$endpoint_run_dir/chroot-container-id.txt
+                container_mount=`do_ssh $user@$host podman mount "$container_id"`
+                echo "container_mount: $container_mount"
+                echo "$container_mount" >>$endpoint_run_dir/chroot-container-mount.txt
+                echo "container_name: $container_name"
+                echo "$container_name" >>$endpoint_run_dir/chroot-container-name.txt
+                if [ ! -z "$container_mount" ]; then
+                    echo "Container mount: $container_mount"
+                    # Allow the user to more easily inspect failed runs
+                    echo "Mapping container /tmp to host $remote_data_dir"
+                    do_ssh $user@$host mkdir -p $container_mount/tmp
+                    do_ssh $user@$host mount --verbose --options bind $remote_data_dir $container_mount/tmp
+                    echo "Adding host directories to container mount"
+                    if [ "$host_mounts" != "" ]; then
+                        local oldIFS=$IFS
+                        IFS=" "
+                        for fs in $host_mounts; do
+                            chroot_rbind_mounts+=" $fs"
+                        done
+                        IFS=$oldIFS
+                    fi
+                    for fs in ${chroot_rbind_mounts}; do
+                        echo "Adding ${fs} to ${container_mount}"
+                        do_ssh $user@$host mkdir -p $container_mount/$fs
+                        do_ssh $user@$host mount --verbose --options rbind /$fs $container_mount/$fs
+                        do_ssh $user@$host mount --verbose --make-rslave $container_mount/$fs
+                        echo
+                    done
+                    # for chroot osruntime we can also simply copy the ssh key
+                    echo "Copying ssh key to $user@$host:$container_mount/tmp/ for chroot runtime"
+                    pushd "$config_dir" >/dev/null
+                    do_scp "" "rickshaw_id.rsa" "$user@$host" "$container_mount/tmp/"
+                    popd >/dev/null
+                    do_ssh $user@$host /bin/cp /etc/hosts $container_mount/etc/
+                    do_ssh $user@$host /bin/cp /etc/resolv.conf $container_mount/etc/
+                else
+                    echo "Container mount not found, exiting"
+                    exit 1
+                fi
+            fi
 
             base_cmd="/usr/local/bin/bootstrap"
             base_cmd+=" --rickshaw-host=$controller_ipaddr"

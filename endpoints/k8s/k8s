@@ -79,7 +79,7 @@ function cleanup_json() {
     if jq . ${json}.tmp > ${json}; then
         rm ${json}.tmp
     else
-        exit_error "cleanup_json failed to process ${json}"
+        abort_error "cleanup_json failed to process ${json}" endpoint-deploy-begin
     fi
 }
 
@@ -806,7 +806,7 @@ function create_pods() {
             echo "The list of nodes for tool-pods for type $type is empty"
             echo "Something may be wrong in detecting these nodes"
         else
-            abort_error "You must request one or more pods to create" endpoint-deploy
+            abort_error "You must request one or more pods to create" endpoint-deploy-begin
         fi
     fi
     mkdir -p "$dir"
@@ -839,12 +839,12 @@ function create_pods() {
             # TODO: the exit code does not work here, need to find a way to have it work
             cat "$dir/$this_pod.json" | do_ssh $user@$host "kubectl create -f - 2>&1" >"$endpoint_run_dir/create-pod-output-$this_pod.txt"
             if [ $? -gt 0 ]; then
-                abort_error "Failed to create pod $this_pod" endpoint-deploy
+                abort_error "Failed to create pod $this_pod" endpoint-deploy-begin
             fi
             pods+=" $this_pod"
             do_ssh $user@$host "kubectl  -n $project_name get pod rickshaw-$this_pod -ojson" >$endpoint_run_dir/kubectl-get-pod-$this_pod.json
         else
-            abort_error "Could not find $dir/$this_pod.json to create pod: $create_output" endpoint-deploy
+            abort_error "Could not find $dir/$this_pod.json to create pod: $create_output" endpoint-deploy-begin
         fi
     done
     do_ssh $user@$host kubectl -n $project_name get pods 2>&1 >"$endpoint_run_dir/post-create-get-pods.txt"
@@ -858,7 +858,7 @@ function verify_pods_running() {
     declare -A unverified_pods=()
     declare -A verified_pods=()
     if [ -z "$1" ]; then
-        abort_error "You must provide at least 1 pod to verify" endpoint-deploy
+        abort_error "You must provide at least 1 pod to verify" endpoint-deploy-begin
     fi
     while [ $# -gt 0 ]; do
         unverified_pods[$1]=1; shift
@@ -876,7 +876,7 @@ function verify_pods_running() {
         if [ $rc -gt 0 ]; then
             let num_nonzero_exit=$num_nonzero_exit+1
             if [ $num_nonzero_exit -gt $max_nonzero_exit ]; then
-                abort_error "kubectl-get-pods returns non-zero more than $max_nonzero_exit times" endpoint-deploy
+                abort_error "kubectl-get-pods returns non-zero more than $max_nonzero_exit times" endpoint-deploy-begin
                 return
             fi
         fi
@@ -905,7 +905,7 @@ function verify_pods_running() {
     if [ $abort -eq 1 -o $count -gt $max_attempts ]; then
         #TODO: send abort signal for endpoint-deploy roadblock
         echo "abort: $abort count: $count"
-        abort_error "Failed to verify pods are running" endpoint-deploy
+        abort_error "Failed to verify pods are running" endpoint-deploy-begin
     fi
     declare -A nodes
     for i in ${verified_pods[@]}; do
@@ -917,7 +917,7 @@ function verify_pods_running() {
 
 function get_pod_logs() {
     if [ -z "$1" ]; then
-        abort_error "get_pod_logs(): at least 1 pod must be provided" endpoint-deploy
+        abort_error "get_pod_logs(): at least 1 pod must be provided" endpoint-deploy-begin
     fi
     while [ $# -gt 0 ]; do
         local name="$1"; shift
@@ -929,7 +929,7 @@ function get_pod_logs() {
 
 function delete_pods() {
     if [ -z "$1" ]; then
-        abort_error "delete_pods(): at least 1 pod must be provided" endpoint-deploy
+        abort_error "delete_pods(): at least 1 pod must be provided" endpoint-deploy-begin
     fi
     local pods_to_delete=""
     while [ $# -gt 0 ]; do
@@ -945,7 +945,7 @@ function delete_pods() {
         echo "going to bulk-delete these pods: $pods_to_delete"
         local delete_output=`do_ssh $user@$host "kubectl -n $project_name delete pod $pods_to_delete 2>&1"`
         if [ $? -gt 0 ]; then
-            abort_error "Error deleting pod $existing_pod: $delete_output" endpoint-deploy
+            abort_error "Error deleting pod $existing_pod: $delete_output" endpoint-deploy-begin
         fi
     fi
 }

@@ -28,7 +28,7 @@ function abort_error() {
     local msg="$1"; shift
     local sync="$1"; shift
     echo "[ERROR] ${msg}" 1>&2
-    local msg_file=error.json
+    local msg_file=$(mktemp)
     echo '[{"recipient":{"type":"all","id":"all"},"user-object":{"error":"'$msg'"}}]' >$msg_file
     do_roadblock ${sync} 90 abort messages "${msg_file}"
     abort=1
@@ -214,19 +214,19 @@ function base_req_check() {
         use_rb=1
     fi
     if [ -z "$run_id" ]; then
-        exit_error "The run ID was not provided" endpoint-deploy
+        exit_error "The run ID was not provided" endpoint-deploy-begin
     fi
     if [ -z "$base_run_dir" ]; then
-        exit_error "--base-run-dir was not provided" endpoint-deploy
+        exit_error "--base-run-dir was not provided" endpoint-deploy-begin
     fi
     if [ ! -d "$base_run_dir" ]; then
-        exit_error "The run directory [$base_run_dir] does not exist" endpoint-deploy
+        exit_error "The run directory [$base_run_dir] does not exist" endpoint-deploy-begin
     fi
     if [ ! -e "$config_dir/rickshaw_id.rsa" ]; then
-        exit_error "Could not find $config_dir/rickshaw_id.rsa" endpoint-deploy
+        exit_error "Could not find $config_dir/rickshaw_id.rsa" endpoint-deploy-begin
     fi
     if [ ! -e "$client_server_bench_cmds_dir/client/1" ]; then
-        exit_error "client bench cmd file $client_server_bench_cmds_dir/client/1 not found" endpoint-deploy
+        exit_error "client bench cmd file $client_server_bench_cmds_dir/client/1 not found" endpoint-deploy-begin
     fi
 }
 
@@ -507,6 +507,10 @@ function process_bench_roadblocks() {
         endpoint_type=$1; shift
     fi
 
+    do_roadblock "setup-bench-begin" ${default_timeout}
+    roadblock_rc=$?
+    roadblock_exit_on_error ${roadblock_rc}
+
     local quit=0
     local abort
     local timeout=$default_timeout
@@ -538,6 +542,10 @@ function process_bench_roadblocks() {
     done 9< "${client_server_bench_cmds_dir}/client/1/start"
 
     echo "Total tests: ${total_tests}"
+
+    do_roadblock "setup-bench-end" ${default_timeout}
+    roadblock_rc=$?
+    roadblock_exit_on_error ${roadblock_rc}
 
     local current_test=0
     while read -u 9 line; do
