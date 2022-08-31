@@ -50,7 +50,7 @@ jobs:
 
     strategy:
       matrix:
-        userenv: ${{ needs.determine-available-userenvs.outputs.userenvs }}
+        userenv: ${{ fromJSON(needs.determine-available-userenvs.outputs.userenvs) }}
 
     steps:
     - name: Matrix => (${{ matrix.userenv }})
