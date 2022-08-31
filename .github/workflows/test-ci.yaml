@@ -22,7 +22,7 @@ jobs:
 
       run: |
         userenv_list="$(find userenvs/ -maxdepth 1 -name '*.json' | sed -e 's|userenvs/||' -e 's|.json||')"
-	USERENVS='${{ toJSON(${userenvs_list}) }}'
+        USERENVS='${{ toJSON(${userenvs_list}) }}'
         echo ::set-output name=userenvs::${USERENVS}
 
   display-available-userenvs:
