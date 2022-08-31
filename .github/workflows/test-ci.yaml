@@ -22,7 +22,7 @@ jobs:
 
       run: |
         userenvs=$(find userenvs/ -maxdepth 1 -name '*.json' | sed -e 's|userenvs/||' -e 's|\.json||')
-	echo "Available userenvs: ${userenvs}"
+        echo "Available userenvs: ${userenvs}"
         echo "::set-output name=userenvs::${userenvs}"
 
   display-available-userenvs:
