@@ -32,4 +32,4 @@ jobs:
 
     steps:
     - name: Echo previous outputs
-      run: echo "Available userenvs: ${{ needs.determine-available-userenvs.outputs.userenvs }}"
+      run: echo "${{ needs.determine-available-userenvs.outputs }}"
