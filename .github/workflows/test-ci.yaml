@@ -24,13 +24,13 @@ jobs:
         userenvs=$(find userenvs/ -maxdepth 1 -name '*.json' | sed -e 's|userenvs/||' -e 's|\.json||')
         userenv_json="["
         for userenv in ${userenvs}; do
-          userenv_json+='"${userenv}",'
+          userenv_json+="\"${userenv}\","
         done
         userenv_json=$(echo "${userenv_json}" | sed -e "s/,$//")
         userenv_json+="]"
         echo "userenv_json=${userenv_json}"
         echo
-        echo "::set-output name=userenvs::${userenvs}"
+        echo "::set-output name=userenvs::${userenv_json}"
 
   display-available-userenvs:
     runs-on: ubuntu-latest
