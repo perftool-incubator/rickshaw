@@ -1,0 +1,35 @@
+name: test-ci
+
+on:
+  pull_request:
+    branches: [ master ]
+
+  workflow_dispatch:
+
+jobs:
+  determine-available-userenvs:
+    runs-on: ubuntu-latest
+
+    outputs:
+      userenvs: ${{ steps.generate-matrix.outputs.userenvs  }}
+
+    steps:
+    - name: Checkout rickshaw
+      uses: actions/checkout@v2
+
+    - name: Generate Matrix
+      id: generate-matrix
+
+      run: |
+        userenvs=$(find userenvs/ -maxdepth 1 -name '*.json' | sed -e 's|userenvs/||' -e 's|.json||')
+        echo "Found userenvs: ${userenvs}"
+        echo ::set-output name=userenvs::${userenvs}
+
+  display-available-userenvs:
+    runs-on: ubuntu-latest
+
+    needs: determine-availble-userenvs
+
+    steps:
+      - name: Echo previous outputs
+        run: echo "Available userenvs: ${{ needs.determine-available-userenvs.outputs.userenvs }}"
