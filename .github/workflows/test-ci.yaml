@@ -28,7 +28,7 @@ jobs:
   display-available-userenvs:
     runs-on: ubuntu-latest
 
-    needs: determine-availble-userenvs
+    needs: determine-available-userenvs
 
     steps:
     - name: Echo previous outputs
