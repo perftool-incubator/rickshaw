@@ -31,5 +31,5 @@ jobs:
     needs: determine-availble-userenvs
 
     steps:
-      - name: Echo previous outputs
-        run: echo "Available userenvs: ${{ needs.determine-available-userenvs.outputs.userenvs }}"
+    - name: Echo previous outputs
+      run: echo "Available userenvs: ${{ needs.determine-available-userenvs.outputs.userenvs }}"
