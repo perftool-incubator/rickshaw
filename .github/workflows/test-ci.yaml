@@ -21,9 +21,9 @@ jobs:
       id: generate-matrix
 
       run: |
-        userenvs=$(find userenvs/ -maxdepth 1 -name '*.json' | sed -e 's|userenvs/||' -e 's|.json||')
+        userenvs="$(find userenvs/ -maxdepth 1 -name '*.json' | sed -e 's|userenvs/||' -e 's|.json||')"
         echo "Found userenvs: ${userenvs}"
-        echo ::set-output name=userenvs::${userenvs}
+        echo "::set-output name=userenvs::${userenvs}"
 
   display-available-userenvs:
     runs-on: ubuntu-latest
