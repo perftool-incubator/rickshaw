@@ -22,8 +22,7 @@ jobs:
 
       run: |
         userenv_list="$(find userenvs/ -maxdepth 1 -name '*.json' | sed -e 's|userenvs/||' -e 's|.json||')"
-        USERENVS='${{ toJSON(${userenvs_list}) }}'
-        echo ::set-output name=userenvs::${USERENVS}
+        echo ::set-output name=userenvs::${userenv_list}
 
   display-available-userenvs:
     runs-on: ubuntu-latest
@@ -32,4 +31,4 @@ jobs:
 
     steps:
     - name: Echo previous outputs
-      run: echo "${{ toJSON(needs.determine-available-userenvs.outputs) }}"
+      run: echo "${{ needs.determine-available-userenvs.outputs }}"
