@@ -41,7 +41,7 @@ jobs:
     - name: Echo previous outputs
       run: echo "${{ toJSON(needs.determine-available-userenvs.outputs) }}"
 
-  run-the-userenv-matrix:
+  run-the-userenvs:
     runs-on: ubuntu-latest
 
     needs:
@@ -55,4 +55,17 @@ jobs:
     steps:
     - name: Matrix => (${{ matrix.userenv }})
       run: |
+        sleep 10
         echo ${{ matrix.userenv }}
+
+  confirm-matrix-success:
+    runs-on: ubuntu-latest
+
+    needs:
+    - determine-available-userenvs
+    - display-available-userenvs
+    - run-the-userenvs
+
+    steps:
+    - name: Success Confirmation
+      run: echo "${{ toJSON(needs.determine-available-userenvs.outputs) }}"
