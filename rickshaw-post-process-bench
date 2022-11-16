@@ -211,6 +211,7 @@ foreach my $benchmark_and_id ( split(/,/, $run{'bench-ids'}) ) {
 
 
 printf "Launching a post-process job for each iteration x sample x [client|server] for %s\n", $run{'benchmark'};
+my @job_args;
 for (my $i = 1; $i <= scalar @{ $run{'iterations'} }; $i++) {
     my $iter_dh;
     my $this_iter_dir = $iter_subdir . "/iteration-" . $i;
@@ -230,7 +231,6 @@ for (my $i = 1; $i <= scalar @{ $run{'iterations'} }; $i++) {
         my $primary_metric;
         my $primary_period;
             for my $samp_dir (@samp_dirs) {
-            my @pids;
             my %sample; # sample data from all clients/servers
             my @cons_periods; # consolidated periods across clients/servers get merged here
             my $this_samp_dir = $this_iter_dir . "/" .  $samp_dir;
@@ -252,33 +252,46 @@ for (my $i = 1; $i <= scalar @{ $run{'iterations'} }; $i++) {
                             my $iter_params = dump_params($run{'iterations'}[$i - 1]{'params'}, $cs_id, $cs_name);
                             my $cs_id_dir = $cs_name_dir . "/" . $cs_id;
                             if (-d $run_dir . "/" . $cs_id_dir) {
-                                if (my $pid = fork) {
-                                    push(@pids, $pid);
-                                } else {
-                                    my $pushd_dir = pushd($run_dir . "/" . $cs_id_dir);
-                                    my $full_cmd = "RS_CS_LABEL=" . $cs_name . "-" . $cs_id . " " . $pp_cmd . " " . $iter_params . " >post-process-output.txt 2>&1";
-                                    debug_log(sprintf "About to run: [%s]\n", $full_cmd);
-                                    my $rc = system($full_cmd);
-                                    if ($rc == -1) {
-                                        printf "Failed to execute '%s%s'!\n", $pp_cmd, $iter_params;
-                                    } elsif ($rc & 127) {
-                                        printf "'%s%s' died with signal %d, %s coredump!\n", $pp_cmd, $iter_params, ($rc & 127), ($rc & 128) ? 'with' : 'without';
-                                    } else {
-                                        $rc = $rc >> 8;
-                                        if ($rc != 0) {
-                                        printf "'%s%s' exited with non-zero value %d\n", $pp_cmd, $iter_params, $rc;
-                                        }
-                                    }
-                                    exit;
-                                }
+                                my %args = ('dir' => $run_dir . "/" . $cs_id_dir,
+                                            'cmd' => "RS_CS_LABEL=" . $cs_name . "-" . $cs_id . " " . $pp_cmd . " " . $iter_params . " >post-process-output.txt 2>&1");
+                                push(@job_args, \%args);
                             }
                         }
                     }
                 }
             }
-            printf "Waiting for %d post-processing jobs to complete\n", scalar @pids;
-            while (wait() > -1) {}
-            print "Post-processing complete\n";
         }
     }
 }
+
+my @pids;
+my $count = 0;
+foreach my $args (@job_args) {
+    if (my $pid = fork) {
+        push(@pids, $pid);
+        $count++;
+    } else {
+        my $pushd_dir = pushd($$args{'dir'});
+        debug_log(sprintf "About to run: [%s]\n", $$args{'cmd'});
+        my $rc = system($$args{'cmd'});
+        if ($rc == -1) {
+            printf "Failed to execute '%s'!\n", $$args{'cmd'};
+        } elsif ($rc & 127) {
+            printf "'%s' died with signal %d, %s coredump!\n", $$args{'cmd'}, ($rc & 127), ($rc & 128) ? 'with' : 'without';
+        } else {
+            $rc = $rc >> 8;
+            if ($rc != 0) {
+            printf "'%s' exited with non-zero value %d\n", $$args{'cmd'}, $rc;
+            }
+        }
+        exit;
+    }
+    if ($count >= 50) {
+        printf "Waiting for %d post-processing jobs to complete\n", $count;
+        while (wait() > -1) {}
+        $count = 0;
+    }
+}
+printf "Waiting for %d post-processing jobs to complete\n", $count;
+while (wait() > -1) {}
+print "Post-processing complete\n";

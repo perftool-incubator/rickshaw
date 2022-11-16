@@ -167,6 +167,7 @@ if (! exists $run{'tools-dir'}) {
 printf "Launching a post-process job for each tool * each collector\n";
 my %tools_config;
 my @pids;
+my @job_args;
 my $tool_dir = "tool-data";
 if (opendir(TOOLDIR, $run_dir . "/" . $tool_dir)) {
     my @collectors = grep(/\w+/, readdir(TOOLDIR));
@@ -198,25 +199,38 @@ if (opendir(TOOLDIR, $run_dir . "/" . $tool_dir)) {
                             }
                             $tools_config{$$json_ref{'tool'}} = $json_ref;
                         }
-                        if (my $pid = fork) {
-                            push(@pids, $pid);
-                        } else {
-                            my $pushd_dir = pushd($run_dir . "/" . $num_dir . "/" . $tool);
-                            my $pp_cmd = $tools_config{$tool}{'controller'}{'post-script'};
-                            $pp_cmd =~ s/\%tool-dir\%/$run{'tools-dir'}\/$tool\//g;
-                            $pp_cmd =~ s/\%run-dir\%/$run_dir\//g;
-                            $pp_cmd =~ s/\%config-dir\%/$config_dir\//g;
-                            if (-e $pp_cmd) {
-                                system($pp_cmd . " >post-process-output.txt 2>&1");
-                            }
-                            exit; # Child exits after post-processing
-                        }
+                        my $pp_cmd = $tools_config{$tool}{'controller'}{'post-script'};
+                        $pp_cmd =~ s/\%tool-dir\%/$run{'tools-dir'}\/$tool\//g;
+                        $pp_cmd =~ s/\%run-dir\%/$run_dir\//g;
+                        $pp_cmd =~ s/\%config-dir\%/$config_dir\//g;
+                        my %args = ( 'dir' => $run_dir . "/" . $num_dir . "/" . $tool,
+                                         'pp-cmd' => $pp_cmd );
+                        push(@job_args, \%args);
                     }
                 }
             }
         }
     }
 }
-printf "Waiting for %d post-processing jobs to complete\n", scalar @pids;
+
+my $count = 0;
+foreach my $args (@job_args) {
+    if (my $pid = fork) {
+        push(@pids, $pid);
+        $count++;
+    } else {
+        my $pushd_dir = pushd($$args{'dir'});
+        if (-e $$args{'pp-cmd'}) {
+            system($$args{'pp-cmd'} . " >post-process-output.txt 2>&1");
+        }
+        exit; # Child exits after post-processing
+    }
+    if ($count >= 20) {
+        printf "Waiting for %d post-processing jobs to complete\n", $count;
+        while (wait() > -1) {}
+        $count = 0;
+    }
+}
+printf "Waiting for %d post-processing jobs to complete\n", $count;
 while (wait() > -1) {}
 print "Post-processing complete\n";
