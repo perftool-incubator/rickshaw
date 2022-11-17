@@ -41,13 +41,26 @@ validate_core_env
 setup_core_env # roadblocks may be used after this
 
 if ! pushd $cs_dir; then
-    abort_error "Could not chdir to $cs_dir" engine-init-begin $leader
+    abort_error "Could not chdir to $cs_dir" engine-init-begin
     exit 1
-else
-    do_roadblock engine-init-begin ${engine_script_start_timeout}
-    roadblock_rc=$?
-    roadblock_exit_on_error ${roadblock_rc}
 fi
+
+if [ "${cpu_partitioning}" == "1" ]; then
+    if [ -z "${HK_CPUS}" ]; then
+        abort_error "cpu-partitioning is enabled but HK_CPUS is empty" engine-init-begin
+        exit 1
+    fi
+
+    if [ -z "${WORKLOAD_CPUS}" ]; then
+        abort_error "cpu-partitioning is enabled but WORKLOAD_CPUS is empty" engine-init-begin
+        exit 1
+    fi
+fi
+
+do_roadblock engine-init-begin ${engine_script_start_timeout}
+roadblock_rc=$?
+roadblock_exit_on_error ${roadblock_rc}
+
 do_roadblock engine-init-end ${engine_script_start_timeout}
 roadblock_rc=$?
 roadblock_exit_on_error ${roadblock_rc}

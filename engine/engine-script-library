@@ -28,7 +28,7 @@ function abort_error() {
     echo -e "[ERROR]engine-script-library: $msg\n"
     local msg_file=$(mktemp)
     echo '[{"recipient":{"type":"all","id":"all"},"user-object":{"error":"'$msg'"}}]' >$msg_file
-    do_roadblock ${sync} 90 abort messages "${msg_file}"
+    do_roadblock ${sync} 300 abort messages "${msg_file}"
     abort=1
 }
 
