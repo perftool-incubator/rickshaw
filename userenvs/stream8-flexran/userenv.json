@@ -1,0 +1,14 @@
+  "userenv": {
+    "name": "stream8-flexran",
+    "label": "flexRAN Stream 8",
+    "origin": {
+      "image": "quay.io/xxx/yyy",
+      "tag": "zzz"
+    },
+    "properties": {
+      "packages": {
+        "type": "rpm",
+        "manager": "dnf"
+      }
+    }
+  },
