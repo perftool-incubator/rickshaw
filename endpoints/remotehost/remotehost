@@ -137,7 +137,7 @@ function cleanup_osruntime() {
     echo
 
     for this_cs_label in ${clients[@]} ${servers[@]} ${collectors[@]}; do
-        set_osruntime_numanode_cpupart
+        set_osruntime_numanode_cpupart ${this_cs_label}
 
         if [ "${os_runtime}" == "chroot" ]; then
             data_file=${endpoint_run_dir}/chroot-container-mount.txt
