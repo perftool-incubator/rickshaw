@@ -137,7 +137,7 @@ function cleanup_osruntime() {
     echo
 
     for this_cs_label in ${clients[@]} ${servers[@]} ${collectors[@]}; do
-        set_osruntime_numanode_cpupart
+        set_osruntime_numanode_cpupart ${this_cs_label}
 
         if [ "${os_runtime}" == "chroot" ]; then
             data_file=${endpoint_run_dir}/chroot-container-mount.txt
@@ -435,7 +435,7 @@ function launch_osruntime() {
         do_ssh $user@$host "${cs_cmd}"
         ssh_rc=$?
         if [ ${ssh_rc} -gt 0 ]; then
-            echo "running ${osruntime} failed"
+            echo "running ${os_runtime} failed"
             exit 1
         fi
 
