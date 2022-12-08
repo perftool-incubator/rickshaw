@@ -890,7 +890,7 @@ sub source_container_image {
         }
     }
 
-    print "workshop_args:\n" . Dumper \@workshop_args;
+    debug_log(sprintf "workshop_args:\n" . Dumper \@workshop_args);
 
     my $num_images = scalar @workshop_args;
     my $i;
@@ -1528,9 +1528,8 @@ sub validate_endpoints() {
                 " --endpoint-opts=" . $$endpoint{'opts'} .
                 " --validate";
         debug_log(sprintf "endopoint validation command: [%s]\n", $cmd);
-        printf "endopoint validation command: [%s]\n", $cmd;
         ($cmd, my $output, my $cmd_rc) = run_cmd($cmd);
-        print "\n[$output]\n";
+        debug_log(sprintf "\n[$output]\n");
         my @output = grep(!/^#/, split(/\n/, $output));
         if ($cmd_rc > 0) {
             die "[ERROR]Endpoint " . $$endpoint{'type'} . " with options " . $$endpoint{'opts'} .
@@ -2352,7 +2351,7 @@ if (put_json_file($cs_conf_file, \%cs_conf) > 0) {
 build_test_order();
 prepare_bench_tool_engines();
 print "Preparing userenvs:\n";
-print "image_ids (before):\n" . Dumper \%image_ids;
+debug_log (sprintf "image_ids (before):\n" . Dumper \%image_ids);
 foreach my $bench (keys %bench_configs) {
     printf "Working on %s benchmark\n", $bench;
     foreach my $userenv (keys %{ $image_ids{$bench} }) {
@@ -2365,7 +2364,7 @@ foreach my $bench (keys %bench_configs) {
         $image_ids{$bench}{$userenv}{'image'} = $image;
     }
 }
-print "image_ids(after):\n" . Dumper \%image_ids;
+debug_log(sprintf "image_ids(after):\n" . Dumper \%image_ids);
 
 add_ssh_keys();
 deploy_endpoints();
