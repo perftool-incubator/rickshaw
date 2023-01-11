@@ -1,0 +1,7 @@
+Currently stream8-flexran userenv requires the user to finallize the 
+values of 'image' and 'tag' keys. This is a temporary situation until 
+we decide on what registry to use to meet Intel NDA requirement.  
+
+In addition, bench-flexran mainly tests the image itself, and thus the
+user likely wants to test a specfic image built for a specific FlexRAN 
+release. 
