@@ -1,0 +1,94 @@
+{
+  "workshop": {
+    "schema": {
+      "version": "2022.07.25"
+    }
+  },
+  "userenv": {
+    "name": "stream8-flexran",
+    "label": "flexRAN Stream 8",
+    "origin": {
+      "image": "quay.io/xxx/yyy",
+      "tag": "zzz"
+    },
+    "properties": {
+      "packages": {
+        "type": "rpm",
+        "manager": "dnf"
+      }
+    }
+  },
+  "requirements": [
+    {
+      "name": "python39",
+      "type": "distro",
+      "distro_info": {
+        "packages": [
+          "python39",
+          "python39-pip"
+        ]
+      }
+    },
+    {
+      "name": "utils",
+      "type": "distro",
+      "distro_info": {
+        "packages": [
+          "curl",
+          "tar",
+          "cpio",
+          "gzip",
+          "jq",
+          "git",
+          "cpio",
+          "findutils",
+          "hostname",
+          "iputils",
+          "iproute",
+          "elfutils-libelf",
+          "elfutils-libelf-devel",
+          "openssl",
+          "openssl-devel",
+          "xz",
+          "xz-devel",
+          "libcap",
+          "libzstd",
+          "libzstd-devel",
+          "libcap-devel"
+        ]
+      }
+    },
+    {
+      "name": "core-compiling",
+      "type": "distro",
+      "distro_info": {
+        "packages": [
+          "diffutils",
+          "gcc",
+          "libtool",
+          "autoconf",
+          "automake",
+          "make"
+        ]
+      }
+    },
+    {
+      "name": "core-perl",
+      "type": "distro",
+      "distro_info": {
+        "packages": [
+          "perl-App-cpanminus"
+        ]
+      }
+    },
+    {
+      "name": "core-node",
+      "type": "distro",
+      "distro_info": {
+        "packages": [
+          "nodejs"
+        ]
+      }
+    }
+  ]
+}
