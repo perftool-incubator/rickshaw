@@ -40,7 +40,7 @@ else
     exit
 fi
 
-chroot_rbind_mounts="proc dev sys lib/modules usr/src boot var/run"
+chroot_rbind_mounts="proc dev sys lib/firmware lib/modules usr/src boot var/run"
 
 endpoint_name="remotehost"
 image_cache_size=3
@@ -418,6 +418,7 @@ function launch_osruntime() {
             cs_cmd+=" --net=host"
             cs_cmd+=" --security-opt=label=disable"
             cs_cmd+=" --mount=type=bind,source=${remote_data_dir},destination=/tmp"
+            cs_cmd+=" --mount=type=bind,source=/lib/firmware,destination=/lib/firmware"
             cs_cmd+=" --mount=type=bind,source=/lib/modules,destination=/lib/modules"
             cs_cmd+=" --mount=type=bind,source=/usr/src,destination=/usr/src"
             if [ "$host_mounts" != "" ]; then
