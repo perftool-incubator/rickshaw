@@ -275,7 +275,7 @@ sub dump_params {
         my $role = $$param{'role'} // $default_role;
 
         if (! defined $id or (defined $cs_id and $id eq $cs_id)) {
-            if (defined $benchmark and $bench eq $benchmark) {
+            if ( (! defined $benchmark) or ($bench eq $benchmark) ) {
                 # only dump when role=engine or role=all
                 if ( $role eq $engine || $role eq 'all') {
                     if (defined $val && length $val) {
@@ -1762,7 +1762,7 @@ sub build_files_list {
             $src_file =~ s/\%config-dir\%/$config_dir\//g;
             my $dest_file = $$file_spec{'dest'};
             if (-e $src_file) {
-                debug_log(sprintf("adding  %s for engine type '%s'", $src_file, $cs_type));
+                debug_log(sprintf("adding  %s for engine type '%s'\n", $src_file, $cs_type));
                 printf FH "src=%s\ndest=%s\n", $src_file, $dest_file;
             } elsif (! $$file_spec{'required'}) {
                 debug_log(sprintf("skipping %s because it does not exist and is not required for engine type '%s'", $src_file, $cs_type));
@@ -1781,7 +1781,7 @@ sub build_files_list {
                 $src_file =~ s/\%config-dir\%/$config_dir\//g;
                 my $dest_file = $$file_spec{'dest'};
                 if (-e $src_file) {
-                    debug_log(sprintf("adding %s for tool '%s'", $src_file, $tool_name));
+                    debug_log(sprintf("adding %s for tool '%s'\n", $src_file, $tool_name));
                     printf FH "src=%s\ndest=%s\n", $src_file, $dest_file;
                 } elsif (! $$file_spec{'required'}) {
                     debug_log(sprintf("skipping %s because it does not exist and is not required for tool '%s'", $src_file, $tool_name));
@@ -1799,7 +1799,7 @@ sub build_files_list {
                 $src_file =~ s/\%utility-dir\%/$utility_dir/g;
                 my $dest_file = $$file_spec{'dest'};
                 if (-e $src_file) {
-                    debug_log(sprintf("adding %s for utility '%s'", $src_file, $utility));
+                    debug_log(sprintf("adding %s for utility '%s'\n", $src_file, $utility));
                     printf FH "src=%s\ndest=%s\n", $src_file, $dest_file;
                 } elsif (! $$file_spec{'required'}) {
                     debug_log(sprintf("skipping %s because it does not exist and is not required for utility '%s'", $src_file, $utility));
