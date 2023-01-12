@@ -1,10 +1,10 @@
 {
     "roadblock": {
 	"timeouts": {
-	    "default": 240,
+	    "default": 1200,
 	    "endpoint-deploy": 1440,
 	    "engine-start": 1440,
-	    "move-data": 300
+	    "move-data":1200 
 	}
     },
     "userenvs": {
