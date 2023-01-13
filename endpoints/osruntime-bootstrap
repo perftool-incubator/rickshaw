@@ -88,7 +88,7 @@ function validate_vars() {
 validate_vars
 
 image_cache_size=3
-chroot_rbind_mounts="proc dev sys lib/modules usr/src boot var/run"
+chroot_rbind_mounts="proc dev sys lib/firmware lib/modules usr/src boot var/run"
 host_mounts="run/openvswitch"
 container_name="rickshaw_${run_id}_$cs_label"
 cmd_stdout="$logs_dir/cmd-stdout_$log_file_name"
@@ -238,6 +238,7 @@ function launch_osruntime() {
         cs_cmd+=" --net=host"
         cs_cmd+=" --security-opt=label=disable"
         cs_cmd+=" --mount=type=bind,source=$data_dir,destination=/tmp"
+        cs_cmd+=" --mount=type=bind,source=/lib/firmware,destination=/lib/firmware"
         cs_cmd+=" --mount=type=bind,source=/lib/modules,destination=/lib/modules"
         cs_cmd+=" --mount=type=bind,source=/usr/src,destination=/usr/src"
         if [ "$host_mounts" != "" ]; then
