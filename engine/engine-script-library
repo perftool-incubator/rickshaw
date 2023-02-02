@@ -1045,12 +1045,18 @@ function process_bench_roadblocks() {
 }
 
 function stop_tools() {
+    local working_directory tool_stop_cmds_file tools_disabled tool_cmd_rc tool_name tool_cmd
+
+    working_directory=${1}; shift
+    tool_stop_cmds_file=${1}; shift
+    tools_disabled=${1}; shift
+
     echo "running stop_tools()"
 
-    if [ "$disable_tools" == "1" ]; then
-        echo "Not running tools because --disable-tools=1 was used"
+    if [ "${tools_disabled}" == "1" ]; then
+        echo "Not stopping tools because --disable-tools=1 was used"
     else
-        if pushd tool-data >/dev/null; then
+        if pushd ${working_directory}/tool-data >/dev/null; then
             while read -u 9 line; do
                 tool_name=`echo $line | awk -F: '{print $1}'`
                 tool_cmd=`echo $line | sed -e s/^$tool_name://`
@@ -1062,11 +1068,11 @@ function stop_tools() {
                 else
                     abort_error "stop_tools: Failed to pushd to ${tool_name}" stop-tools-end
                 fi
-            done 9<"$tool_stop_cmds"
+            done 9<"${tool_stop_cmds_file}"
 
             popd >/dev/null
         else
-            abort_error "stop_tools: Failed to pushd to tool-data" stop-tools-end
+            abort_error "stop_tools: Failed to pushd to ${working_directory}/tool-data" stop-tools-end
         fi
     fi
 }
