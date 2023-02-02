@@ -437,11 +437,13 @@ function collect_sysinfo() {
 }
 
 function start_tools() {
+    local tool_name tool_cmd tool_cmd_rc
+
     echo "running start_tools()"
 
     mkdir -p tool-data
     if [ "$disable_tools" == "1" ]; then
-        echo "Not running tools because --disable-tools=1 was used"
+        echo "Not starting tools because --disable-tools=1 was used"
     else
         for this_tool_cmds in "$tool_start_cmds" "$tool_stop_cmds"; do
             if [ ! -e $this_tool_cmds ]; then
