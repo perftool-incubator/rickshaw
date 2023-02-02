@@ -120,13 +120,19 @@ function do_roadblock() {
         echo "roadblock output END"
         echo "roadblock exit code: ${rc}"
         if [ -f ${msgs_log_file} ]; then
-            echo "messages from roadblock:"
+            echo "# start messages from roadblock ################################################"
             cat ${msgs_log_file}
+            echo "# end messages from roadblock ##################################################"
+        else
+            echo "# no messages from roadblock ###################################################"
         fi
         if [ -n "${wait_for_log}" -a -f "${wait_for_log}" ]; then
-            echo "wait-for log:"
+            echo "# start wait-for log ###########################################################"
             cat ${wait_for_log}
+            echo "# end wait-for log #############################################################"
             rm ${wait_for_log}
+        else
+            echo "# no wait for log ##############################################################"
         fi
     done
 
