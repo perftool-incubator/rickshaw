@@ -120,13 +120,19 @@ function do_roadblock() {
         echo "roadblock output END"
         echo "roadblock exit code: ${rc}"
         if [ -f ${msgs_log_file} ]; then
-            echo "messages from roadblock:"
+            echo "# start messages from roadblock ################################################"
             cat ${msgs_log_file}
+            echo "# end messages from roadblock ##################################################"
+        else
+            echo "# no messages from roadblock ###################################################"
         fi
         if [ -n "${wait_for_log}" -a -f "${wait_for_log}" ]; then
-            echo "wait-for log:"
+            echo "# start wait-for log ###########################################################"
             cat ${wait_for_log}
+            echo "# end wait-for log #############################################################"
             rm ${wait_for_log}
+        else
+            echo "# no wait for log ##############################################################"
         fi
     done
 
@@ -437,11 +443,13 @@ function collect_sysinfo() {
 }
 
 function start_tools() {
+    local tool_name tool_cmd tool_cmd_rc total_tools
+
     echo "running start_tools()"
 
     mkdir -p tool-data
     if [ "$disable_tools" == "1" ]; then
-        echo "Not running tools because --disable-tools=1 was used"
+        echo "Not starting tools because --disable-tools=1 was used"
     else
         for this_tool_cmds in "$tool_start_cmds" "$tool_stop_cmds"; do
             if [ ! -e $this_tool_cmds ]; then
@@ -450,19 +458,27 @@ function start_tools() {
         done
 
         if pushd tool-data >/dev/null; then
+            total_tools=0
             while read -u 9 line; do
                 tool_name=`echo $line | awk -F: '{print $1}'`
                 tool_cmd=`echo $line | sed -e s/^$tool_name://`
+                (( total_tools += 1 ))
                 /bin/mkdir -p $tool_name
                 if pushd $tool_name >/dev/null; then
                     echo "Starting tool '${tool_name}' with command '${tool_cmd}'"
                     eval $tool_cmd
+                    tool_cmd_rc=$?
+                    echo "Starting tool '${tool_name}' with command '${tool_cmd}' returned ${tool_cmd_rc}"
 
                     popd >/dev/null
                 else
                     abort_error "start_tools: Failed to pushd to ${tool_name}" start-tools-end
                 fi
             done 9<"$tool_start_cmds"
+
+            if [ ${total_tools} -eq 0 ]; then
+                echo "No tools configured for this engine"
+            fi
 
             popd >/dev/null
         else
@@ -1045,28 +1061,42 @@ function process_bench_roadblocks() {
 }
 
 function stop_tools() {
+    local working_directory tool_stop_cmds_file tools_disabled tool_cmd_rc tool_name tool_cmd total_tools
+
+    working_directory=${1}; shift
+    tool_stop_cmds_file=${1}; shift
+    tools_disabled=${1}; shift
+
     echo "running stop_tools()"
 
-    if [ "$disable_tools" == "1" ]; then
-        echo "Not running tools because --disable-tools=1 was used"
+    if [ "${tools_disabled}" == "1" ]; then
+        echo "Not stopping tools because --disable-tools=1 was used"
     else
-        if pushd tool-data >/dev/null; then
+        if pushd ${working_directory}/tool-data >/dev/null; then
+            total_tools=0
             while read -u 9 line; do
                 tool_name=`echo $line | awk -F: '{print $1}'`
                 tool_cmd=`echo $line | sed -e s/^$tool_name://`
+                (( total_tools += 1 ))
                 if pushd $tool_name >/dev/null; then
                     echo "Stopping tool '${tool_name}' with command '${tool_cmd}'"
                     eval $tool_cmd
+                    tool_cmd_rc=$?
+                    echo "Stopping tool '${tool_name}' with command '${tool_cmd}' returned ${tool_cmd_rc}"
 
                     popd >/dev/null
                 else
                     abort_error "stop_tools: Failed to pushd to ${tool_name}" stop-tools-end
                 fi
-            done 9<"$tool_stop_cmds"
+            done 9<"${tool_stop_cmds_file}"
+
+            if [ ${total_tools} -eq 0 ]; then
+                echo "No tools configured for this engine"
+            fi
 
             popd >/dev/null
         else
-            abort_error "stop_tools: Failed to pushd to tool-data" stop-tools-end
+            abort_error "stop_tools: Failed to pushd to ${working_directory}/tool-data" stop-tools-end
         fi
     fi
 }
