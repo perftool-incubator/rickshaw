@@ -103,8 +103,7 @@ process_bench_roadblocks
 
 
 do_roadblock stop-tools-begin ${default_timeout}
-stop_tools
-do_roadblock stop-tools-end ${default_timeout}
+do_roadblock stop-tools-end ${default_timeout} wait-for "/usr/local/bin/engine-script-library stop_tools '$(pwd)' '${tool_stop_cmds}' '${disable_tools}'"
 
 
 do_roadblock send-data-begin ${default_timeout}
