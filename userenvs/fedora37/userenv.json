@@ -1,0 +1,14 @@
+  "userenv": {
+    "name": "fedora37",
+    "label": "Fedora 37",
+    "origin": {
+      "image": "registry.fedoraproject.org/fedora",
+      "tag": "37"
+    },
+    "properties": {
+      "packages": {
+        "type": "rpm",
+        "manager": "dnf"
+      }
+    }
+  },
