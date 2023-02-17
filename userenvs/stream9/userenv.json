@@ -6,6 +6,14 @@
       "tag": "stream9"
     },
     "properties": {
+      "platform": [
+        {
+          "architecture": "x86_64"
+        },
+        {
+          "architecture": "aarch64"
+        }
+      ],
       "packages": {
         "type": "rpm",
         "manager": "dnf"

@@ -6,6 +6,14 @@
       "tag": "stable-slim"
     },
     "properties": {
+      "platform": [
+        {
+          "architecture": "x86_64"
+        },
+        {
+          "architecture": "aarch64"
+        }
+      ],
       "packages": {
         "type": "pkg",
         "manager": "apt"
