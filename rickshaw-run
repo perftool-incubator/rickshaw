@@ -1517,7 +1517,7 @@ sub validate_endpoints() {
     my $min_id;
     my $max_id;
     my $collectors_present = 0;
-    printf "Confirming the endpoints will satisfy the benchmark requirements";
+    printf "Confirming the endpoints will satisfy the benchmark requirements:\n";
 
     # Process all endpoint --validate outputs to get ID range for client and server
     foreach my $endpoint (@endpoints) {
@@ -1572,13 +1572,17 @@ sub validate_endpoints() {
             }
         }
     }
+    if (! defined $min_id || ! defined $max_id) {
+        print "[ERROR] Could not determine number of clients and/or server engines to create!  Did you specify at least 'client:N' in your endpoint arguments?\n";
+        exit 1;
+    }
     if ($min_id != 1) {
         printf "[ERROR]lowest ID found in clients and servers is %d, must be 1\n", $min_id;
         exit 1;
     }
 
 
-    print "number of benchmarks: " . scalar(keys(%bench_configs)) . "\n";
+    print "Number of benchmarks: " . scalar(keys(%bench_configs)) . "\n";
     if (scalar keys %bench_configs == 1) {
         # There us only one benchmark type used, and there may not be a --benchmark-ids provided,
         # so we need to match clients to servers here.

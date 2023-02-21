@@ -1,9 +1,9 @@
   "userenv": {
-    "name": "fedora36",
-    "label": "Fedora 36",
+    "name": "fedora37",
+    "label": "Fedora 37",
     "origin": {
       "image": "registry.fedoraproject.org/fedora",
-      "tag": "36"
+      "tag": "37"
     },
     "properties": {
       "platform": [

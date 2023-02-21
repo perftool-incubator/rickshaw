@@ -6,6 +6,11 @@
       "tag": "latest"
     },
     "properties": {
+      "platform": [
+        {
+          "architecture": "x86_64"
+        }
+      ],
       "packages": {
         "type": "rpm",
         "manager": "yum"

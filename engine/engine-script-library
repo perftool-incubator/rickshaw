@@ -613,6 +613,7 @@ function evaluate_test_roadblock {
 }
 
 function run_bench_cmd() {
+    local cs_type
     local matching_cs_type
     local cmd_type
     local abort_status
@@ -622,6 +623,7 @@ function run_bench_cmd() {
     local ret_val
     local cmd_rc
 
+    cs_type="${1}"; shift
     matching_cs_type="${1}"; shift
     cmd_type="${1}"; shift
     abort_status="${1}"; shift
@@ -845,7 +847,7 @@ function process_bench_roadblocks() {
                 roadblock_rc=$?
                 evaluate_test_roadblock "${rb_name}" ${roadblock_rc} ${iter_array_idx}
 
-                run_bench_cmd "client" "infra" "${abort}" "${quit}" "0" "${infra_cmd}"
+                run_bench_cmd "${cs_type}" "client" "infra" "${abort}" "${quit}" "0" "${infra_cmd}"
                 abort_rc=$?
                 if [ "${abort_rc}" == "0" ]; then
                     abort_arg=""
@@ -866,7 +868,7 @@ function process_bench_roadblocks() {
                 roadblock_rc=$?
                 evaluate_test_roadblock "${rb_name}" ${roadblock_rc} ${iter_array_idx}
 
-                run_bench_cmd "server" "server" "${abort}" "${quit}" "0" "${start_cmd}"
+                run_bench_cmd "${cs_type}" "server" "server" "${abort}" "${quit}" "0" "${start_cmd}"
                 abort_rc=$?
                 if [ "${abort_rc}" == "0" ]; then
                     abort_arg=""
@@ -906,16 +908,20 @@ function process_bench_roadblocks() {
                     runtime=$(${runtime_cmd})
                     runtime_rc=$?
 
-                    if [ "${runtime_rc}" -eq 0 -a \
-                         -n "${runtime}" ]; then
-                        # add padding to benchmark runtime so that
-                        # there is flexibility on benchmark end
-                        # behavior
-                        let tmp_timeout=${runtime}+${runtime_padding}
-                        echo "updated timeout value is ${tmp_timeout}"
+                    if [ "${runtime_rc}" -eq 0 -a -n "${runtime}" ]; then
+                        if [ "${runtime}" == "-1" ]; then
+                            echo "The workload has requested an unbounded roadblock timeout"
+                            unbounded_roadblock="yes"
+                        else
+                            # add padding to benchmark runtime so that
+                            # there is flexibility on benchmark end
+                            # behavior
+                            let tmp_timeout=${runtime}+${runtime_padding}
+                            echo "updated timeout value is ${tmp_timeout}"
 
-                        echo "adding timeout message to ${cs_tx_msgs_dir}"
-                        echo '{"recipient":{"type":"all","id":"all"},"user-object":{"timeout":"'${tmp_timeout}'"}}' > "${cs_tx_msgs_dir}/timeout"
+                            echo "adding timeout message to ${cs_tx_msgs_dir}"
+                            echo '{"recipient":{"type":"all","id":"all"},"user-object":{"timeout":"'${tmp_timeout}'"}}' > "${cs_tx_msgs_dir}/timeout"
+                        fi
                     fi
                 fi
 
@@ -943,20 +949,28 @@ function process_bench_roadblocks() {
                     fi
                 fi
 
-                run_bench_cmd "client" "client" "${abort}" "${abort}" "0" "${start_cmd}"
-                abort_rc=$?
-                if [ "${abort_rc}" == "0" ]; then
-                    abort_arg=""
+                if [ "${unbounded_roadblock}" == "yes" ]; then
+                    rb_name=$(printf "%s%s" ${rb_prefix} "client-start-end")
+                    prepare_roadblock_user_msgs_file "${iter_samp_dir}" "${rb_name}"
+                    do_roadblock "${rb_name}" ${timeout} wait-for "/usr/local/bin/engine-script-library run_bench_cmd '${cs_type}' 'client' 'client' '${abort}' '${abort}' '0' '${start_cmd}'"
+                    roadblock_rc=$?
+                    evaluate_test_roadblock "${rb_name}" ${roadblock_rc} ${iter_array_idx}
                 else
-                    abort_arg="abort"
-                    abort=${abort_rc}
-                fi
+                    run_bench_cmd "${cs_type}" "client" "client" "${abort}" "${abort}" "0" "${start_cmd}"
+                    abort_rc=$?
+                    if [ "${abort_rc}" == "0" ]; then
+                        abort_arg=""
+                    else
+                        abort_arg="abort"
+                        abort=${abort_rc}
+                    fi
 
-                rb_name=$(printf "%s%s" ${rb_prefix} "client-start-end")
-                prepare_roadblock_user_msgs_file "${iter_samp_dir}" "${rb_name}"
-                do_roadblock "${rb_name}" ${timeout} messages "${user_msgs_file}" "${abort_arg}"
-                roadblock_rc=$?
-                evaluate_test_roadblock "${rb_name}" ${roadblock_rc} ${iter_array_idx}
+                    rb_name=$(printf "%s%s" ${rb_prefix} "client-start-end")
+                    prepare_roadblock_user_msgs_file "${iter_samp_dir}" "${rb_name}"
+                    do_roadblock "${rb_name}" ${timeout} messages "${user_msgs_file}" "${abort_arg}"
+                    roadblock_rc=$?
+                    evaluate_test_roadblock "${rb_name}" ${roadblock_rc} ${iter_array_idx}
+                fi
                 ####################################################################
                 # reset the timeout value in case it was changed
                 if [ ${timeout} != ${default_timeout} ]; then
@@ -994,7 +1008,7 @@ function process_bench_roadblocks() {
                 roadblock_rc=$?
                 evaluate_test_roadblock "${rb_name}" ${roadblock_rc} ${iter_array_idx}
 
-                run_bench_cmd "server" "server" "${abort}" "${quit}" "${force_server_stop}" "${stop_cmd}"
+                run_bench_cmd "${cs_type}" "server" "server" "${abort}" "${quit}" "${force_server_stop}" "${stop_cmd}"
                 abort_rc=$?
                 if [ "${abort_rc}" == "0" ]; then
                     abort_arg=""
