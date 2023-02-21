@@ -1,7 +1,7 @@
 {
   "workshop": {
     "schema": {
-      "version": "2022.07.25"
+      "version": "2023.02.16"
     }
   },
   "userenv": {
@@ -12,6 +12,11 @@
       "tag": "zzz"
     },
     "properties": {
+      "platform": [
+        {
+          "architecture": "x86_64"
+        }
+      ],
       "packages": {
         "type": "rpm",
         "manager": "dnf"

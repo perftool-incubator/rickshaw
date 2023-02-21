@@ -1,7 +1,7 @@
 {
   "workshop": {
     "schema": {
-      "version": "2020.03.02"
+      "version": "2023.02.16"
     }
   },
   "userenv": {
@@ -12,6 +12,14 @@
       "tag": "stream8"
     },
     "properties": {
+      "platform": [
+        {
+          "architecture": "x86_64"
+        },
+        {
+          "architecture": "aarch64"
+        }
+      ],
       "packages": {
         "type": "rpm",
         "manager": "dnf"

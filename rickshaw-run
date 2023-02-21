@@ -1572,6 +1572,10 @@ sub validate_endpoints() {
             }
         }
     }
+    if (! defined $min_id || ! defined $max_id) {
+        print "[ERROR] Could not determine number of clients and/or server engines to create!  Did you specify at least 'client:N' in your endpoint arguments?\n";
+        exit 1;
+    }
     if ($min_id != 1) {
         printf "[ERROR]lowest ID found in clients and servers is %d, must be 1\n", $min_id;
         exit 1;
