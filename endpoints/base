@@ -568,7 +568,7 @@ function do_roadblock() {
     local msgs_log_file="$roadblock_msgs_dir/$label.json"
     local cmd=""
     local role="follower"
-    ping -w 10 -c 4 localhost || exit_error "Could not ping controller 4 times in 10 seconds"
+    ping -w 10 -c 4 localhost
     cmd="${cmd} /usr/local/bin/roadblock.py --role=${role} --redis-server=localhost"
     cmd="${cmd} --leader-id=${leader} --timeout=${timeout} --redis-password=${rb_passwd}"
     cmd="${cmd} --follower-id=${endpoint_label} --message-log=${msgs_log_file}"

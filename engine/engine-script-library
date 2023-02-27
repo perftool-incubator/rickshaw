@@ -82,7 +82,7 @@ function do_roadblock() {
     local msgs_log_file="$roadblock_msgs_dir/$label.json"
     local cmd=""
     local role="follower"
-    ping -c 4 $rickshaw_host || exit_error "Could not ping controller"
+    ping -w 10 -c 4 ${rickshaw_host}
     cmd="$cmd $roadblock_bin --role=${role} --redis-server=$rickshaw_host"
     cmd="$cmd --leader-id=$leader --timeout=$timeout --redis-password=$roadblock_passwd"
     cmd="$cmd --follower-id=$cs_label --message-log=$msgs_log_file"
