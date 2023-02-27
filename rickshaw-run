@@ -118,6 +118,8 @@ my $abort_test_id;
 my $skip_registry_auth;
 my @active_followers;
 
+(my $detect_arch_cmd, my $arch, my $detect_arch_cmd_rc) = run_cmd('uname -m');
+chomp($arch);
 
 sub usage {
     print "\nusage:\n\n";
@@ -361,6 +363,7 @@ sub calc_image_md5 {
     my $userenv_arg = shift;
     die "calc_image_md5(): \$userenv_arg must be defined" if (!defined $userenv_arg);
     my $req_args = shift;
+    my $arch_suffix = shift;
     my $workshop_sub_cmd;
     if (defined $req_args) {
         $workshop_sub_cmd = $workshop_base_cmd . " " . $userenv_arg . " " . $req_args;
@@ -443,7 +446,9 @@ sub calc_image_md5 {
         $md5->addfile($fh);
         close($fh);
     }
-    return $md5->hexdigest;
+    my $base_hash = $md5->hexdigest;
+    my $full_hash = $base_hash . "_" . $arch_suffix;
+    return $full_hash;
 }
 
 sub remote_image_found {
@@ -825,6 +830,7 @@ sub source_container_image {
     # or build and push the image to the registry
     my $userenv = shift;
     my $benchmark = shift;
+    my $container_arch = shift;
     my $image; # What gets returned
     my @local_images;
 
@@ -866,7 +872,7 @@ sub source_container_image {
             $req_arg = shift(@requirements);
             $skip_update = "true";
         }
-        my $tag = calc_image_md5($workshop_base_cmd, $userenv_arg, $req_arg);
+        my $tag = calc_image_md5($workshop_base_cmd, $userenv_arg, $req_arg, $container_arch);
         my %args = ( 'userenv' => $userenv_arg, 'reqs' => $req_arg, 'tag' => $tag, 'skip-update' => $skip_update );
         push (@workshop_args, \%args);
 
@@ -2360,7 +2366,7 @@ foreach my $bench (keys %bench_configs) {
     printf "Working on %s benchmark\n", $bench;
     foreach my $userenv (keys %{ $image_ids{$bench} }) {
         printf "Working on %s userenv\n", $userenv;
-        my $image = source_container_image($userenv, $bench);
+        my $image = source_container_image($userenv, $bench, $arch);
         if (!defined $image) {
             die "Could not get valid image [" . $image_ids{$bench}{$userenv}{'image'} . "] for container image build for userenv [" . $userenv . "] and benchmark [" . $bench . "]\n";
         }
