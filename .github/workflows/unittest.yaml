@@ -1,0 +1,51 @@
+name: unittest
+
+on:
+  pull_request:
+    branches: [ main ]
+    paths-ignore:
+      - LICENSE
+      - '**.md'
+      - .github/workflows/faux-unittest.yaml
+      - .github/workflows/faux-crucible-ci.yaml
+      - 'docs/**'
+
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.ref }}/unittest
+  cancel-in-progress: true
+
+jobs:
+  blockbreaker:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Install dependencies
+        run: |
+          cd util
+          python3 -m venv .venv
+          source .venv/bin/activate
+          pip install pytest pytest-html jsonschema
+
+      - name: Run unit tests
+        run: |
+          cd util
+          source .venv/bin/activate
+          pytest -v --html=report.html --self-contained-html blockbreaker.py tests/*.py
+
+      - name: Upload html report
+        uses: actions/upload-artifact@v2
+        with:
+          name: report
+          path: bin/report.html
+
+  unittest-complete:
+    runs-on: ubuntu-latest
+    needs:
+    - blockbreaker
+    steps:
+    - name: Confirm Success
+      run: echo "unittest-complete"

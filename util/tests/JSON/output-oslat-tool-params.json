@@ -1,0 +1,15 @@
+[
+    {
+        "tool": "sysstat",
+        "params": [
+            {
+                "arg": "subtools",
+                "val": "mpstat",
+                "enabled": "yes"
+            }
+        ]
+    },
+    {
+        "tool": "procstat"
+    }
+]

@@ -1,0 +1,87 @@
+{
+    "mv-params": {
+        "global-options": [
+            {
+                "name": "common-params",
+                "params": [
+                    { "arg": "duration", "vals": [ "10" ], "role": "client" },
+                    { "arg": "rtprio", "vals": [ "1" ], "role": "client" }
+                ]
+            }
+        ],
+        "sets": [
+            {
+                "include": "common-params"
+            }
+        ]
+    },
+    "tool-params": [
+        {
+            "tool": "sysstat",
+            "params": [
+                { "arg": "subtools", "val": "mpstat", "enabled": "yes" }
+            ]
+        },
+        {
+            "tool": "procstat"
+        }
+    ],
+    "tags": {
+        "run": "single-json-all-in-one",
+        "userenv": "alma8"
+    },
+    "endpoint": [
+        {
+            "type": "k8s",
+            "controller-ip": "CONTROLLER_IP",
+            "host": "CI_ENDPOINT_HOST",
+            "user": "CI_ENDPOINT_USER",
+            "userenv": "alma8",
+            "unique-project": 1,
+            "kubeconfig": 0,
+            "server": 1,
+            "client": 2,
+            "config": [
+                {
+                    "targets": [
+                        { "role": "client", "ids": "1" },
+                        { "role": "client", "ids": "2" },
+                        { "role": "server", "ids": "1" }
+                    ],
+                    "settings": {
+                        "securityContext": {
+                            "privileged": true,
+                            "capabilities": {
+                                "add": [ "SYS_NICE", "IPC_LOCK", "SYS_RAWIO", "SYS_ADMIN" ]
+                            }
+                        },
+                        "annotations": {
+                            "k8s.v1.cni.cncf.io/networks": "sriov-intel-b-pod, sriov-intel-a-pod",
+                            "irq-load-balancing.crio.io": "disable",
+                            "cpu-quota.crio.io": "disable"
+                        },
+                        "resources": {
+                            "requests": {
+                                "cpu": "14",
+                                "memory": "1000Mi",
+                                "hugepages-1Gi": "12Gi"
+                            },
+                            "limits": {
+                                "cpu": "14",
+                                "memory": "1000Mi",
+                                "hugepages-1Gi": "12Gi"
+                            }
+                        }
+                    }
+                },
+                {
+                    "targets": "all",
+                    "settings": {
+                        "cpu-partitioning": 1
+                    }
+                }
+            ]
+        }
+    ],
+    "passthru-args": " --num-samples 1 --test-order s"
+}

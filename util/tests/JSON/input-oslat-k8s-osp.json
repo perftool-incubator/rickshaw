@@ -1,0 +1,66 @@
+{
+    "mv-params": {
+        "global-options": [
+            {
+                "name": "common-params",
+                "params": [
+                    { "arg": "duration", "vals": [ "10" ], "role": "client" },
+                    { "arg": "rtprio", "vals": [ "1" ], "role": "client" }
+                ]
+            }
+        ],
+        "sets": [
+            {
+                "include": "common-params"
+            }
+        ]
+    },
+    "endpoint": [
+        {
+            "type": "k8s",
+            "controller-ip": "CONTROLLER_IP",
+            "host": "ENDPOINT_HOST",
+            "user": "ENDPOINT_USER",
+            "userenv": "alma8",
+            "unique-project": 1,
+            "kubeconfig": 0,
+            "server": 1,
+            "client": 1,
+            "config": [
+                {
+                    "targets": [
+                        { "role": "server", "ids": "1" }
+                    ],
+                    "settings": {
+                        "securityContext": {
+                            "privileged": true
+                        }
+                    }
+                }
+            ]
+        },
+        {
+            "type": "osp",
+            "controller-ip": "CONTROLLER_IP",
+            "host": "ENDPOINT_HOST",
+            "user": "ENDPOINT_USER",
+            "userenv": "alma8",
+            "unique-project": 1,
+            "server": 1,
+            "client": 1,
+            "config": [
+                {
+                    "targets": [
+                        { "role": "client", "ids": "1" }
+                    ],
+                    "settings": {
+                        "custom": {
+                            "custom-setting": true
+                        }
+                    }
+                }
+            ]
+        }
+
+    ]
+}
