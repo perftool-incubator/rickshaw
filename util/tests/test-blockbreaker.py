@@ -1,0 +1,139 @@
+#!/usr/bin/env python3
+
+import pytest
+import json
+import blockbreaker
+import re
+
+class TestBlockBreaker:
+
+    # helper function to read stream from file
+    def _load_file(self, filename):
+        with open("tests/JSON/" + filename, "r") as file:
+            data = file.read().rstrip("\n")
+        return data
+
+    # fixture to load json object from file
+    @pytest.fixture(scope="function")
+    def load_json_file(self, request):
+        return blockbreaker.load_json_file("tests/JSON/" + request.param)
+
+    """Test if json_to_stream converts endpoint block to a stream"""
+    @pytest.mark.parametrize("load_json_file",
+                             [ "input-oslat-k8s.json" ], indirect=True)
+    def test_json_to_stream_endpoints(self, load_json_file):
+        endpoints_stream = blockbreaker.json_to_stream(load_json_file, "endpoint", 0)
+        expected_stream = self._load_file("output-oslat-k8s-endpoints.stream")
+
+        # endpoint config generates random stream, so we match only general args
+        assert expected_stream in endpoints_stream
+        assert 'securityContext:client-1:' in endpoints_stream
+        assert 'resources:client-2:' in endpoints_stream
+        assert 'annotations:server-1:' in endpoints_stream
+
+    """Test if json_to_stream converts tags block to a stream"""
+    @pytest.mark.parametrize("load_json_file",
+                             [ "input-oslat-k8s.json" ], indirect=True)
+    def test_json_to_stream_tags(self, load_json_file):
+        tags_stream = blockbreaker.json_to_stream(load_json_file, "tags", 0)
+        expected_stream = self._load_file("output-oslat-tags.stream")
+
+        assert tags_stream == expected_stream
+
+    """Test if json_to_stream converts passthru-args block to a stream"""
+    @pytest.mark.parametrize("load_json_file",
+                             [ "input-oslat-k8s.json" ], indirect=True)
+    def test_json_to_stream_passthru(self, load_json_file):
+        passthru_stream = blockbreaker.dump_json(load_json_file, "passthru-args")
+        expected_stream = self._load_file("output-oslat-passthru-args.stream")
+
+        assert passthru_stream == expected_stream
+
+    """Test if load_json_file returns a dict dump_json returns a str"""
+    @pytest.mark.parametrize("load_json_file",
+                             [ "input-oslat-k8s.json" ], indirect=True)
+    def test_dump_json_mvparams(self, load_json_file):
+        assert type(load_json_file) == dict
+        input_json = blockbreaker.dump_json(load_json_file, "mv-params")
+        assert type(input_json) == str
+
+    """Test if json_to_stream returns None for invalid index"""
+    @pytest.mark.parametrize("load_json_file",
+                             [ "input-oslat-k8s.json" ], indirect=True)
+    def test_json_to_stream_endpoints_invalid_idx(self, load_json_file, capsys):
+        input_json = blockbreaker.json_to_stream(load_json_file, "endpoint", 1)
+        out, err = capsys.readouterr()
+        assert 'Invalid index' in out
+        assert input_json is None
+
+    """Test validate_schema using default schema for null schema_file arg"""
+    @pytest.mark.parametrize("load_json_file",
+                             [ "input-oslat-k8s.json" ], indirect=True)
+    def test_validate_schema_default(self, load_json_file):
+        validated_json = blockbreaker.validate_schema(load_json_file)
+        assert validated_json is True
+
+    """Test validate_schema using k8s schema and returns True"""
+    @pytest.mark.parametrize("load_json_file",
+                             [ "input-oslat-k8s.json" ], indirect=True)
+    def test_validate_schema_endpoint_k8s(self, load_json_file):
+        validated_json = blockbreaker.validate_schema(
+                             load_json_file["endpoint"][0], "schema-k8s.json")
+        assert validated_json is True
+
+    """Test validate_schema using osp schema and returns True"""
+    @pytest.mark.parametrize("load_json_file",
+                             [ "input-oslat-osp.json" ], indirect=True)
+    def test_validate_schema_endpoint_osp(self, load_json_file):
+        validated_json = blockbreaker.validate_schema(
+                             load_json_file["endpoint"][0], "schema-osp.json")
+        assert validated_json is True
+
+    """Test validate_schema using remotehost schema and returns True"""
+    @pytest.mark.parametrize("load_json_file",
+                             [ "input-oslat-remotehost.json" ], indirect=True)
+    def test_validate_schema_endpoint_remotehost(self, load_json_file):
+        validated_json = blockbreaker.validate_schema(
+                             load_json_file["endpoint"][0], "schema-remotehost.json")
+        assert validated_json is True
+
+    """Test validate_schema using kvm schema and returns True"""
+    @pytest.mark.parametrize("load_json_file",
+                             [ "input-oslat-kvm.json" ], indirect=True)
+    def test_validate_schema_endpoint_kvm(self, load_json_file):
+        validated_json = blockbreaker.validate_schema(
+                             load_json_file["endpoint"][0], "schema-kvm.json")
+        assert validated_json is True
+
+    """Test validate_schema using invalid schema and returns False"""
+    @pytest.mark.parametrize("load_json_file",
+                             [ "input-oslat-invalid.json" ], indirect=True)
+    def test_validate_schema_endpoint_invalid(self, load_json_file):
+        validated_json = blockbreaker.validate_schema(
+                             load_json_file["endpoint"][0], "schema-invalid.json")
+        assert validated_json is False
+
+    """Test validate_schema w/ missing endpoint type and returns False"""
+    @pytest.mark.parametrize("load_json_file",
+                             [ "input-oslat-notype.json" ], indirect=True)
+    def test_validate_schema_endpoint_notype(self, load_json_file):
+        validated_json = blockbreaker.validate_schema(
+                             load_json_file["endpoint"][0], "schema-null.json")
+        assert validated_json is False
+
+    """Test validate_schema using multiple endpoints and returns True"""
+    @pytest.mark.parametrize("load_json_file",
+                             [ "input-oslat-k8s-osp.json" ], indirect=True)
+    def test_validate_schema_endpoint_k8s_osp(self, load_json_file):
+        validated_json_1 = blockbreaker.validate_schema(
+                             load_json_file["endpoint"][0], "schema-k8s.json")
+        validated_json_2 = blockbreaker.validate_schema(
+                             load_json_file["endpoint"][1], "schema-osp.json")
+        endpoints_stream = blockbreaker.json_to_stream(load_json_file, "endpoint", 1)
+        expected_stream = self._load_file("output-oslat-k8s-osp.stream")
+
+        assert validated_json_1 is True
+        assert validated_json_2 is True
+        # endpoint config generates random stream, so we match only general args
+        assert expected_stream in endpoints_stream
+        assert 'custom:client-1:' in endpoints_stream

@@ -1,0 +1,85 @@
+{
+    "mv-params": {
+        "global-options": [
+            {
+                "name": "common-params",
+                "params": [
+                    { "arg": "duration", "vals": [ "10" ], "role": "client" },
+                    { "arg": "rtprio", "vals": [ "1" ], "role": "client" }
+                ]
+            }
+        ],
+        "sets": [
+            {
+                "include": "common-params"
+            }
+        ]
+    },
+    "tool-params": [
+        {
+            "tool": "sysstat",
+            "params": [
+                { "arg": "subtools", "val": "mpstat", "enabled": "yes" }
+            ]
+        },
+        {
+            "tool": "procstat"
+        }
+    ],
+    "tags": {
+        "run": "single-json-all-in-one",
+        "userenv": "alma8"
+    },
+    "endpoint": [
+        {
+            "type": "k8s",
+            "controller-ip": "",
+            "host": "foo.bar",
+            "user": "root",
+            "userenv": "alma8",
+            "unique-project": 1,
+            "kubeconfig": 0,
+            "server": 1,
+            "client": 1,
+            "config": [
+                {
+                    "targets": [
+                        { "role": "client", "ids": "1" }
+                    ],
+                    "settings": {
+                        "securityContext": {
+                            "capabilities": {
+                                "add": [ "SYS_NICE", "IPC_LOCK" ]
+                            }
+                        },
+                        "resources": {
+                            "requests": {
+                                "cpu": "12",
+                                "memory": "2048Mi"
+                            },
+                            "limits": {
+                                "cpu": "12",
+                                "memory": "2048Mi"
+                            }
+                        },
+                        "annotations": {
+                            "irq-load-balancing.crio.io": "disable",
+                            "cpu-quota.crio.io": "disable",
+                            "cpu-load-balancing.crio.io": "disable"
+                        }
+                    }
+                },
+                {
+                    "targets": "all",
+                    "settings": {
+                        "cpu-partitioning": 1,
+                        "nodeSelector": {
+                            "node-role.kubernetes.io/worker": ""
+                        }
+                    }
+                }
+            ]
+        }
+    ],
+    "passthru-args": " --num-samples 1 --test-order s"
+}

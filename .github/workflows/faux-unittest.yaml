@@ -1,0 +1,18 @@
+name: faux-unittest
+
+on:
+  pull_request:
+    branches: [ main ]
+    paths:
+      - LICENSE
+      - '**.md'
+      - .github/workflows/faux-unittest.yaml
+      - .github/workflows/faux-crucible-ci.yaml
+      - 'docs/**'
+
+jobs:
+  unittest-complete:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Confirm Success
+      run: echo "faux-unittest-complete"

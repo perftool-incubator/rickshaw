@@ -1,0 +1,1 @@
+k8s,controller-ip:CONTROLLER_IP,host:CI_ENDPOINT_HOST,user:CI_ENDPOINT_USER,userenv:alma8,unique-project:1,kubeconfig:0,server:1,client:2

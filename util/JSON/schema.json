@@ -1,0 +1,45 @@
+{
+    "$schema": "https://json-schema.org/draft/2019-09/schema",
+    "type": "object",
+    "properties": {
+        "schema": {
+            "type": "object",
+            "properties": {
+                "version": {
+                    "type": "string",
+                    "enum": [
+                        "2022.11.08",
+                        "2023.03.10"
+                    ]
+                }
+            }
+        },
+        "tags": {
+            "type": "object",
+            "additionalProperties": {
+                "type": "string"
+            }
+        },
+        "endpoint": {
+            "type": "array",
+            "items": {
+                "minItems": 1,
+                "uniqueItems": true,
+                "type": "object"
+            }
+        },
+        "tool-params": {
+            "type": "array"
+        },
+        "mv-params": {
+            "type": "object"
+        },
+        "passthru-args": {
+            "type": "string"
+        }
+    },
+    "additionalProperties": false,
+    "required": [
+        "mv-params"
+    ]
+}
