@@ -443,6 +443,7 @@ sub calc_image_md5 {
     for my $file (@files) {
         open(my $fh, $file);
         binmode($fh);
+        $md5->add($file);
         $md5->addfile($fh);
         close($fh);
     }
