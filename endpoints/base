@@ -569,7 +569,7 @@ function do_roadblock() {
     local cmd=""
     local role="follower"
     ping -w 10 -c 4 localhost
-    cmd="${cmd} /usr/local/bin/roadblock.py --role=${role} --redis-server=localhost"
+    cmd="${cmd} /usr/local/bin/roadblocker.py --role=${role} --redis-server=localhost"
     cmd="${cmd} --leader-id=${leader} --timeout=${timeout} --redis-password=${rb_passwd}"
     cmd="${cmd} --follower-id=${endpoint_label} --message-log=${msgs_log_file}"
     if [ -n "${message}" ]; then
