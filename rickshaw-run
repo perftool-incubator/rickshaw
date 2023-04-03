@@ -215,7 +215,7 @@ sub do_roadblock {
         debug_log(sprintf "roadblock leader output:\n%s\n", $output);
         ($file_rc, $_[0]) = get_json_file($msgs_log_file);
         if ($file_rc > 0 or ! defined $_[0]) {
-            print "Could not open the message file\n";
+            printf "Could not open the messages log file: %s\n", $msgs_log_file;
             exit 1;
         }
         if ( $rc != $roadblock_exit_success) {
@@ -236,7 +236,7 @@ sub do_roadblock {
     if ($rc == $roadblock_exit_abort or $rc == $roadblock_exit_success) {
         ($file_rc, $_[0]) = get_json_file($msgs_log_file);
         if ($file_rc > 0 or ! defined $_[0]) {
-            print "Could not open the message file\n";
+            printf "Could not open the messages log file on abort/exit: %s\n". $msgs_log_file;
             exit 1;
         }
         return $rc;
