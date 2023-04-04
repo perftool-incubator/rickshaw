@@ -1,0 +1,9 @@
+    {
+      "name": "lang",
+      "type": "distro",
+      "distro_info": {
+        "packages": [
+          "glibc-langpack-en"
+        ]
+      }
+    }
