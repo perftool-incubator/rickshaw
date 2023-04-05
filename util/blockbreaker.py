@@ -117,6 +117,10 @@ def json_to_stream(json_obj, cfg, idx):
                 tg_list = []
                 targets = json_blk[key][ecfg]['targets']
                 if isinstance(targets, str):
+                    # alias for default: 'all' --> applies config to all
+                    # target engines, but handle it as 'default'
+                    if targets == 'all':
+                        targets = 'default'
                     tg_list = [ targets ]
                 elif isinstance(targets, list):
                     for tg in targets:
