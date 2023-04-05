@@ -2,7 +2,7 @@
 # -*- mode: sh; indent-tabs-mode: nil; sh-basic-offset: 4 -*-
 # vim: autoindent tabstop=4 shiftwidth=4 expandtab softtabstop=4 filetype=bash
 
-roadblock_bin="/usr/local/bin/roadblock.py"
+roadblock_bin="/usr/local/bin/roadblocker.py"
 use_roadblock=1
 rb_exit_success=0
 rb_exit_timeout=3
