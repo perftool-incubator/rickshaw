@@ -56,6 +56,7 @@ my %run; # A multi-dimensional, nested hash, schema TBD
          # This hash documents what was run.
 my $redis_passwd = "flubber"; # TODO: make this cmdline setting
 my $rb_bin = "/usr/local/bin/roadblocker.py";
+my $rb_module = "/usr/local/bin/roadblock.py";
 my $messages_ref;
 my $default_rb_timeout;
 my $endpoint_deploy_timeout;
@@ -83,6 +84,7 @@ my $engine_archives_dir;
 my $engine_run_script;
 my $engine_library_script;
 my $engine_roadblock_script;
+my $engine_roadblock_module;
 my $iterations_dir;
 my $rickshaw_project_dir;
 my $roadblock_msgs_dir;
@@ -106,6 +108,7 @@ my $roadblock_exit_success = 0;
 my $roadblock_exit_timeout = 3;
 my $roadblock_exit_abort = 4;
 my $roadblock_exit_input = 2;
+my $abort_via_roadblock = 0;
 my $workshop_base_cmd;
 my $workshop_force_builds;
 my $cs_conf_file;
@@ -1242,6 +1245,7 @@ sub validate_controller_env() {
     if (defined $run{'roadblock-dir'} and -e $run{'roadblock-dir'} . "/roadblocker.py") {
         copy($run{'roadblock-dir'} . "/roadblocker.py", $rb_bin);
         chmod 0755, "$rb_bin";
+        copy($run{'roadblock-dir'} . "/roadblock.py", $rb_module);
     }
     if (defined $run{'workshop-dir'} and -e $run{'workshop-dir'} . "/workshop.pl") {
         $use_workshop = 1;
@@ -1447,6 +1451,7 @@ sub make_run_dirs() {
     $engine_run_script = $engine_config_dir . "/engine-script";
     $engine_library_script = $engine_config_dir . "/engine-script-library";
     $engine_roadblock_script = $engine_config_dir . "/roadblocker.py";
+    $engine_roadblock_module = $engine_config_dir . "/roadblock.py";
     $iterations_dir = $run_dir . "/iterations";
     mkdir($iterations_dir);
     $roadblock_msgs_dir = $run_dir . "/roadblock-msgs";
@@ -1859,6 +1864,8 @@ sub prepare_bench_tool_engines() {
     copy($run{'roadblock-dir'} . "/roadblocker.py", $engine_roadblock_script)
         || die "Could not copy roadblocker.py to " . $engine_roadblock_script;
     chmod 0755, "$engine_roadblock_script";
+    copy($run{'roadblock-dir'} . "/roadblock.py", $engine_roadblock_module)
+        || die "Could not copy roadblock.py to " . $engine_roadblock_module;
 
     my @collectors = grep(/[^client|^server]/, keys %clients_servers);
     my @all_collector_types = qw(client server worker master profiler compute);
