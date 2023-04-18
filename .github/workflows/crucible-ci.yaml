@@ -8,6 +8,8 @@ on:
     - '**.md'
     - .github/workflows/faux-crucible-ci.yaml
     - 'docs/**'
+    - engine/engine-script-library.py
+    - engine/engine-script.py
   workflow_dispatch:
 
 jobs:
