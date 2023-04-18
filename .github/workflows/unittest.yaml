@@ -9,6 +9,8 @@ on:
       - .github/workflows/faux-unittest.yaml
       - .github/workflows/faux-crucible-ci.yaml
       - 'docs/**'
+      - engine/engine-script-library.py
+      - engine/engine-script.py
 
   workflow_dispatch:
 
