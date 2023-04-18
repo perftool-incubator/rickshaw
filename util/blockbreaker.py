@@ -136,7 +136,7 @@ def json_to_stream(json_obj, cfg, idx):
                         st_blk = { st: st_val }
                         # create json file for each setting block
                         tf = tempfile.NamedTemporaryFile(prefix='__'+st+'__',
-                                      suffix='.tmp.json', delete=False)
+                                      suffix='.tmp.json', delete=False, dir=os.getcwd())
                         json_blk_to_file(st_blk, tf.name)
                         st_val = tf.name
                     for tg_name in tg_list:
