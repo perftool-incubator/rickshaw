@@ -124,6 +124,11 @@ my @active_followers;
 (my $detect_arch_cmd, my $arch, my $detect_arch_cmd_rc) = run_cmd('uname -m');
 chomp($arch);
 
+$SIG{'INT'} = sub {
+    print "Caught a CTRL-C/SIGINT, aborting via roadblock!\n";
+    $abort_via_roadblock = 1;
+};
+
 sub usage {
     print "\nusage:\n\n";
     print "--json-validator        Path to json schema validation utility\n";
@@ -212,6 +217,9 @@ sub do_roadblock {
             " --timeout=" . $timeout .
             " --message-log=" . $msgs_log_file .
             $follower_param;
+        if ($abort_via_roadblock) {
+            $cmd .= " --abort";
+        }
         debug_log(sprintf "roadblock leader command:%s\n", $cmd);
         ($cmd, $output, $rc) = run_cmd($cmd);
         debug_log(sprintf "roadblock leader rc:%s\n", $rc);
