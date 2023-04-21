@@ -647,7 +647,23 @@ sub push_local_image {
         exit 1;
     }
     if (!remote_image_found($image_tag)) {
-        die "ERROR: push_local_image(): could not find remote image after push ($image_tag)";
+        printf "WARNING: push_local_image(): failed to find remote image after push...retrying!\n";
+        my $found_it = 0;
+        for (my $i=1; $i<=20; $i++) {
+            sleep 3;
+
+            if (remote_image_found($image_tag)) {
+                $found_it = 1;
+                last;
+                printf "NOTICE: push_local_image(): found image on retry attempt number %d\n", $i;
+            } else {
+                printf "NOTICE: push_local_image(): failed to find image on retry attempt number %d\n", $i;
+            }
+        }
+
+        if (!$found_it) {
+            die "ERROR: push_local_image(): could not find remote image after push ($image_tag)";
+        }
     }
 }
 
