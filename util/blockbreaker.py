@@ -131,16 +131,17 @@ def json_to_stream(json_obj, cfg, idx):
                 for st in json_blk[key][ecfg]['settings']:
                     st_val = json_blk[key][ecfg]['settings'][st]
                     if isinstance(st_val, dict):
-                        # auto-detect json config blocks and from settings and
+                        # auto-detect json config blocks from settings and
                         # create inidividual json files e.g. securityContext
-                        st_blk = { st: st_val }
+                        st_val_str = json.dumps(st_val)
+                        st_blk = "\"" + st + "\": " + st_val_str
                         # create json file for each setting block
                         tf = tempfile.NamedTemporaryFile(prefix='__'+st+'__',
                                       suffix='.tmp.json', delete=False, dir=os.getcwd())
                         json_blk_to_file(st_blk, tf.name)
-                        st_val = tf.name
+                        st_blkfile = tf.name
                     for tg_name in tg_list:
-                        stream += st + ':' + tg_name + ':' + str(st_val) + ','
+                        stream += st + ':' + tg_name + ':' + str(st_blkfile) + ','
         else:
             val = json_blk[key]
             if isinstance(val, list):
