@@ -55,7 +55,7 @@ def json_blk_to_file(endpoint_setting, json_filename):
     """Generate json file from endpoint setting block"""
     try:
         with open(json_filename, 'w', encoding='utf-8') as f:
-            json.dump(endpoint_setting, f, indent=4)
+            f.write(endpoint_setting)
             f.close()
     except Exception as err:
          print("Unexpected error writing JSON file %s: %s" % (json_filename, err))
@@ -134,7 +134,7 @@ def json_to_stream(json_obj, cfg, idx):
                         # auto-detect json config blocks from settings and
                         # create inidividual json files e.g. securityContext
                         st_val_str = json.dumps(st_val)
-                        st_blk = "\"" + st + "\": " + st_val_str
+                        st_blk = '\"' + st + '": ' + st_val_str
                         # create json file for each setting block
                         tf = tempfile.NamedTemporaryFile(prefix='__'+st+'__',
                                       suffix='.tmp.json', delete=False, dir=os.getcwd())
