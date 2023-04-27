@@ -139,9 +139,9 @@ def json_to_stream(json_obj, cfg, idx):
                         tf = tempfile.NamedTemporaryFile(prefix='__'+st+'__',
                                       suffix='.tmp.json', delete=False, dir=os.getcwd())
                         json_blk_to_file(st_blk, tf.name)
-                        st_blkfile = tf.name
+                        st_val = tf.name
                     for tg_name in tg_list:
-                        stream += st + ':' + tg_name + ':' + str(st_blkfile) + ','
+                        stream += st + ':' + tg_name + ':' + str(st_val) + ','
         else:
             val = json_blk[key]
             if isinstance(val, list):
