@@ -1,0 +1,128 @@
+{
+    "bench-ids": {
+        "oslat": "1-2",
+        "uperf": ["3-4","6-7"],
+        "iperf": "5"
+    },
+    "mv-params": [
+        {
+            "sets": [
+                {
+                    "params": [
+                        { "arg": "duration", "vals": [ "10" ], "role": "client" },
+                        { "arg": "rtprio", "vals": [ "1" ], "role": "client" }
+                    ]
+                }
+            ]
+        },
+        {
+            "sets": [
+                {
+                    "params": [
+                        { "arg": "ifname", "vals": ["eth0"], "role": "server" },
+                        { "arg": "ipv", "vals": ["6"], "role": "all" },
+                        { "arg": "protocol", "vals": ["udp"], "id": "21" },
+                        { "arg": "bitrate", "vals": ["200M"], "id": "21" },
+                        { "arg": "length", "vals": ["256"], "id": "21" }
+                    ]
+                }
+            ]
+        },
+        {
+            "global-options": [
+                {
+                    "name": "common-params",
+                    "params": [
+                        { "arg": "duration", "vals": ["60"] },
+                        { "arg": "protocol", "vals": ["tcp"] },
+                        { "arg": "nthreads", "vals": ["1"] },
+                        { "arg": "ifname", "vals": ["eth0"], "role": "server" }
+                    ]
+                }
+            ],
+            "sets": [
+                {
+                    "include": "common-params",
+                    "params": [
+                        { "arg": "test-type", "vals": ["crr"], "id": "1" },
+                        { "arg": "wsize", "vals": ["512"], "id": "1" },
+                        { "arg": "rsize", "vals": ["2048"], "id": "1" }
+                    ]
+                }
+            ]
+        }
+    ],
+    "tool-params": [
+        {
+            "tool": "procstat"
+        }
+    ],
+    "tags": {
+        "run": "multibench-runfile"
+    },
+    "endpoint": [
+        {
+            "type": "k8s",
+            "controller-ip": "K8S_CONTROLLER_IP",
+            "host": "K8S_ENDPOINT_HOST",
+            "user": "K8S_ENDPOINT_USER",
+            "userenv": "alma8",
+            "unique-project": 1,
+            "kubeconfig": 0,
+            "server": "1-7",
+            "client": "2-4+6",
+            "config": [
+                {
+                    "targets": [
+                        { "role": "client", "ids": "2" },
+                        { "role": "server", "ids": "1+3+5" }
+                    ],
+                    "settings": {
+                        "securityContext": {
+                            "capabilities": {
+                                "add": [ "SYS_NICE", "IPC_LOCK" ]
+                            }
+                        },
+                        "nodeSelector": {
+                            "kubernetes.io/hostname": "worker-001"
+                        }
+                    }
+                },
+                {
+                    "targets": [
+                        { "role": "client", "ids": "3-4+6" },
+                        { "role": "server", "ids": "2+4+6-7" }
+                    ],
+                    "settings": {
+                        "nodeSelector": {
+                            "kubernetes.io/hostname": "worker-002"
+                        }
+                    }
+                },
+                {
+                    "targets": "all",
+                    "settings": {
+                        "cpu-partitioning": 1
+                    }
+                }
+            ]
+        },
+        {
+            "type": "remotehost",
+            "host": "ENDPOINT_HOST",
+            "user": "ENDPOINT_USER",
+            "server": 0,
+            "client": "1+5",
+            "config": [
+                {
+                    "targets": [
+                        { "role": "client", "ids": "1+5" }
+                    ],
+                    "settings": {
+                    }
+                }
+            ]
+        }
+    ],
+    "passthru-args": " --num-samples 1 --test-order s"
+}
