@@ -1,9 +1,9 @@
 {
-    "bench-ids": {
-        "oslat": "1-2",
-        "uperf": ["3-4","6-7"],
-        "iperf": "5"
-    },
+    "benchmarks": [
+        { "name": "oslat", "ids": "1-2" },
+        { "name": "uperf", "ids": ["3-4","6-7"] },
+        { "name": "iperf", "ids": "5" }
+    ],
     "mv-params": [
         {
             "sets": [

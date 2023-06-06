@@ -35,7 +35,7 @@ def process_options():
     args = parser.parse_args()
     return args
 
-def dump_json(obj, key, format = 'readable'):
+def dump_json(obj, key, idx, format = 'readable'):
     """Dump json in readable or parseable format"""
     # Parseable format has no indentation
     indentation = None
@@ -45,11 +45,23 @@ def dump_json(obj, key, format = 'readable'):
         sep += ' '
 
     try:
-        json_str = json.dumps(obj[key], indent = indentation, separators = (',', sep),
+        blk = obj[key]
+        if isinstance(obj[key], list):
+            if key != 'tool-params':
+                blk = blk[idx]
+        
+        json_str = json.dumps(blk, indent = indentation, separators = (',', sep),
                               sort_keys = False)
         return json_str
-    except KeyError:
-        return None
+    except IndexError as err:
+        err_msg = f"{ err }: Index { idx } does not exist in the config block { key }."
+    except KeyError as err:
+        err_msg = f"{ err }: Config block { key } does not exist."
+    except Exception as err:
+        err_msg = f"{ err }: An unexpected error occurred while processing JSON { obj }."
+        
+    print(err_msg)
+    return None
 
 def json_blk_to_file(endpoint_setting, json_filename):
     """Generate json file from endpoint setting block"""
@@ -94,20 +106,26 @@ def json_to_stream(json_obj, cfg, idx):
 
     try:
         # arrays w/ multiple key:value objects e.g. "endpoint" block
-        if isinstance(json_obj[cfg], list):
+        if cfg == 'endpoint' and isinstance(json_obj[cfg], list):
             json_blk = json_obj[cfg][idx]
+            endpoint_type = json_blk["type"]
+            if not validate_schema(json_blk, "schema-" + endpoint_type + ".json"):
+                return None
         else:
             # single object w/ key:value pairs e.g. "tags" block
             json_blk = json_obj[cfg]
     except IndexError as err:
-        err_msg="{} => Invalid index: {} block has {} element(s).".format(
-                        err, cfg, len(json_obj[cfg]))
+        err_msg=(
+            f"{ err }: Invalid index { idx }: Config block { cfg } has "
+            f"{ len(json_obj[cfg]) } element(s)."
+        )
+    except KeyError as err:
+        err_msg=f"{ err }: There is no 'type' key in { json_blk }"
     except Exception as err:
-        err_msg="{} => Failed to convert block {} into stream.".format(
-                        err, cfg)
+        err_msg=f"{ err }: Failed to parse config { cfg }, index { idx }."
 
     if err_msg is not None:
-        print("ERROR: %s" % (err_msg))
+        print(f"ERROR: { err_msg }")
         return None
 
     for key in json_blk:
@@ -151,7 +169,8 @@ def json_to_stream(json_obj, cfg, idx):
             else:
                 try:
                     val_str = str(val)
-                    # TODO: Handle endpoint type in rickshaw like the other args
+                    # TODO: Handle endpoint type as key:val in rickshaw-run like the
+                    # other args. Instead of: k8s,foo:bar ==> type:k8s,foo:bar
                     if key != 'type':
                         stream += key + ':'
                     stream += val_str + ','
@@ -199,19 +218,11 @@ def main():
         return 1
 
     if args.config == "endpoint" or args.config == "tags":
-        if args.config == "endpoint":
-            try:
-                endp = input_json[args.config][args.index]["type"]
-            except:
-                endp = "null"
-                return 1
-            finally:
-                if not validate_schema(input_json[args.config][args.index],
-                                        "schema-" + endp + ".json"):
-                    return 1
+        # output is a stream of the endpoint or tags 
         output = json_to_stream(input_json, args.config, args.index)
     else:
-        output = dump_json(input_json, args.config)
+        # output is a JSON object (e.g. mv-params, tool-params)
+        output = dump_json(input_json, args.config, args.index)
     print(output)
 
 if __name__ == "__main__":

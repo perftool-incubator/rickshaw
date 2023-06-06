@@ -5,9 +5,6 @@
             "type": "string",
             "enum": [ "kvm" ]
         },
-        "controller-ip": {
-            "type": "string"
-        },
         "host": {
             "type": "string"
         },
@@ -21,10 +18,26 @@
             "type": "integer"
         },
         "client": {
-            "type": "integer"
+            "anyOf": [
+                {
+                    "type": "string",
+                    "pattern": "^(?!0$)(([1-9]|10)(-[1-9][0-9]*)?)(\\+(([1-9]|10)(-[1-9][0-9]*)?))*$"
+                },
+                {
+                    "type": "integer"
+                }
+            ]
         },
         "server": {
-            "type": "integer"
+            "anyOf": [ 
+                {
+                    "type": "string",
+                    "pattern": "^(?!0$)(([1-9]|10)(-[1-9][0-9]*)?)(\\+(([1-9]|10)(-[1-9][0-9]*)?))*$"
+                },
+                {
+                    "type": "integer"
+                }
+            ]
         },
         "config": {
             "type": "array",
@@ -45,7 +58,8 @@
                                             "enum": [ "client", "server" ]
                                         },
                                         "ids": {
-                                            "type": "string"
+                                            "type": "string",
+                                            "pattern": "^(?!0$)(([1-9]|10)(-[1-9][0-9]*)?)(\\+(([1-9]|10)(-[1-9][0-9]*)?))*$"
                                         }
                                     },
                                     "additionalProperties": false,
@@ -76,7 +90,6 @@
     "additionalProperties": true,
     "required": [
         "type",
-        "controller-ip",
         "host",
         "user"
     ],
