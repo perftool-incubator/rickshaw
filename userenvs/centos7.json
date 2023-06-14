@@ -8,7 +8,7 @@
     "name": "centos7",
     "label": "CentOS 7",
     "origin": {
-      "image": "registry.centos.org/centos/centos",
+      "image": "quay.io/centos/centos",
       "tag": "7"
     },
     "properties": {
