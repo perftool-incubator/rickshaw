@@ -3,7 +3,7 @@
     "label": "Debian",
     "origin": {
       "image": "docker.io/library/debian",
-      "tag": "stable-slim"
+      "tag": "bookworm"
     },
     "properties": {
       "platform": [
