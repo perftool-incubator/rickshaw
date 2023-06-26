@@ -1,0 +1,43 @@
+{
+    "sets": [
+        {
+            "params": [
+                {
+                    "arg": "ifname",
+                    "vals": [
+                        "eth0"
+                    ],
+                    "role": "server"
+                },
+                {
+                    "arg": "ipv",
+                    "vals": [
+                        "6"
+                    ],
+                    "role": "all"
+                },
+                {
+                    "arg": "protocol",
+                    "vals": [
+                        "udp"
+                    ],
+                    "id": "21"
+                },
+                {
+                    "arg": "bitrate",
+                    "vals": [
+                        "200M"
+                    ],
+                    "id": "21"
+                },
+                {
+                    "arg": "length",
+                    "vals": [
+                        "256"
+                    ],
+                    "id": "21"
+                }
+            ]
+        }
+    ]
+}
