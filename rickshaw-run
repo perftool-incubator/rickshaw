@@ -866,7 +866,7 @@ sub source_container_image {
     $run{'workshop-dir'} . "/workshop.pl" .
     " --log-level verbose " .
     " --config " . $cs_conf_file .
-    " --param %bench-dir%=" . $bench_dirs{$benchmark} .
+    " --param %bench-dir%=" . $run{'bench-dir'} .
     " --param %engine-dir%=" . $rickshaw_project_dir . "/engine/" .
     " --param %rickshaw-dir%=" . $rickshaw_project_dir .
     " --reg-tls-verify=" . $run{'reg-tls-verify'} .
@@ -1398,7 +1398,7 @@ sub load_tool_params() {
         my $this_tool_config = $run{'tools-dir'} . "/" . $tool_name . "/rickshaw.json";
         my ($rc, $json_ref) = get_json_file($this_tool_config, $tool_schema_file);
         if ($rc > 0 or ! defined $json_ref) {
-            printf "Could not open the tool config file: %s\n", $this_tool_config;
+            print "Could not open the tool config file\n";
             exit 1;
         }
         if (! exists $$json_ref{'tool'} or $$json_ref{'tool'} ne $tool_name) {
@@ -1420,7 +1420,7 @@ sub load_utility_params() {
             my $this_utility_config = $run{$utility . '-dir'} . "/rickshaw.json";
             ($rc, my $json_ref) = get_json_file($this_utility_config, $utility_schema_file);
             if ($rc > 0 or ! defined $json_ref) {
-                printf "Could not open the utility config file: %s\n", $this_utility_config;
+                print "Could not open the tool config file\n";
                 exit 1;
             }
             if (! exists $$json_ref{'utility'} or $$json_ref{'utility'} ne $utility) {
@@ -1472,7 +1472,8 @@ sub make_run_dirs() {
     mkdir($engine_logs_dir);
     $engine_archives_dir = $engine_run_dir . "/archives/";
     mkdir($engine_archives_dir);
-    $engine_run_script = $engine_config_dir . "/engine-script";
+    #$engine_run_script = $engine_config_dir . "/engine-script";
+    $engine_run_script = $engine_config_dir . "/engine.py";
     $engine_library_script = $engine_config_dir . "/engine-script-library";
     $engine_roadblock_script = $engine_config_dir . "/roadblocker.py";
     $engine_roadblock_module = $engine_config_dir . "/roadblock.py";
@@ -1797,7 +1798,7 @@ sub build_files_list {
                 $$file_spec{'required'} = 1;
             }
             my $src_file = $$file_spec{'src'};
-            $src_file =~ s/\%bench-dir\%/$bench_dirs{$benchmark}\//g;
+            $src_file =~ s/\%bench-dir\%/$bench_dir\//g;
             $src_file =~ s/\%run-dir\%/$run_dir\//g;
             $src_file =~ s/\%config-dir\%/$config_dir\//g;
             my $dest_file = $$file_spec{'dest'};
@@ -1860,14 +1861,12 @@ sub prepare_bench_tool_engines() {
             # Note that the user params for the benchmark are from the first set only
             # This pre-script is run only once before all of the tests are started.
             # If this script generates a file to aid in benchmark execution (such as a job file),
-            # The file should work for all peram sets (all benchmark iterations).  If you need
+            # The file should work for all perams sets (all benchmark iterations).  If you need
             # different job files per iteration, then use the client or server-side "pre-script"
             # to either augment a file generated here or create a completely new file.
-            # NOTE: for multi-bench, this will require some new logic.  One may have a benchmark
-            # which uses a pre-script but does not use ID 1.  Instead we will need to run from the 
-            # first ID for that benchmark.
             printf "generating pre-script cmd\n";
-            my $cmd = $bench_configs{$this_benchmark}{"controller"}{"pre-script"} . " " . dump_params($run{'iterations'}[0]{'params'}, 1, "client");
+            my $cmd = $bench_configs{$this_benchmark}{"controller"}{"pre-script"} . " " . dump_params($run{'iterations'}[0]{'params'});
+            #$cmd =~ s/\%bench-dir\%/$run{'bench-dir'}/g;
             $cmd =~ s/\%bench-dir\%/$bench_dirs{$this_benchmark}/g;
             $cmd =~ s/\%run-dir\%/$run_dir/g;
             debug_log(sprintf "controller pre-script command: [%s]\n", $cmd);
@@ -1881,12 +1880,15 @@ sub prepare_bench_tool_engines() {
             debug_log(sprintf "controller pre-script output:\n%s", join("\n", $pre_cmd_output));
         }
     }
-    copy($rickshaw_project_dir . "/engine/engine-script", $engine_run_script)
-        || die "Could not copy engine-script to " . $engine_run_script;
-    chmod 0755, "$engine_run_script";
-    copy($rickshaw_project_dir . "/engine/engine-script-library", $engine_library_script)
-        || die "Could not copy engine-script-library to " . $engine_library_script;
-    chmod 0755, "$engine_library_script";
+    #copy($rickshaw_project_dir . "/engine/engine-script", $engine_run_script)
+    #    || die "Could not copy engine-script to " . $engine_run_script;
+    #chmod 0755, "$engine_run_script";
+    #copy($rickshaw_project_dir . "/engine/engine-script-library", $engine_library_script)
+    #    || die "Could not copy engine-script-library to " . $engine_library_script;
+    #chmod 0755, "$engine_library_script";
+    copy($rickshaw_project_dir . "/engine/engine.py", $engine_run_script)
+    	|| die "Could not copy engine.py to " . $engine_run_script;
+	chmod 0755, "$engine_run_script";
     copy($run{'roadblock-dir'} . "/roadblocker.py", $engine_roadblock_script)
         || die "Could not copy roadblocker.py to " . $engine_roadblock_script;
     chmod 0755, "$engine_roadblock_script";
@@ -1954,15 +1956,10 @@ sub prepare_bench_tool_engines() {
     # already collecting that data from a different source (and a client
     # and/or server would be collecting duplicate data).  For this reason tool
     # cmd files are built specifically for each client and server.
-    print "Generating tool cmds\n";
     foreach my $cs_type (keys %clients_servers) {
         next if ($cs_type eq "profiler"); # Currently we do not generate specific tools cmds for each profiler
         for my $start_stop ("start", "stop") {
             foreach my $cs_ref (@{ $clients_servers{$cs_type} }) {
-		if (! defined $$cs_ref{'id'}) {
-			printf "cs_ref{'id'} for client_servers{%s} is not defined, skipping.\n", $cs_type;
-			next;
-		}
                 my $cs_tool_cmds_dir = $tool_cmds_dir . "/" . $cs_type . "/" . $$cs_ref{'id'};
                 make_path($cs_tool_cmds_dir);
                 my $tool_cmd_file = $cs_tool_cmds_dir . "/" . $start_stop;
@@ -1993,10 +1990,6 @@ sub prepare_bench_tool_engines() {
             if ($cs_type eq "client") {
                 push(@cmd_type_files, "infra");
             }
-	    if (! defined $$cs_ref{'id'}) {
-		printf "cs_type: [%s] cs_ref{'id'} not defined, skipping\n", $cs_type;
-                next;
-	    }
             my $cs_id = $$cs_ref{'id'};
             my $this_cmds_dir = $engine_bench_cmds_dir . "/" . $cs_type . "/" . $cs_id;
             #make_path($this_cmds_dir) || die "Could not mkdir " . $this_cmds_dir;
@@ -2048,10 +2041,6 @@ sub prepare_bench_tool_engines() {
     foreach my $cs_type (keys %clients_servers, @all_collector_types) {
         if ($cs_type =~ /^client|server|profiler?/) {
             foreach my $cs_ref (@{ $clients_servers{$cs_type} }) {
-	        if (! defined $$cs_ref{'id'}) {
-		    printf "cs_type: [%s] cs_ref{'id'} not defined, skipping\n", $cs_type;
-                    next;
-	        }
                 my $cs_id = $$cs_ref{'id'};
                 my $benchmark = $ids_to_benchmark{$cs_id};
                 build_files_list($cs_type, $cs_id, $benchmark);
@@ -2076,7 +2065,7 @@ sub deploy_endpoints() {
     $endpoint_deploy_timeout += scalar @endpoints * 120;
     foreach my $engine (keys %clients_servers) {
         $endpoint_deploy_timeout += scalar @{ $clients_servers{$engine} } * 15;
-        $engine_script_start_timeout += scalar @{ $clients_servers{$engine} } * 15;
+	$engine_script_start_timeout += scalar @{ $clients_servers{$engine} } * 15;
     }
     printf "endpoint-deploy-timeout adjusted to %d seconds\n", $endpoint_deploy_timeout;
     printf "engine-script-timeout adjusted to %d seconds\n", $endpoint_deploy_timeout;
