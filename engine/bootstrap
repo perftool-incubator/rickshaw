@@ -278,13 +278,18 @@ if [ ! -e ${json_settings_file} ]; then
     exit_error "Could not find rickshaw-settings.json.xz"
 fi
 
-scp_from_controller "$ssh_id_file" "$engine_config_dir/engine-script" /usr/local/bin/
-scp_from_controller "$ssh_id_file" "$engine_config_dir/engine-script-library" /usr/local/bin/
+#scp_from_controller "$ssh_id_file" "$engine_config_dir/engine-script" /usr/local/bin/
+#scp_from_controller "$ssh_id_file" "$engine_config_dir/engine-script-library" /usr/local/bin/
 scp_from_controller "$ssh_id_file" "$engine_config_dir/roadblocker.py" /usr/local/bin
 scp_from_controller "$ssh_id_file" "$engine_config_dir/roadblock.py" /usr/local/bin
-if [ -e /usr/local/bin/engine-script -a -e /usr/local/bin/engine-script-library ]; then
+scp_from_controller "$ssh_id_file" "$engine_config_dir/engine.py" /usr/local/bin
+
+clean_upts=$(echo "$opts" | sed 's/--$//')
+
+if [ -e /usr/local/bin/engine.py ]; then
     echo "Execing engine-script:"
-    exec /usr/local/bin/engine-script
+    #exec /usr/local/bin/engine-script
+    exec /usr/local/bin/engine.py $clean_opts
 else
     exit_error "Could not find engine-script or engine-script-library"
 fi
