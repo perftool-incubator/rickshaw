@@ -35,7 +35,7 @@ def collect_sysinfo():
 
     print()
 
-def do_roadblock(options, label, timeout, messages=None, wait_for=None, abort=False, roadblock_msgs_dir):
+def do_roadblock(options, label, timeout, roadblock_msgs_dir, roadblock_bin, rb_exit_success, rb_exit_abort, messages=None, wait_for=None, abort=False):
     """
     Executes a roadblock with the specified label, timeout, and optional parameters for sending a user message file,
     waiting for a particular condition, and aborting the roadblock.
@@ -555,7 +555,7 @@ def main(*args):
 
     engine_script_start_timeout = options.engine_script_start_timeout
 
-    do_roadblock(options, 'engine-init-begin', engine_script_start_timeout, roadblock_msgs_dir)
+    do_roadblock(options, 'engine-init-begin', engine_script_start_timeout, roadblock_msgs_dir, ROADBLOCK_BIN, RB_EXIT_SUCCESS, RB_EXIT_ABORT)
     do_roadblock('engine-init-end', engine_script_start_timeout)
 
     # Get data
