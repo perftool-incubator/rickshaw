@@ -35,7 +35,7 @@ def collect_sysinfo():
 
     print()
 
-def do_roadblock(options, label, timeout, messages=None, wait_for=None, abort=False):
+def do_roadblock(options, label, timeout, messages=None, wait_for=None, abort=False, roadblock_msgs_dir):
     """
     Executes a roadblock with the specified label, timeout, and optional parameters for sending a user message file,
     waiting for a particular condition, and aborting the roadblock.
@@ -353,7 +353,7 @@ def setup_core_env(cs_label, base_run_dir):
     sync_prefix = "engine"
     sync = f"{sync_prefix}-script-start"
 
-    return cs_dir
+    return cs_dir, tool_start_cmds, tool_stop_cmds, roadblock_msgs_dir
 
 def start_tools():
     """
@@ -539,7 +539,7 @@ def main(*args):
     # setup core environment
     base_run_dir = options.base_run_dir
     cs_label = options.cs_label
-    cs_dir = setup_core_env(cs_label, base_run_dir)
+    cs_dir, tool_start_cmds, tool_stop_cmds, roadblock_msgs_dir = setup_core_env(cs_label, base_run_dir)
     # roadblocks may be used after this
 
     # cs_dir is created by setup_core_env
@@ -555,7 +555,7 @@ def main(*args):
 
     engine_script_start_timeout = options.engine_script_start_timeout
 
-    do_roadblock(options, 'engine-init-begin', engine_script_start_timeout)
+    do_roadblock(options, 'engine-init-begin', engine_script_start_timeout, roadblock_msgs_dir)
     do_roadblock('engine-init-end', engine_script_start_timeout)
 
     # Get data
