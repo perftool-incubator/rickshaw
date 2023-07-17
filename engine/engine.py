@@ -35,7 +35,7 @@ def collect_sysinfo():
 
     print()
 
-def do_roadblock(options, label, timeout, roadblock_msgs_dir, roadblock_bin, rb_exit_success, rb_exit_abort, messages=None, wait_for=None, abort=False):
+def do_roadblock(options, label, timeout, roadblock_msgs_dir, roadblock_bin, rb_exit_success, rb_exit_abort, max_rb_attempts, messages=None, wait_for=None, abort=False):
     """
     Executes a roadblock with the specified label, timeout, and optional parameters for sending a user message file,
     waiting for a particular condition, and aborting the roadblock.
@@ -114,7 +114,7 @@ def do_roadblock(options, label, timeout, roadblock_msgs_dir, roadblock_bin, rb_
     rc = 99
 
     # Loop until either the maximum number of attempts is reached or the roadblock is successful or aborted
-    while attempts < options.max_rb_attempts and rc != rb_exit_success and rc != rb_exit_abort:
+    while attempts < max_rb_attempts and rc != rb_exit_success and rc != rb_exit_abort:
         attempts += 1
         print(f"attempt number: {attempts}")
         print(f"uuid: {attempts}:{uuid}")
@@ -454,6 +454,7 @@ def validate_core_env(options, ROADBLOCK_BIN):
 
     # Check that max_rb_attempts environment variable is set, and if not, set it to a default value
     max_rb_attempts = options.max_rb_attempts
+    max_rb_attempts = max_rb_attempts.replace("'", "")
     if max_rb_attempts is None:
         max_rb_attempts = 1
         print(f'[WARNING] --max-rb-attempts was not used, so setting to default of {max_rb_attempts}')
@@ -477,6 +478,8 @@ def validate_core_env(options, ROADBLOCK_BIN):
 
     engine_script_start_timeout = options.engine_script_start_timeout
     print(f"engine_script_start_timeout: {engine_script_start_timeout}")
+
+    return max_rb_attempts
 
 def main(*args):
     options = process_opts()
@@ -534,7 +537,7 @@ def main(*args):
     default_rickshaw_timeout = rickshaw_opts['roadblock']['timeouts']['default']
 
     # validate core environment
-    validate_core_env(options, ROADBLOCK_BIN)
+    max_rb_attempts = validate_core_env(options, ROADBLOCK_BIN)
 
     # setup core environment
     base_run_dir = options.base_run_dir
@@ -555,7 +558,7 @@ def main(*args):
 
     engine_script_start_timeout = options.engine_script_start_timeout
 
-    do_roadblock(options, 'engine-init-begin', engine_script_start_timeout, roadblock_msgs_dir, ROADBLOCK_BIN, RB_EXIT_SUCCESS, RB_EXIT_ABORT)
+    do_roadblock(options, 'engine-init-begin', engine_script_start_timeout, roadblock_msgs_dir, ROADBLOCK_BIN, RB_EXIT_SUCCESS, RB_EXIT_ABORT, max_rb_attempts)
     do_roadblock('engine-init-end', engine_script_start_timeout)
 
     # Get data
