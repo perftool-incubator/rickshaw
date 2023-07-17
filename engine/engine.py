@@ -442,6 +442,7 @@ def validate_core_env(options, ROADBLOCK_BIN):
 
     # Check that cs_label environment variable is set and matches a certain regular expression
     cs_label = options.cs_label
+    cs_label = cs_label.replace("'", "") # remove single quotes from cs_label
     if cs_label is None:
         exit_error("The client/server label (--cs-label) was not defined")
     else:
@@ -533,7 +534,7 @@ def main(*args):
     default_rickshaw_timeout = rickshaw_opts['roadblock']['timeouts']['default']
 
     # validate core environment
-    validate_core_env(options, ROADBLOCK_BIN, USE_ROADBLOCK)
+    validate_core_env(options, ROADBLOCK_BIN)
 
     # setup core environment
     base_run_dir = options.base_run_dir
