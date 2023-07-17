@@ -114,7 +114,7 @@ def do_roadblock(options, label, timeout, roadblock_msgs_dir, roadblock_bin, rb_
     rc = 99
 
     # Loop until either the maximum number of attempts is reached or the roadblock is successful or aborted
-    while attempts < max_rb_attempts and rc != rb_exit_success and rc != rb_exit_abort:
+    while attempts < int(max_rb_attempts) and rc != rb_exit_success and rc != rb_exit_abort:
         attempts += 1
         print(f"attempt number: {attempts}")
         print(f"uuid: {attempts}:{uuid}")
