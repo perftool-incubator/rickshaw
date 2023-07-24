@@ -559,10 +559,10 @@ def main(*args):
     engine_script_start_timeout = options.engine_script_start_timeout
 
     do_roadblock(options, 'engine-init-begin', engine_script_start_timeout, roadblock_msgs_dir, ROADBLOCK_BIN, RB_EXIT_SUCCESS, RB_EXIT_ABORT, max_rb_attempts)
-    do_roadblock('engine-init-end', engine_script_start_timeout)
+    do_roadblock(options, 'engine-init-end', engine_script_start_timeout, roadblock_msgs_dir, ROADBLOCK_BIN, RB_EXIT_SUCCESS, RB_EXIT_ABORT, max_rb_attempts)
 
     # Get data
-    do_roadblock('get-data-begin', default_rickshaw_timeout)
+    do_roadblock(options, 'get-data-begin', default_rickshaw_timeout, roadblock_msgs_dir, ROADBLOCK_BIN, RB_EXIT_SUCCESS, RB_EXIT_ABORT, max_rb_attempts)
 
     # get data
     os.environ["RS_CS_LABEL"] = cs_label
@@ -575,23 +575,23 @@ def main(*args):
 
     get_data(cs_type, cs_id, ssh_id_file, engine_config_dir, tool_cmds_dir)
 
-    do_roadblock('get-data-end', default_rickshaw_timeout)
+    do_roadblock(options, 'get-data-end', default_rickshaw_timeout, roadblock_msgs_dir, ROADBLOCK_BIN, RB_EXIT_SUCCESS, RB_EXIT_ABORT, max_rb_attempts)
 
 
     # Collect sysinfo
-    do_roadblock('collect-sysinfo-begin', default_rickshaw_timeout)
+    do_roadblock(options, 'collect-sysinfo-begin', default_rickshaw_timeout, roadblock_msgs_dir, ROADBLOCK_BIN, RB_EXIT_SUCCESS, RB_EXIT_ABORT, max_rb_attempts)
 
     collect_sysinfo()
 
-    do_roadblock('collect-sysinfo-end', default_rickshaw_timeout)
+    do_roadblock(options, 'collect-sysinfo-end', default_rickshaw_timeout, roadblock_msgs_dir, ROADBLOCK_BIN, RB_EXIT_SUCCESS, RB_EXIT_ABORT, max_rb_attempts)
 
 
     # Start tools
-    do_roadblock('start-tools-begin', default_rickshaw_timeout)
+    do_roadblock(options, 'start-tools-begin', default_rickshaw_timeout, roadblock_msgs_dir, ROADBLOCK_BIN, RB_EXIT_SUCCESS, RB_EXIT_ABORT, max_rb_attempts)
 
     start_tools()
 
-    do_roadblock('start-tools-end', default_rickshaw_timeout)
+    do_roadblock(options, 'start-tools-end', default_rickshaw_timeout, roadblock_msgs_dir, ROADBLOCK_BIN, RB_EXIT_SUCCESS, RB_EXIT_ABORT, max_rb_attempts)
 
 
     # Process bench roadblocks
@@ -601,14 +601,14 @@ def main(*args):
 
 
     # Stop tools
-    do_roadblock('stop-tools-begin', default_rickshaw_timeout)
-    do_roadblock('stop-tools-end', default_rickshaw_timeout, wait_for="/usr/local/bin/engine-script-library stop_tools '$(pwd)' '${tool_stop_cmds}' '${disable_tools}'")
+    do_roadblock(options, 'stop-tools-begin', default_rickshaw_timeout, roadblock_msgs_dir, ROADBLOCK_BIN, RB_EXIT_SUCCESS, RB_EXIT_ABORT, max_rb_attempts)
+    do_roadblock(options, 'stop-tools-end', default_rickshaw_timeout, roadblock_msgs_dir, ROADBLOCK_BIN, RB_EXIT_SUCCESS, RB_EXIT_ABORT, max_rb_attempts, wait_for="/usr/local/bin/engine-script-library stop_tools '$(pwd)' '${tool_stop_cmds}' '${disable_tools}'")
     # wait-for "/usr/local/bin/engine-script-library stop_tools '$(pwd)' '${tool_stop_cmds}' '${disable_tools}'"
 
 
     # Send data
-    do_roadblock('send-data-begin', default_rickshaw_timeout)
-    do_roadblock('send-data-end', default_rickshaw_timeout, wait_for="/usr/local/bin/engine-script-library send_data '${ssh_id_file}' '${cs_dir}' '${rickshaw_host}' '${archives_dir}/${cs_label}-data.tgz'")
+    do_roadblock(options, 'send-data-begin', default_rickshaw_timeout, roadblock_msgs_dir, ROADBLOCK_BIN, RB_EXIT_SUCCESS, RB_EXIT_ABORT, max_rb_attempts)
+    do_roadblock(options, 'send-data-end', default_rickshaw_timeout, roadblock_msgs_dir, ROADBLOCK_BIN, RB_EXIT_SUCCESS, RB_EXIT_ABORT, max_rb_attempts, wait_for="/usr/local/bin/engine-script-library send_data '${ssh_id_file}' '${cs_dir}' '${rickshaw_host}' '${archives_dir}/${cs_label}-data.tgz'")
 
 
     print('All client/server scripts are finished')
