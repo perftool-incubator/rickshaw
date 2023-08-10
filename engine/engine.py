@@ -353,7 +353,7 @@ def setup_core_env(cs_label, base_run_dir):
     sync_prefix = "engine"
     sync = f"{sync_prefix}-script-start"
 
-    return cs_dir, tool_start_cmds, tool_stop_cmds, roadblock_msgs_dir, engine_config_dir
+    return cs_dir, tool_start_cmds, tool_stop_cmds, roadblock_msgs_dir, engine_config_dir, tool_cmds_dir
 
 def start_tools():
     """
@@ -396,7 +396,7 @@ def start_tools():
             total_tools += 1
 
             # Create the tool directory
-            tool_cmds_dir = os.makedirs(tool_name, exist_ok=True)
+            os.makedirs(tool_name, exist_ok=True)
 
             # Change to the tool directory and execute the command
             try:
@@ -411,8 +411,7 @@ def start_tools():
     if total_tools == 0:
         print("No tools configured for this engine")
     else:
-        print(f"Started {total_tools} tool(s)")
-    return tool_cmds_dir
+        print(f"Started {total_tools} tool(s)") 
 
 def validate_core_env(options, ROADBLOCK_BIN):
     """
@@ -543,7 +542,7 @@ def main(*args):
     # setup core environment
     base_run_dir = options.base_run_dir
     cs_label = options.cs_label
-    cs_dir, tool_start_cmds, tool_stop_cmds, roadblock_msgs_dir, engine_config_dir = setup_core_env(cs_label, base_run_dir)
+    cs_dir, tool_start_cmds, tool_stop_cmds, roadblock_msgs_dir, engine_config_dir, tool_cmds_dir = setup_core_env(cs_label, base_run_dir)
     # roadblocks may be used after this
 
     # cs_dir is created by setup_core_env
@@ -590,7 +589,7 @@ def main(*args):
     # Start tools
     do_roadblock(options, 'start-tools-begin', default_rickshaw_timeout, roadblock_msgs_dir, ROADBLOCK_BIN, RB_EXIT_SUCCESS, RB_EXIT_ABORT, max_rb_attempts)
 
-    tool_cmds_dir = start_tools()
+    start_tools()
 
     do_roadblock(options, 'start-tools-end', default_rickshaw_timeout, roadblock_msgs_dir, ROADBLOCK_BIN, RB_EXIT_SUCCESS, RB_EXIT_ABORT, max_rb_attempts)
 
