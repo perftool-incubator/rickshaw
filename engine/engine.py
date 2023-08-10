@@ -353,7 +353,7 @@ def setup_core_env(cs_label, base_run_dir):
     sync_prefix = "engine"
     sync = f"{sync_prefix}-script-start"
 
-    return cs_dir, tool_start_cmds, tool_stop_cmds, roadblock_msgs_dir
+    return cs_dir, tool_start_cmds, tool_stop_cmds, roadblock_msgs_dir, engine_config_dir
 
 def start_tools():
     """
@@ -542,7 +542,7 @@ def main(*args):
     # setup core environment
     base_run_dir = options.base_run_dir
     cs_label = options.cs_label
-    cs_dir, tool_start_cmds, tool_stop_cmds, roadblock_msgs_dir = setup_core_env(cs_label, base_run_dir)
+    cs_dir, tool_start_cmds, tool_stop_cmds, roadblock_msgs_dir, engine_config_dir = setup_core_env(cs_label, base_run_dir)
     # roadblocks may be used after this
 
     # cs_dir is created by setup_core_env
