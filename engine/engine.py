@@ -396,7 +396,7 @@ def start_tools():
             total_tools += 1
 
             # Create the tool directory
-            os.makedirs(tool_name, exist_ok=True)
+            tool_cmds_dir = os.makedirs(tool_name, exist_ok=True)
 
             # Change to the tool directory and execute the command
             try:
@@ -412,6 +412,7 @@ def start_tools():
         print("No tools configured for this engine")
     else:
         print(f"Started {total_tools} tool(s)")
+    return tool_cmds_dir
 
 def validate_core_env(options, ROADBLOCK_BIN):
     """
@@ -589,7 +590,7 @@ def main(*args):
     # Start tools
     do_roadblock(options, 'start-tools-begin', default_rickshaw_timeout, roadblock_msgs_dir, ROADBLOCK_BIN, RB_EXIT_SUCCESS, RB_EXIT_ABORT, max_rb_attempts)
 
-    start_tools()
+    tool_cmds_dir = start_tools()
 
     do_roadblock(options, 'start-tools-end', default_rickshaw_timeout, roadblock_msgs_dir, ROADBLOCK_BIN, RB_EXIT_SUCCESS, RB_EXIT_ABORT, max_rb_attempts)
 
