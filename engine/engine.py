@@ -319,6 +319,13 @@ def process_opts():
 
     return parser.parse_args()
 
+def remove_quotes(s):
+    if s.startswith("'"):
+        s = s[1:]
+    if s.endswith("'"):
+        s = s[:-1]
+    return s
+
 def setup_core_env(cs_label, base_run_dir):
     """
     Sets several environment variables, creates several directories on the client/server and the controller.
@@ -543,6 +550,10 @@ def main(*args):
     base_run_dir = options.base_run_dir
     cs_label = options.cs_label
     cs_dir, tool_start_cmds, tool_stop_cmds, roadblock_msgs_dir, engine_config_dir, tool_cmds_dir = setup_core_env(cs_label, base_run_dir)
+
+    # cs_type and cs_id can have leading or trailing single-quotes
+    cs_type = remove_quotes(cs_type)
+    cs_id = remove_quotes(cs_id)
     # roadblocks may be used after this
 
     # cs_dir is created by setup_core_env
