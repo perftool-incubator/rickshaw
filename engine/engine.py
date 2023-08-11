@@ -11,7 +11,7 @@ import subprocess
 import sys
 import tempfile
 
-def collect_sysinfo():
+def collect_sysinfo(RUNTIME_PADDING):
     """Collects sysinfo using the packrat tool."""
     packrat_bin = subprocess.run(["command", "-v", "packrat"], capture_output=True, text=True).stdout.strip()
     sysinfo_dir = "/path/to/sysinfo/dir"
@@ -592,7 +592,7 @@ def main(*args):
     # Collect sysinfo
     do_roadblock(options, 'collect-sysinfo-begin', default_rickshaw_timeout, roadblock_msgs_dir, ROADBLOCK_BIN, RB_EXIT_SUCCESS, RB_EXIT_ABORT, max_rb_attempts)
 
-    collect_sysinfo()
+    collect_sysinfo(RUNTIME_PADDING)
 
     do_roadblock(options, 'collect-sysinfo-end', default_rickshaw_timeout, roadblock_msgs_dir, ROADBLOCK_BIN, RB_EXIT_SUCCESS, RB_EXIT_ABORT, max_rb_attempts)
 
