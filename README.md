@@ -12,13 +12,13 @@ Rickshaw needs the following:
 - Benchmark parameters JSON file (--bench-params):
   - This tells rickshaw all the different ways you want to run the benchmark.  The [multiplex](https://github.com/perftool-incubator/multiplex) project can be used to generate this array (it can convert things like "--rw=read,write --bs=4k" into the proper JSON), and it will do parameter validation for you as well.
 - Endpoints (--endpoint:\<endpoint-type\>:\<endpoint-options\>):
-  - An endpoint is a place a benchmark or tool runs.  An endpoint could be almost anything as long as there is an implementation to support that endpoint type.  The most basic endpoint is 'local'.  Other endpoints planned are 'ssh' for executing on a remote host, 'k8s' for executing on kubernetes (with dynamic creation of pods/containers), 'osp' for execution on Openstack (with built-in support to create VMs on demand).  Other endpoints could exist, like 'ec2' for Amazon cloud, 'gce' for Google cloud, and 'azure' for Microsoft cloud.
-  - Specifying the endpoint (and what clients/servers it will run) determines how the benchmark gets executed on different systems.  The default endpoint, local, simply runs the benchmark command on the local host.  Rickshaw supports using multiple endpoints for the same run.  For example, if you want to run uperf benchmark, you need both a client and server uperf.  If you want to run the uperf server on Kuberbetes, but you want to run the uperf client on a baremetal host, you can use the 'k8s' endpoint for the server and the 'ssh' endpoint for the client.
+  - An endpoint is a place a benchmark or tool runs.  An endpoint could be almost anything as long as there is an implementation to support that endpoint type.  The most basic endpoint is 'local'.  Other endpoints planned are 'ssh' for executing on a remote host, 'k8s' for executing on Kubernetes (with dynamic creation of pods/containers), 'osp' for execution on OpenStack (with built-in support to create VMs on demand).  Other endpoints could exist, like 'ec2' for Amazon cloud, 'gce' for Google cloud, and 'azure' for Microsoft cloud.
+  - Specifying the endpoint (and what clients/servers it will run) determines how the benchmark gets executed on different systems.  The default endpoint, local, simply runs the benchmark command on the local host.  Rickshaw supports using multiple endpoints for the same run.  For example, if you want to run uperf benchmark, you need both a client and server uperf.  If you want to run the uperf server on Kubernetes, but you want to run the uperf client on a baremetal host, you can use the 'k8s' endpoint for the server and the 'ssh' endpoint for the client.
   - <pre>--endpoint:k8s:server[1]:$master-hostname --endpoint:ssh:client[1]:$client-hostname</pre>
   - Other examples
-    - 8 servers running in 8 containers in k8s and 8 clients running on the same barmetal host:  
+    - 8 servers running in 8 containers in k8s and 8 clients running on the same baremetal host:  
       <pre>--endpoint:k8s:server[1-8]:$master-hostname --endpoint:ssh:client[1-8]:$client-hostname</pre>
-    - 8 servers running in 8 containers in k8s and 8 clients running on 8 different barmetal host:  
+    - 8 servers running in 8 containers in k8s and 8 clients running on 8 different baremetal host:  
       <pre>--endpoint:k8s:server[1-8]:$master-hostname --endpoint:ssh:client[1]:$client1-hostname \
       --endpoint:ssh:client[2]:$client2-hostname --endpoint:ssh:client[3]:$client3-hostname \
       --endpoint:ssh:client[4]:$client4-hostname --endpoint:ssh:client[5]:$client5-hostname \
@@ -34,7 +34,7 @@ Rickshaw needs the following:
     - RS_TAGS Environment variable or --tags containing a comma-separated list of words that are relevant to the run
     - RS_DESC Environment variable or --desc containing a free form description of the purpose, conditions, or any other relevant information about this test.
 
-Other, optional paramers include:
+Other, optional parameters include:
 - Specifying the test order (--test-order):
   - 'i-s' = run one iteration and all its samples, then run the next iteration and its samples, etc.
   - 's-i' = run the first sample for all iterations, then run all the iterations for the second sample, etc.
