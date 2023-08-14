@@ -165,7 +165,7 @@ def exit_error(msg):
     print("Exiting")
     sys.exit(1)
 
-def get_data(cs_type, cs_id, ssh_id_file, engine_config_dir, tool_cmds_dir):
+def get_data(cs_type, cs_id, ssh_id_file, engine_config_dir, tool_cmds_dir, rickshaw_host):
     """Retrieves files required to run a benchmark and tools for a distributed system from a controller node to worker nodes.
 
     Args:
@@ -185,7 +185,7 @@ def get_data(cs_type, cs_id, ssh_id_file, engine_config_dir, tool_cmds_dir):
         cs_files_list = f"{cs_type}-files-list"
 
     # Retrieve the files
-    cmd = f"scp -i {ssh_id_file} controller:{engine_config_dir}/{cs_files_list} {cs_files_list}"
+    cmd = f"scp -i {ssh_id_file} {rickshaw_host}:{engine_config_dir}/{cs_files_list} {cs_files_list}"
     subprocess.run(cmd, check=True, shell=True)
 
     with open(cs_files_list) as f:
@@ -199,24 +199,24 @@ def get_data(cs_type, cs_id, ssh_id_file, engine_config_dir, tool_cmds_dir):
 
     # Retrieve the benchmark and tool commands
     if cs_type == "client" or cs_type == "server":
-        cmd = f"scp -i {ssh_id_file} controller:{engine_config_dir}/bench-cmds/{cs_type}/{cs_id}/start bench-start-cmds"
+        cmd = f"scp -i {ssh_id_file} {rickshaw_host}:{engine_config_dir}/bench-cmds/{cs_type}/{cs_id}/start bench-start-cmds"
         subprocess.run(cmd, check=True, shell=True)
         if cs_type == "client":
-            cmd = f"scp -i {ssh_id_file} controller:{engine_config_dir}/bench-cmds/{cs_type}/{cs_id}/infra bench-infra-cmds"
+            cmd = f"scp -i {ssh_id_file} {rickshaw_host}:{engine_config_dir}/bench-cmds/{cs_type}/{cs_id}/infra bench-infra-cmds"
             subprocess.run(cmd, check=True, shell=True)
             if cs_id == "1":
-                cmd = f"scp -i {ssh_id_file} controller:{engine_config_dir}/bench-cmds/{cs_type}/{cs_id}/runtime bench-runtime-cmds"
+                cmd = f"scp -i {ssh_id_file} {rickshaw_host}:{engine_config_dir}/bench-cmds/{cs_type}/{cs_id}/runtime bench-runtime-cmds"
                 subprocess.run(cmd, check=True, shell=True)
         else:
-            cmd = f"scp -i {ssh_id_file} controller:{engine_config_dir}/bench-cmds/{cs_type}/{cs_id}/stop bench-stop-cmds"
+            cmd = f"scp -i {ssh_id_file} {rickshaw_host}:{engine_config_dir}/bench-cmds/{cs_type}/{cs_id}/stop bench-stop-cmds"
             subprocess.run(cmd, check=True, shell=True)
     else:
-        cmd = f"scp -i {ssh_id_file} controller:{engine_config_dir}/bench-cmds/client/1/start bench-start-cmds"
+        cmd = f"scp -i {ssh_id_file} {rickshaw_host}:{engine_config_dir}/bench-cmds/client/1/start bench-start-cmds"
         subprocess.run(cmd, check=True, shell=True)
 
-    cmd = f"scp -i {ssh_id_file} controller:{tool_cmds_dir}/{cs_id}/start tool-start-cmds"
+    cmd = f"scp -i {ssh_id_file} {rickshaw_host}:{tool_cmds_dir}/{cs_id}/start tool-start-cmds"
     subprocess.run(cmd, check=True, shell=True)
-    cmd = f"scp -i {ssh_id_file} controller:{tool_cmds_dir}/{cs_id}/stop tool-stop-cmds"
+    cmd = f"scp -i {ssh_id_file} {rickshaw_host}:{tool_cmds_dir}/{cs_id}/stop tool-stop-cmds"
     subprocess.run(cmd, check=True, shell=True)
 
 def process_bench_roadblocks(cs_type, test_config, total_tests):
@@ -580,11 +580,12 @@ def main(*args):
     cs_type = cs_label.split("-")[0]
     cs_id = cs_label.split("-")[1]
     ssh_id_file='/tmp/rickshaw_id.rsa'
+    rickshaw_host = options.rickshaw_host
     # engine_config_dir=
     # tool_cmds_dir=
 
 
-    get_data(cs_type, cs_id, ssh_id_file, engine_config_dir, tool_cmds_dir)
+    get_data(cs_type, cs_id, ssh_id_file, engine_config_dir, tool_cmds_dir, rickshaw_host)
 
     do_roadblock(options, 'get-data-end', default_rickshaw_timeout, roadblock_msgs_dir, ROADBLOCK_BIN, RB_EXIT_SUCCESS, RB_EXIT_ABORT, max_rb_attempts)
 
