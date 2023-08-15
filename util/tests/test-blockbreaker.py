@@ -44,17 +44,17 @@ class TestBlockBreaker:
     @pytest.mark.parametrize("load_json_file",
                              [ "input-oslat-k8s.json" ], indirect=True)
     def test_json_to_stream_passthru(self, load_json_file):
-        passthru_stream = blockbreaker.dump_json(load_json_file, "passthru-args")
+        passthru_stream = blockbreaker.dump_json(load_json_file, "passthru-args", 0)
         expected_stream = self._load_file("output-oslat-passthru-args.stream")
 
         assert passthru_stream == expected_stream
 
-    """Test if load_json_file returns a dict dump_json returns a str"""
+    """Test if dump_json returns a str"""
     @pytest.mark.parametrize("load_json_file",
                              [ "input-oslat-k8s.json" ], indirect=True)
     def test_dump_json_mvparams(self, load_json_file):
         assert type(load_json_file) == dict
-        input_json = blockbreaker.dump_json(load_json_file, "mv-params")
+        input_json = blockbreaker.dump_json(load_json_file, "mv-params", 0)
         assert type(input_json) == str
 
     """Test if json_to_stream returns None for invalid index"""
@@ -137,3 +137,43 @@ class TestBlockBreaker:
         # endpoint config generates random stream, so we match only general args
         assert expected_stream in endpoints_stream
         assert 'custom:client-1:' in endpoints_stream
+
+    """Test validate_schema using multiple endpoints and returns True"""
+    @pytest.mark.parametrize("load_json_file",
+                             [ "input-multibench-k8s-remotehost.json" ], indirect=True)
+    def test_validate_schema_multibench_k8s_remotehost(self, load_json_file):
+        validated_json_0 = blockbreaker.validate_schema(
+                             load_json_file, "schema.json")
+        validated_json_1 = blockbreaker.validate_schema(
+                             load_json_file["endpoint"][0], "schema-k8s.json")
+        validated_json_2 = blockbreaker.validate_schema(
+                             load_json_file["endpoint"][1], "schema-remotehost.json")
+        endpoints_stream0 = blockbreaker.json_to_stream(load_json_file, "endpoint", 0)
+        endpoints_stream1 = blockbreaker.json_to_stream(load_json_file, "endpoint", 1)
+        expected_stream = self._load_file("output-multibench-k8s-remotehost.stream")
+
+        assert validated_json_0 is True
+        assert validated_json_1 is True
+        assert validated_json_2 is True
+        # endpoint config generates random stream, so we match only general args
+        assert expected_stream in endpoints_stream0
+        assert 'remotehost,host:ENDPOINT_HOST,user:ENDPOINT_USER' in endpoints_stream1
+        assert 'server:0,client:1+5' in endpoints_stream1
+
+    """Test if dump_json returns the correct json block"""
+    @pytest.mark.parametrize("load_json_file",
+                             [ "input-oslat-k8s.json" ], indirect=True)
+    def test_dump_json_mvparams_object(self, load_json_file):
+        assert type(load_json_file) == dict
+        input_json = blockbreaker.dump_json(load_json_file, "mv-params", 0)
+        expected_output = self._load_file("output-oslat-k8s-mvparams.json")
+        assert input_json == expected_output
+
+    """Test if dump_json returns the correct json block from mv-params idx 1"""
+    @pytest.mark.parametrize("load_json_file",
+                             [ "input-multibench-k8s-remotehost.json" ], indirect=True)
+    def test_dump_json_mvparams_index1(self, load_json_file):
+        assert type(load_json_file) == dict
+        input_json = blockbreaker.dump_json(load_json_file, "mv-params", 1)
+        expected_output = self._load_file("output-multibench-k8s-remotehost-mvparams1.json")
+        assert input_json == expected_output
