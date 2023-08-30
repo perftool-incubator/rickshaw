@@ -10,9 +10,18 @@
                     "enum": [
                         "2022.11.08",
                         "2023.03.10",
-                        "2023.06.06"
+                        "2023.06.06",
+                        "2023.08.30"
                     ]
                 }
+            }
+        },
+        "benchmarks": {
+            "type": "array",
+            "items": {
+                "minItems": 1,
+                "uniqueItems": true,
+                "type": "object"
             }
         },
         "tags": {

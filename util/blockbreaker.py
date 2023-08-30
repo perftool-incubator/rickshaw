@@ -24,7 +24,7 @@ def process_options():
                         dest = "config",
                         required = True,
                         help = "Configuration type to get from the json file",
-                        choices = [ "mv-params", "tool-params", "passthru-args", "tags", "endpoint" ])
+                        choices = [ "benchmarks", "mv-params", "tool-params", "passthru-args", "tags", "endpoint" ])
 
     parser.add_argument("--index",
                         dest = "index",
@@ -205,6 +205,26 @@ def validate_schema(input_json, schema_file = None):
         return False
     return True
 
+def get_bench_ids(json_obj, cfg):
+    """Get benchmark names and ids from the benchmarks block"""
+    stream=""
+    if json_obj is None:
+        return ""
+    try:
+        bench_count = len(json_obj[cfg])
+        if bench_count > 0:
+            for idx in range(0, bench_count):
+                json_blk = json_obj[cfg][idx]
+                stream+=json_blk["name"]+":"+json_blk["ids"]+","
+            # remove last ","
+            if len(stream)>0:
+                stream = stream[:-1]
+    except:
+        pass
+
+    return stream
+
+
 def main():
     """Main function of get-json-config.py tool"""
 
@@ -217,7 +237,9 @@ def main():
     if not validate_schema(input_json):
         return 1
 
-    if args.config == "endpoint" or args.config == "tags":
+    if args.config == "benchmarks":
+        output = get_bench_ids(input_json, args.config)
+    elif args.config == "endpoint" or args.config == "tags":
         # output is a stream of the endpoint or tags 
         output = json_to_stream(input_json, args.config, args.index)
     else:
