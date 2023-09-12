@@ -169,11 +169,11 @@ class TestBlockBreaker:
         expected_output = self._load_file("output-oslat-k8s-mvparams.json")
         assert input_json == expected_output
 
-    """Test if dump_json returns the correct json block from mv-params idx 1"""
+    """Test if dump_json returns the correct json block from mv-params for uperf"""
     @pytest.mark.parametrize("load_json_file",
                              [ "input-multibench-k8s-remotehost.json" ], indirect=True)
     def test_dump_json_mvparams_index1(self, load_json_file):
         assert type(load_json_file) == dict
-        input_json = blockbreaker.dump_json(load_json_file, "mv-params", 1)
+        input_json = blockbreaker.dump_json(load_json_file["benchmarks"][1], "mv-params", "uperf")
         expected_output = self._load_file("output-multibench-k8s-remotehost-mvparams1.json")
         assert input_json == expected_output

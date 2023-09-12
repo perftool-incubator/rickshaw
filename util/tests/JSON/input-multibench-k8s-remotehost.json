@@ -1,55 +1,63 @@
 {
     "benchmarks": [
-        { "name": "oslat", "ids": "1-2" },
-        { "name": "uperf", "ids": ["3-4","6-7"] },
-        { "name": "iperf", "ids": "5" }
-    ],
-    "mv-params": [
         {
-            "sets": [
-                {
-                    "params": [
-                        { "arg": "duration", "vals": [ "10" ], "role": "client" },
-                        { "arg": "rtprio", "vals": [ "1" ], "role": "client" }
-                    ]
-                }
-            ]
+            "name": "oslat",
+            "ids": "1-2",
+            "mv-params": {
+                "sets": [
+                    {
+                        "params": [
+                            { "arg": "duration", "vals": [ "10" ], "role": "client" },
+                            { "arg": "rtprio", "vals": [ "1" ], "role": "client" }
+                        ]
+                    }
+                ]
+            }
         },
         {
-            "sets": [
-                {
-                    "params": [
-                        { "arg": "ifname", "vals": ["eth0"], "role": "server" },
-                        { "arg": "ipv", "vals": ["6"], "role": "all" },
-                        { "arg": "protocol", "vals": ["udp"], "id": "21" },
-                        { "arg": "bitrate", "vals": ["200M"], "id": "21" },
-                        { "arg": "length", "vals": ["256"], "id": "21" }
-                    ]
-                }
-            ]
+            "name": "uperf",
+            "ids": ["3-4","6-7"],
+            "mv-params": {
+                "sets": [
+                    {
+                        "params": [
+                            { "arg": "ifname", "vals": ["eth0"], "role": "server" },
+                            { "arg": "ipv", "vals": ["6"], "role": "all" },
+                            { "arg": "protocol", "vals": ["udp"], "id": "21" },
+                            { "arg": "bitrate", "vals": ["200M"], "id": "21" },
+                            { "arg": "length", "vals": ["256"], "id": "21" }
+                        ]
+                    }
+                ]
+
+            }
         },
         {
-            "global-options": [
-                {
-                    "name": "common-params",
-                    "params": [
-                        { "arg": "duration", "vals": ["60"] },
-                        { "arg": "protocol", "vals": ["tcp"] },
-                        { "arg": "nthreads", "vals": ["1"] },
-                        { "arg": "ifname", "vals": ["eth0"], "role": "server" }
-                    ]
-                }
-            ],
-            "sets": [
-                {
-                    "include": "common-params",
-                    "params": [
-                        { "arg": "test-type", "vals": ["crr"], "id": "1" },
-                        { "arg": "wsize", "vals": ["512"], "id": "1" },
-                        { "arg": "rsize", "vals": ["2048"], "id": "1" }
-                    ]
-                }
-            ]
+            "name": "iperf",
+            "ids": "5",
+            "mv-params": {
+                "global-options": [
+                    {
+                        "name": "common-params",
+                        "params": [
+                            { "arg": "duration", "vals": ["60"] },
+                            { "arg": "protocol", "vals": ["tcp"] },
+                            { "arg": "nthreads", "vals": ["1"] },
+                            { "arg": "ifname", "vals": ["eth0"], "role": "server" }
+                        ]
+                    }
+                ],
+                "sets": [
+                    {
+                        "include": "common-params",
+                        "params": [
+                            { "arg": "test-type", "vals": ["crr"], "id": "1" },
+                            { "arg": "wsize", "vals": ["512"], "id": "1" },
+                            { "arg": "rsize", "vals": ["2048"], "id": "1" }
+                        ]
+                    }
+                ]
+            }
         }
     ],
     "tool-params": [
