@@ -24,13 +24,18 @@ def process_options():
                         dest = "config",
                         required = True,
                         help = "Configuration type to get from the json file",
-                        choices = [ "mv-params", "tool-params", "passthru-args", "tags", "endpoint" ])
+                        choices = [ "benchmarks", "mv-params", "tool-params", "passthru-args", "tags", "endpoint" ])
 
     parser.add_argument("--index",
                         dest = "index",
                         help = "Crucible config index (e.g. 2 => endpoint[2]",
                         default = 0,
                         type = int)
+
+    parser.add_argument("--benchmark",
+                        dest = "benchmark",
+                        help = "Crucible benchmark block to extract data from  (e.g. 'uperf')",
+                        type = str)
 
     args = parser.parse_args()
     return args
@@ -205,6 +210,33 @@ def validate_schema(input_json, schema_file = None):
         return False
     return True
 
+def get_bench_ids(json_obj, cfg):
+    """Get benchmark names and ids from the benchmarks block"""
+    stream=""
+    if json_obj is None:
+        return ""
+    try:
+        bench_count = len(json_obj[cfg])
+        if bench_count > 0:
+            for idx in range(0, bench_count):
+                json_blk = json_obj[cfg][idx]
+                stream+=json_blk["name"]+":"+json_blk["ids"]+","
+            # remove last ","
+            if len(stream)>0:
+                stream = stream[:-1]
+    except:
+        pass
+
+    return stream
+
+def get_mv_params(input_json, name):
+    """Extract mv-params from the benchmarks block"""
+    try:
+        benchmark_blk = next(d for d in input_json['benchmarks'] if d.get('name', None) == name)
+    except:
+        return None
+    return benchmark_blk
+
 def main():
     """Main function of get-json-config.py tool"""
 
@@ -217,12 +249,21 @@ def main():
     if not validate_schema(input_json):
         return 1
 
-    if args.config == "endpoint" or args.config == "tags":
-        # output is a stream of the endpoint or tags 
-        output = json_to_stream(input_json, args.config, args.index)
-    else:
-        # output is a JSON object (e.g. mv-params, tool-params)
-        output = dump_json(input_json, args.config, args.index)
+    match args.config:
+        case "benchmarks":
+            output = get_bench_ids(input_json, args.config)
+        case "endpoint" | "tags":
+            # output is a stream of the endpoint or tags
+            output = json_to_stream(input_json, args.config, args.index)
+        case default:
+            if args.config == "mv-params":
+                # if '--benchmark' is specified, get mv-params from
+                # the mv-params object inside of the 'benchmarks' block
+                if args.benchmark is not None:
+                    input_json = get_mv_params(input_json, args.benchmark)
+            # mv-params, tool-params, passthru-args
+            output = dump_json(input_json, args.config, args.index)
+
     print(output)
 
 if __name__ == "__main__":

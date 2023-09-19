@@ -10,7 +10,8 @@
                     "enum": [
                         "2022.11.08",
                         "2023.03.10",
-                        "2023.06.06"
+                        "2023.06.06",
+                        "2023.09.12"
                     ]
                 }
             }
@@ -76,18 +77,30 @@
                                 }
                             }
                         ]
+                    },
+                    "mv-params": {
+                        "anyOf": [
+                            {
+                                "type": "array",
+                                "items": {
+                                    "minItems": 1,
+                                    "type": "object"
+                                }
+                            },
+                            {
+                                "type": "object"
+                            }
+                        ]
                     }
                 },
                 "additionalProperties": false,
                 "required": [
                     "name",
-                    "ids"
+                    "ids",
+                    "mv-params"
                 ]
             }
         }
     },
-    "additionalProperties": false,
-    "required": [
-        "mv-params"
-    ]
+    "additionalProperties": false
 }
