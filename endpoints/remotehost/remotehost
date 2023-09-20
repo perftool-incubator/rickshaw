@@ -46,6 +46,7 @@ endpoint_name="remotehost"
 image_cache_size=3
 osruntime[default]="chroot"
 host_mounts=""
+hypervisor_host="none" # Default is no hypervisor
 
 function endpoint_remotehost_test_stop() {
     echo "Running endpoint_remotehost_test_stop"
@@ -209,6 +210,9 @@ function process_remotehost_opts() {
                     controller_ipaddr=`get_controller_ip $host`
                 fi
                 ;;
+            hypervisor-host)
+                hypervisor_host=$val
+                ;;
             controller-ip)
                 controller_ipaddr=$val
                 ;;
@@ -362,6 +366,8 @@ function launch_osruntime() {
             base_cmd+=" --cpu-partitioning=$cpu_partitioning"
             base_cmd+=" --engine-script-start-timeout=$engine_script_start_timeout"
             base_cmd+=" --disable-tools=$this_disable_tools"
+            base_cmd+=" --hosted-by=$host" # The host that runs the osruntime for this crucible engine
+            base_cmd+=" --hypervisor-host=$hypervisor_host" # The hypervisor host that runs the VM (if this remotehost happens to be a VM)
             if [ $numa_node -gt -1 ]; then
                 base_cmd="numactl -N $numa_node -m $numa_node $base_cmd"
             fi
@@ -388,6 +394,8 @@ function launch_osruntime() {
             echo "max_rb_attempts=$max_rb_attempts"         >> ${endpoint_run_dir}/${env_file}
             echo "ssh_id=${ssh_id}"                         >> ${endpoint_run_dir}/${env_file}
             echo "disable_tools=$this_disable_tools"        >> ${endpoint_run_dir}/${env_file}
+            echo "hosted_by=$host"                          >> ${endpoint_run_dir}/${env_file} 
+            echo "hypervisor_host=$hypervisor_host"         >> ${endpoint_run_dir}/${env_file}
 
             for cs_rb_opt in $cs_rb_opts; do
                 arg=$(echo $cs_rb_opt | awk -F'=' '{print $1}')

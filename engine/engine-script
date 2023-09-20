@@ -45,6 +45,8 @@ if ! pushd $cs_dir; then
     abort_error "Could not chdir to $cs_dir" engine-init-begin
     exit 1
 fi
+# There are a number of env vars needed for post-processing metrics
+env >engine-env.txt
 
 if [ "${cpu_partitioning}" == "1" ]; then
     if [ -z "${HK_CPUS}" ]; then
