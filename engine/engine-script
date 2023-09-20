@@ -36,6 +36,7 @@ echo
 
 leader=controller
 load_json_setting "roadblock.timeouts.default" default_timeout
+load_json_setting "roadblock.timeouts.collect-sysinfo" collect_sysinfo_timeout
 process_opts
 validate_core_env
 setup_core_env # roadblocks may be used after this
@@ -77,13 +78,13 @@ roadblock_rc=$?
 roadblock_exit_on_error ${roadblock_rc}
 
 
-do_roadblock collect-sysinfo-begin ${default_timeout}
+do_roadblock collect-sysinfo-begin ${collect_sysinfo_timeout}
 roadblock_rc=$?
 roadblock_exit_on_error ${roadblock_rc}
 
 collect_sysinfo
 
-do_roadblock collect-sysinfo-end ${default_timeout}
+do_roadblock collect-sysinfo-end ${collect_sysinfo_timeout}
 roadblock_rc=$?
 roadblock_exit_on_error ${roadblock_rc}
 

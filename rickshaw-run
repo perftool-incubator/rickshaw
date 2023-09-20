@@ -59,6 +59,7 @@ my $rb_bin = "/usr/local/bin/roadblocker.py";
 my $rb_module = "/usr/local/bin/roadblock.py";
 my $messages_ref;
 my $default_rb_timeout;
+my $collect_sysinfo_timeout;
 my $endpoint_deploy_timeout;
 my $engine_script_start_timeout;
 my $endpoint_move_data_rb_timeout;
@@ -1506,6 +1507,12 @@ sub load_settings_info() {
         exit 1;
     }
 
+    ($rc, $collect_sysinfo_timeout) = get_json_setting("roadblock.timeouts.collect-sysinfo", $jsonsettings);
+    if ($rc != 0) {
+        print "load_settings_info(): failed to load collect-sysinfo roadblock timeout\n";
+        exit 1;
+    }
+
     ($rc, $engine_script_start_timeout) = get_json_setting("roadblock.timeouts.engine-start", $jsonsettings);
     if ($rc != 0) {
         print "load_settings_info(): failed to load engine-start roadblock timeout\n";
@@ -2180,10 +2187,10 @@ sub process_roadblocks() {
     ####################################################################
     make_path($run_dir . "/sysinfo/endpoint");
 
-    $roadblock_rc = do_roadblock("collect-sysinfo-begin", $default_rb_timeout, $messages_ref, @active_followers);
+    $roadblock_rc = do_roadblock("collect-sysinfo-begin", $collect_sysinfo_timeout, $messages_ref, @active_followers);
     roadblock_exit_on_error($roadblock_rc);
 
-    $roadblock_rc = do_roadblock("collect-sysinfo-end", $default_rb_timeout, $messages_ref, @active_followers);
+    $roadblock_rc = do_roadblock("collect-sysinfo-end", $collect_sysinfo_timeout, $messages_ref, @active_followers);
     roadblock_exit_on_error($roadblock_rc);
     ####################################################################
     $roadblock_rc = do_roadblock("start-tools-begin", $default_rb_timeout, $messages_ref, @active_followers);
