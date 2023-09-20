@@ -34,7 +34,7 @@ use toolbox::logging;
 use toolbox::run;
 use toolbox::jsonsettings;
 
-$toolbox::logging::debug = 0;
+$toolbox::logging::debug = 1;
 
 my $ug = Data::UUID->new;
 my %defaults = ( "num-samples" => 1, "tool-group" => "default", "test-order" => "s",

@@ -129,6 +129,16 @@ while true; do
             export rickshaw_host="$1"
             shift;
             ;;
+        --hosted-by)
+            shift;
+            export hosted_by="$1"
+            shift;
+            ;;
+        --hypervisor-host)
+            shift;
+            export hypervisor_host="$1"
+            shift;
+            ;;
         --base-run-dir)
             shift;
             export base_run_dir=$1

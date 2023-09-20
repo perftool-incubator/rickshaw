@@ -352,8 +352,9 @@ sub wait_for_metric_descs {
 # with create_es_doc().  Metrics can be indexed from either a benchmark sample directory or a tool
 # directory.
 sub index_metrics {
-    my $index_or_queue = shift;
-    my $metr_file = shift; # filename without .json or .csv
+    my $index_or_queue = shift; # what action to take, index = submit to ES, queue = enqueue to file for bulk index later
+    my $metr_dir = shift; # directory where metric files exist
+    my $metr_file = shift; # metric filename without .json or .csv
     my $cstype = shift;
     my $csid = shift;
     my $base_doc_ref = shift; # metric_desc doc gets populated with this, usually a run doc or period doc
@@ -364,6 +365,19 @@ sub index_metrics {
     my $earliest_begin;
     my $latest_end;
     my $coder = JSON::XS->new->canonical;
+
+    {
+       my $dir =  pushd($metr_dir);
+
+    my $eng_env_file = "engine-env.txt";
+    if (! -e $eng_env_file) {
+        $eng_env_file .= ".xz";
+    }
+    if (! -e $eng_env_file) {
+        printf "pwd: %s\nCould not find %s, exiting\n", getcwd(), $eng_env_file;
+        exit 1;
+    }
+
     # Copy data from 'parent' doc so querying directly for metric_desc with
     # run data is possible
     my $metr_json_file = $metr_file . ".json";
@@ -372,7 +386,7 @@ sub index_metrics {
         $metr_json_file .= ".xz";
     }
     if (! -e $metr_json_file) {
-        printf "Could not find %s, exiting\n", $metr_json_file;
+        printf "pwd: %s\nCould not find %s, exiting\n", getcwd(), $metr_json_file;
         exit 1;
     }
     if (! -e $metr_csv_file) {
@@ -410,8 +424,30 @@ sub index_metrics {
         if ( exists $$this_metr{'values'} ) {
             $metr_desc_doc{'metric_desc'}{'values'} = $$this_metr{'values'};
         }
+        # this is where we add engine-related metadata
         $metr_desc_doc{'metric_desc'}{'names'}{'cstype'} = $cstype;
         $metr_desc_doc{'metric_desc'}{'names'}{'csid'} = $csid;
+        my $eng_env_fh = new IO::Uncompress::UnXz $eng_env_file, Transparent => 1 || die "[ERROR]could not open file " . $eng_env_file;
+        # Cull out env vars which we want as metadata
+        printf "Looking for engine env vars\n";
+        my @varnames = ('hosted_by', 'hypervisor_host', 'osruntime');
+        while (<$eng_env_fh>) {
+            
+            chomp;
+            printf "env: %s\n", $_;
+
+            foreach my $varname (@varnames) {
+                if (/^$varname=(.*)$/) {
+                    my $val = $1;
+                    $varname =~ s/_/-/g;
+                    $metr_desc_doc{'metric_desc'}{'names'}{$varname} = $val;
+                    printf "found %s = %s\n", $varname, $val;
+                    next;
+                }
+            }
+        }
+        close $eng_env_fh;
+
         my @names_list = sort(keys(%{ $metr_desc_doc{'metric_desc'}{'names'} }));
         $metr_desc_doc{'metric_desc'}{'names-list'} = \@names_list;
         my $metr_desc_doc_json = $coder->encode(\%metr_desc_doc);
@@ -483,6 +519,8 @@ sub index_metrics {
     } else {
         return $num_metric_docs_submitted;
     }
+
+    } #pushd
 }
 
 sub indexed_doc_count {
@@ -702,7 +740,8 @@ if (-e $tool_dir and $index_tools == 1) {
                                     $tool_file =~ s/(metric-data-\S+)\.json.*/$1/;
                                     printf "Working on tool_file: %s\n", $tool_file;
 
-                                    my %job_args = ( 'tool-file' => $tool_dir . "/" . $tool_file,
+                                    my %job_args = ( 'tool-dir' => $tool_dir, 
+                                                     'tool-file' => $tool_file,
                                                      'collector' => $collector,
                                                      'num' => $num,
                                                      'doc-ref' => $base_metric_doc_ref );
@@ -724,7 +763,7 @@ foreach my $job_args (@jobs) {
         push(@pids, $pid);
         $num_jobs++;
     } else {
-        my $num_metric_docs_submitted = index_metrics('index', $$job_args{'tool-file'}, $$job_args{'collector'}, $$job_args{'num'}, $$job_args{'doc-ref'});
+        my $num_metric_docs_submitted = index_metrics('index', $$job_args{'tool-dir'}, $$job_args{'tool-file'}, $$job_args{'collector'}, $$job_args{'num'}, $$job_args{'doc-ref'});
         #$tool_dir . "/" . $tool_file, $collector, $num, $base_metric_doc_ref);
         exit 0;
     }
@@ -880,11 +919,12 @@ if (exists $result{'iterations'}) {
                                                     for (my $j = 0; $j < scalar(@{ $data{'periods'}[$k]{'metric-files'} }); $j++) {
                                                         # Metric data is still in other file(s).  For each member in 'metric-files' array,
                                                         # there should be a 2 files with the same prefix
-                                                        my $metric_file_prefix = $run_dir . "/" . $cs_id_dir . "/" . $data{'periods'}[$k]{'metric-files'}[$j];
+                                                        my $metric_file_prefix = $data{'periods'}[$k]{'metric-files'}[$j];
+                                                        my $metric_dir = $run_dir . "/" . $cs_id_dir;
                                                         my $this_begin;
                                                         my $this_end;
                                                         # index_metric() to return the easliest-begin and latest-end for metric types matching the primary-metric
-                                                        (my $num_metric_docs_submitted, $this_begin, $this_end) = index_metrics('queue', $metric_file_prefix, $cs_name, $cs_id, $base_metric_doc_ref, $data{'benchmark'}, $data{'primary-metric'});
+                                                        (my $num_metric_docs_submitted, $this_begin, $this_end) = index_metrics('queue', $metric_dir, $metric_file_prefix, $cs_name, $cs_id, $base_metric_doc_ref, $data{'benchmark'}, $data{'primary-metric'});
                                                         # From processing all metric files, get the very-earliest-begin and very-latest-end
                                                         if (defined $this_begin and defined $this_end) {
                                                             if (not defined $earliest_begin or $earliest_begin > $this_begin) {
