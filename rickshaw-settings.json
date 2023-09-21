@@ -3,6 +3,7 @@
 	"timeouts": {
 	    "default": 240,
 	    "endpoint-deploy": 1440,
+	    "collect-sysinfo": 600,
 	    "engine-start": 1440,
 	    "move-data": 300
 	}
