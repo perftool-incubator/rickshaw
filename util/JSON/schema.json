@@ -11,7 +11,8 @@
                         "2022.11.08",
                         "2023.03.10",
                         "2023.06.06",
-                        "2023.09.12"
+                        "2023.09.12",
+                        "2023.09.20"
                     ]
                 }
             }
@@ -22,7 +23,7 @@
                 "type": "string"
             }
         },
-        "endpoint": {
+        "endpoints": {
             "type": "array",
             "items": {
                 "minItems": 1,
@@ -35,20 +36,6 @@
                 "minItems": 0,
                 "type": "object"
             }
-        },
-        "mv-params": {
-            "anyOf": [
-                {
-                    "type": "array",
-                    "items": {
-                        "minItems": 1,
-                        "type": "object"
-                    }
-                },
-                {
-                    "type": "object"
-                }
-            ]
         },
         "passthru-args": {
             "type": "string"
@@ -102,5 +89,8 @@
             }
         }
     },
-    "additionalProperties": false
+    "additionalProperties": false,
+    "required": [
+        "benchmarks"
+    ]
 }

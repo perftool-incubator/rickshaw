@@ -18,14 +18,14 @@ class TestBlockBreaker:
     def load_json_file(self, request):
         return blockbreaker.load_json_file("tests/JSON/" + request.param)
 
-    """Test if json_to_stream converts endpoint block to a stream"""
+    """Test if json_to_stream converts endpoints block to a stream"""
     @pytest.mark.parametrize("load_json_file",
                              [ "input-oslat-k8s.json" ], indirect=True)
     def test_json_to_stream_endpoints(self, load_json_file):
-        endpoints_stream = blockbreaker.json_to_stream(load_json_file, "endpoint", 0)
+        endpoints_stream = blockbreaker.json_to_stream(load_json_file, "endpoints", 0)
         expected_stream = self._load_file("output-oslat-k8s-endpoints.stream")
 
-        # endpoint config generates random stream, so we match only general args
+        # endpoints config generates random stream, so we match only general args
         assert expected_stream in endpoints_stream
         assert 'securityContext:client-1:' in endpoints_stream
         assert 'resources:client-2:' in endpoints_stream
@@ -54,14 +54,15 @@ class TestBlockBreaker:
                              [ "input-oslat-k8s.json" ], indirect=True)
     def test_dump_json_mvparams(self, load_json_file):
         assert type(load_json_file) == dict
-        input_json = blockbreaker.dump_json(load_json_file, "mv-params", 0)
+        benchmark_blk = blockbreaker.get_mv_params(load_json_file, "oslat") 
+        input_json = blockbreaker.dump_json(benchmark_blk, "mv-params", 0)
         assert type(input_json) == str
 
     """Test if json_to_stream returns None for invalid index"""
     @pytest.mark.parametrize("load_json_file",
                              [ "input-oslat-k8s.json" ], indirect=True)
     def test_json_to_stream_endpoints_invalid_idx(self, load_json_file, capsys):
-        input_json = blockbreaker.json_to_stream(load_json_file, "endpoint", 1)
+        input_json = blockbreaker.json_to_stream(load_json_file, "endpoints", 1)
         out, err = capsys.readouterr()
         assert 'Invalid index' in out
         assert input_json is None
@@ -78,7 +79,7 @@ class TestBlockBreaker:
                              [ "input-oslat-k8s.json" ], indirect=True)
     def test_validate_schema_endpoint_k8s(self, load_json_file):
         validated_json = blockbreaker.validate_schema(
-                             load_json_file["endpoint"][0], "schema-k8s.json")
+                             load_json_file["endpoints"][0], "schema-k8s.json")
         assert validated_json is True
 
     """Test validate_schema using osp schema and returns True"""
@@ -86,7 +87,7 @@ class TestBlockBreaker:
                              [ "input-oslat-osp.json" ], indirect=True)
     def test_validate_schema_endpoint_osp(self, load_json_file):
         validated_json = blockbreaker.validate_schema(
-                             load_json_file["endpoint"][0], "schema-osp.json")
+                             load_json_file["endpoints"][0], "schema-osp.json")
         assert validated_json is True
 
     """Test validate_schema using remotehost schema and returns True"""
@@ -94,7 +95,7 @@ class TestBlockBreaker:
                              [ "input-oslat-remotehost.json" ], indirect=True)
     def test_validate_schema_endpoint_remotehost(self, load_json_file):
         validated_json = blockbreaker.validate_schema(
-                             load_json_file["endpoint"][0], "schema-remotehost.json")
+                             load_json_file["endpoints"][0], "schema-remotehost.json")
         assert validated_json is True
 
     """Test validate_schema using kvm schema and returns True"""
@@ -102,7 +103,7 @@ class TestBlockBreaker:
                              [ "input-oslat-kvm.json" ], indirect=True)
     def test_validate_schema_endpoint_kvm(self, load_json_file):
         validated_json = blockbreaker.validate_schema(
-                             load_json_file["endpoint"][0], "schema-kvm.json")
+                             load_json_file["endpoints"][0], "schema-kvm.json")
         assert validated_json is True
 
     """Test validate_schema using invalid schema and returns False"""
@@ -110,7 +111,7 @@ class TestBlockBreaker:
                              [ "input-oslat-invalid.json" ], indirect=True)
     def test_validate_schema_endpoint_invalid(self, load_json_file):
         validated_json = blockbreaker.validate_schema(
-                             load_json_file["endpoint"][0], "schema-invalid.json")
+                             load_json_file["endpoints"][0], "schema-invalid.json")
         assert validated_json is False
 
     """Test validate_schema w/ missing endpoint type and returns False"""
@@ -118,7 +119,7 @@ class TestBlockBreaker:
                              [ "input-oslat-notype.json" ], indirect=True)
     def test_validate_schema_endpoint_notype(self, load_json_file):
         validated_json = blockbreaker.validate_schema(
-                             load_json_file["endpoint"][0], "schema-null.json")
+                             load_json_file["endpoints"][0], "schema-null.json")
         assert validated_json is False
 
     """Test validate_schema using multiple endpoints and returns True"""
@@ -126,10 +127,10 @@ class TestBlockBreaker:
                              [ "input-oslat-k8s-osp.json" ], indirect=True)
     def test_validate_schema_endpoint_k8s_osp(self, load_json_file):
         validated_json_1 = blockbreaker.validate_schema(
-                             load_json_file["endpoint"][0], "schema-k8s.json")
+                             load_json_file["endpoints"][0], "schema-k8s.json")
         validated_json_2 = blockbreaker.validate_schema(
-                             load_json_file["endpoint"][1], "schema-osp.json")
-        endpoints_stream = blockbreaker.json_to_stream(load_json_file, "endpoint", 1)
+                             load_json_file["endpoints"][1], "schema-osp.json")
+        endpoints_stream = blockbreaker.json_to_stream(load_json_file, "endpoints", 1)
         expected_stream = self._load_file("output-oslat-k8s-osp.stream")
 
         assert validated_json_1 is True
@@ -145,11 +146,11 @@ class TestBlockBreaker:
         validated_json_0 = blockbreaker.validate_schema(
                              load_json_file, "schema.json")
         validated_json_1 = blockbreaker.validate_schema(
-                             load_json_file["endpoint"][0], "schema-k8s.json")
+                             load_json_file["endpoints"][0], "schema-k8s.json")
         validated_json_2 = blockbreaker.validate_schema(
-                             load_json_file["endpoint"][1], "schema-remotehost.json")
-        endpoints_stream0 = blockbreaker.json_to_stream(load_json_file, "endpoint", 0)
-        endpoints_stream1 = blockbreaker.json_to_stream(load_json_file, "endpoint", 1)
+                             load_json_file["endpoints"][1], "schema-remotehost.json")
+        endpoints_stream0 = blockbreaker.json_to_stream(load_json_file, "endpoints", 0)
+        endpoints_stream1 = blockbreaker.json_to_stream(load_json_file, "endpoints", 1)
         expected_stream = self._load_file("output-multibench-k8s-remotehost.stream")
 
         assert validated_json_0 is True
@@ -165,7 +166,8 @@ class TestBlockBreaker:
                              [ "input-oslat-k8s.json" ], indirect=True)
     def test_dump_json_mvparams_object(self, load_json_file):
         assert type(load_json_file) == dict
-        input_json = blockbreaker.dump_json(load_json_file, "mv-params", 0)
+        benchmark_blk = blockbreaker.get_mv_params(load_json_file, "oslat")
+        input_json = blockbreaker.dump_json(benchmark_blk, "mv-params", 0)
         expected_output = self._load_file("output-oslat-k8s-mvparams.json")
         assert input_json == expected_output
 
@@ -174,6 +176,7 @@ class TestBlockBreaker:
                              [ "input-multibench-k8s-remotehost.json" ], indirect=True)
     def test_dump_json_mvparams_index1(self, load_json_file):
         assert type(load_json_file) == dict
-        input_json = blockbreaker.dump_json(load_json_file["benchmarks"][1], "mv-params", "uperf")
+        benchmark_blk = blockbreaker.get_mv_params(load_json_file, "uperf")
+        input_json = blockbreaker.dump_json(benchmark_blk, "mv-params", 0)
         expected_output = self._load_file("output-multibench-k8s-remotehost-mvparams1.json")
         assert input_json == expected_output
