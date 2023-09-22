@@ -1007,7 +1007,7 @@ function process_roadblocks() {
     roadblock_exit_on_error ${roadblock_rc}
 
 
-    do_roadblock "collect-sysinfo-begin" ${default_timeout}
+    do_roadblock "collect-sysinfo-begin" ${collect_sysinfo_timeout}
     roadblock_rc=$?
     roadblock_exit_on_error ${roadblock_rc}
 
@@ -1016,7 +1016,7 @@ function process_roadblocks() {
         mv ${endpoint_run_dir}/sysinfo ${run_dir}/sysinfo/endpoint/${endpoint_label}
     fi
 
-    do_roadblock "collect-sysinfo-end" ${default_timeout}
+    do_roadblock "collect-sysinfo-end" ${collect_sysinfo_timeout}
     roadblock_rc=$?
     roadblock_exit_on_error ${roadblock_rc}
 
@@ -1139,6 +1139,7 @@ function load_json_setting() {
 
 function load_settings() {
     load_json_setting "roadblock.timeouts.default" default_timeout
+    load_json_setting "roadblock.timeouts.collect-sysinfo" collect_sysinfo_timeout
     load_json_setting "roadblock.timeouts.endpoint-deploy" endpoint_deploy_timeout
     load_json_setting "roadblock.timeouts.engine-start" engine_script_start_timeout
     load_json_setting "roadblock.timeouts.move-data" endpoint_move_data_timeout
