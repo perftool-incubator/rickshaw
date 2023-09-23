@@ -1,20 +1,26 @@
 {
-    "mv-params": {
-        "global-options": [
-            {
-                "name": "common-params",
-                "params": [
-                    { "arg": "duration", "vals": [ "10" ], "role": "client" },
-                    { "arg": "rtprio", "vals": [ "1" ], "role": "client" }
+    "benchmarks": [
+        {
+            "name": "oslat",
+            "ids": "1",
+            "mv-params": {
+                "global-options": [
+                    {
+                        "name": "common-params",
+                        "params": [
+                            { "arg": "duration", "vals": [ "10" ], "role": "client" },
+                            { "arg": "rtprio", "vals": [ "1" ], "role": "client" }
+                        ]
+                    }
+                ],
+                "sets": [
+                    {
+                        "include": "common-params"
+                    }
                 ]
             }
-        ],
-        "sets": [
-            {
-                "include": "common-params"
-            }
-        ]
-    },
+        }
+    ],
     "tool-params": [
         {
             "tool": "sysstat",
@@ -30,7 +36,7 @@
         "run": "single-json-all-in-one",
         "userenv": "alma8"
     },
-    "endpoint": [
+    "endpoints": [
         {
             "type": "k8s",
             "controller-ip": "CONTROLLER_IP",

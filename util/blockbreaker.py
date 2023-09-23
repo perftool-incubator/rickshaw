@@ -24,17 +24,18 @@ def process_options():
                         dest = "config",
                         required = True,
                         help = "Configuration type to get from the json file",
-                        choices = [ "benchmarks", "mv-params", "tool-params", "passthru-args", "tags", "endpoint" ])
+                        choices = [ "benchmarks", "mv-params", "tool-params", "passthru-args", "tags", "endpoint", "endpoints" ])
 
     parser.add_argument("--index",
                         dest = "index",
-                        help = "Crucible config index (e.g. 2 => endpoint[2]",
+                        help = "Crucible config index (e.g. 2 => endpoints[2]",
                         default = 0,
                         type = int)
 
     parser.add_argument("--benchmark",
                         dest = "benchmark",
                         help = "Crucible benchmark block to extract data from  (e.g. 'uperf')",
+                        default = None,
                         type = str)
 
     args = parser.parse_args()
@@ -69,7 +70,7 @@ def dump_json(obj, key, idx, format = 'readable'):
     return None
 
 def json_blk_to_file(endpoint_setting, json_filename):
-    """Generate json file from endpoint setting block"""
+    """Generate json file from endpoints setting block"""
     try:
         with open(json_filename, 'w', encoding='utf-8') as f:
             f.write(endpoint_setting)
@@ -108,10 +109,12 @@ def json_to_stream(json_obj, cfg, idx):
     err_msg = None
     if json_obj is None:
         return None
+    if cfg == 'endpoint':
+        cfg = 'endpoints'
 
     try:
-        # arrays w/ multiple key:value objects e.g. "endpoint" block
-        if cfg == 'endpoint' and isinstance(json_obj[cfg], list):
+        # arrays w/ multiple key:value objects e.g. "endpoints" block
+        if cfg == 'endpoints' and isinstance(json_obj[cfg], list):
             json_blk = json_obj[cfg][idx]
             endpoint_type = json_blk["type"]
             if not validate_schema(json_blk, "schema-" + endpoint_type + ".json"):
@@ -134,7 +137,7 @@ def json_to_stream(json_obj, cfg, idx):
         return None
 
     for key in json_blk:
-        if cfg == 'endpoint' and key == 'config':
+        if cfg == 'endpoints' and key == 'config':
             for ecfg in range(0, len(json_blk[key])):
                 # process targets e.g. 'client-1' for each config section
                 tg_list = []
@@ -252,15 +255,12 @@ def main():
     match args.config:
         case "benchmarks":
             output = get_bench_ids(input_json, args.config)
-        case "endpoint" | "tags":
+        case "endpoints" | "endpoint" | "tags":
             # output is a stream of the endpoint or tags
             output = json_to_stream(input_json, args.config, args.index)
         case default:
             if args.config == "mv-params":
-                # if '--benchmark' is specified, get mv-params from
-                # the mv-params object inside of the 'benchmarks' block
-                if args.benchmark is not None:
-                    input_json = get_mv_params(input_json, args.benchmark)
+                input_json = get_mv_params(input_json, args.benchmark)
             # mv-params, tool-params, passthru-args
             output = dump_json(input_json, args.config, args.index)
 

@@ -68,7 +68,7 @@
     "tags": {
         "run": "multibench-runfile"
     },
-    "endpoint": [
+    "endpoints": [
         {
             "type": "k8s",
             "controller-ip": "K8S_CONTROLLER_IP",
