@@ -40,14 +40,14 @@ class TestBlockBreaker:
 
         assert tags_stream == expected_stream
 
-    """Test if json_to_stream converts passthru-args block to a stream"""
+    """Test if json_to_stream converts run-params block to a stream"""
     @pytest.mark.parametrize("load_json_file",
                              [ "input-oslat-k8s.json" ], indirect=True)
-    def test_json_to_stream_passthru(self, load_json_file):
-        passthru_stream = blockbreaker.dump_json(load_json_file, "passthru-args", 0)
+    def test_json_to_stream_run_parameters(self, load_json_file):
+        run_parameters_stream = blockbreaker.dump_json(load_json_file, "run-params", 0)
         expected_stream = self._load_file("output-oslat-passthru-args.stream")
 
-        assert passthru_stream == expected_stream
+        assert run_parameters_stream == expected_stream
 
     """Test if dump_json returns a str"""
     @pytest.mark.parametrize("load_json_file",
