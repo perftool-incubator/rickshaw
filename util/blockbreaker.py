@@ -24,7 +24,7 @@ def process_options():
                         dest = "config",
                         required = True,
                         help = "Configuration type to get from the json file",
-                        choices = [ "benchmarks", "mv-params", "tool-params", "passthru-args", "tags", "endpoint", "endpoints" ])
+                        choices = [ "benchmarks", "mv-params", "tool-params", "run-params", "tags", "endpoint", "endpoints" ])
 
     parser.add_argument("--index",
                         dest = "index",
@@ -177,18 +177,22 @@ def json_to_stream(json_obj, cfg, idx):
             else:
                 try:
                     val_str = str(val)
-                    # TODO: Handle endpoint type as key:val in rickshaw-run like the
-                    # other args. Instead of: k8s,foo:bar ==> type:k8s,foo:bar
-                    if key != 'type':
-                        stream += key + ':'
-                    stream += val_str + ','
+                    if cfg == 'run-params':
+                        stream += ' --' + key + ' ' + val_str
+                    else:
+                        # TODO: Handle endpoint type as key:val in rickshaw-run like the
+                        # other args. Instead of: k8s,foo:bar ==> type:k8s,foo:bar
+                        if key != 'type':
+                            stream += key + ':'
+                        stream += val_str + ','
                 except:
                     raise Exception("Error: Unexpected object type %s" % (type(val)))
                     return None
 
-    # remove last ","
-    if len(stream)>0:
-        stream = stream[:-1]
+    if cfg != 'run-params':
+        # remove last ","
+        if len(stream)>0:
+            stream = stream[:-1]
 
     return stream
 
@@ -255,8 +259,8 @@ def main():
     match args.config:
         case "benchmarks":
             output = get_bench_ids(input_json, args.config)
-        case "endpoints" | "endpoint" | "tags":
-            # output is a stream of the endpoint or tags
+        case "endpoints" | "endpoint" | "tags" | "run-params":
+            # output is a stream of the endpoint or tags or run-params
             output = json_to_stream(input_json, args.config, args.index)
         case default:
             if args.config == "mv-params":

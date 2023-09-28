@@ -41,5 +41,8 @@
             ]
         }
     ],
-    "passthru-args": " --num-samples 1 --test-order s"
+    "run-params": {
+	"num-samples": "1",
+	"test-order": "s"
+    }
 }
