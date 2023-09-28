@@ -265,7 +265,7 @@ def main():
         case default:
             if args.config == "mv-params":
                 input_json = get_mv_params(input_json, args.benchmark)
-            # mv-params, tool-params, passthru-args
+            # mv-params, tool-params
             output = dump_json(input_json, args.config, args.index)
 
     print(output)
