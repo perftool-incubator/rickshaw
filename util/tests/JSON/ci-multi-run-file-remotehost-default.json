@@ -1,0 +1,124 @@
+{
+    "benchmarks": [
+        {
+            "name": "iperf",
+            "ids": "1",
+            "mv-params": {
+                "global-options": [
+                    {
+                        "name": "required",
+                        "params": [
+                            { "arg": "time", "vals": [ "10" ], "role": "client" },
+                            { "arg": "protocol", "vals": [ "tcp" ] },
+                            { "arg": "bitrate", "vals": [ "0" ] },
+                            { "arg": "ifname", "vals" : [ "default-route" ], "role": "server" }
+                        ]
+                    }
+                ],
+                "sets": [
+                    {
+                        "include": "required",
+                        "params": [
+                            { "arg": "length", "vals": [ "256", "1024" ] }
+                        ]
+                    }
+                ]
+            }
+        },
+        {
+            "name": "uperf",
+            "ids": "2",
+            "mv-params": {
+                "global-options": [
+                    {
+                        "name": "required",
+                        "params": [
+                            { "arg": "protocol", "vals": [ "tcp" ], "role": "client" },
+                            { "arg": "wsize", "vals": [ "64" ], "role": "client" },
+                            { "arg": "rsize", "vals": [ "64" ], "role": "client" },
+                            { "arg": "duration", "vals": [ "10" ], "role": "client" },
+                            { "arg": "ifname", "vals" : [ "default-route" ], "role": "server" }
+                        ]
+                    }
+                ],
+                "sets": [
+                    {
+                        "include": "required",
+                        "params": [
+                            { "arg": "test-type", "vals": [ "stream" ], "role": "client" },
+                            { "arg": "nthreads", "vals": [ "1", "8" ], "role": "client" }
+                        ]
+                    }
+                ]
+            }
+        }
+    ],
+    "tool-params": [
+        {
+            "tool": "sysstat",
+            "params": [
+                { "arg": "subtools", "val": "mpstat", "enabled": "yes" }
+            ]
+        },
+        {
+            "tool": "procstat"
+        }
+    ],
+    "tags": {
+        "run": "multibench-run-file-json",
+        "userenv": "default"
+    },
+    "endpoints": [
+        {
+            "type": "remotehost",
+            "controller-ip": "CONTROLLER_IP",
+            "host": "CI_ENDPOINT_HOST",
+            "user": "CI_ENDPOINT_USER",
+            "userenv": "default",
+            "server": "1-2",
+            "client": "1-2",
+            "config": [
+                {
+                    "targets": [
+                        { "role": "client", "ids": "1" },
+                        { "role": "server", "ids": "1" }
+                    ],
+                    "settings": {
+                        "osruntime": "podman"
+                    }
+                },
+                {
+                    "targets": [
+                        { "role": "client", "ids": "2" },
+                        { "role": "server", "ids": "2" }
+                    ],
+                   "settings": {
+                        "osruntime": "chroot"
+                    }
+                }             
+            ]
+        },
+        {
+            "type": "remotehost",
+            "controller-ip": "CONTROLLER_IP",
+            "host": "CI_ENDPOINT_HOST",
+            "user": "CI_ENDPOINT_USER",
+            "userenv": "default",
+            "profiler": "1",
+            "config": [
+                {
+                    "targets": [
+                        { "role": "profiler", "ids": "1" }
+                    ],
+                    "settings": {
+                        "osruntime": "chroot"
+                    }
+                }
+            ]
+        }
+    ],
+    "run-params": {
+	    "num-samples": "1",
+	    "test-order": "s"
+    }
+}
