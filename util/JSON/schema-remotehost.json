@@ -5,6 +5,9 @@
             "type": "string",
             "enum": [ "remotehost" ]
         },
+        "controller-ip": {
+            "type": "string"
+        }, 
         "host": {
             "type": "string"
         },
@@ -13,9 +16,6 @@
         },
         "userenv": {
             "type": "string"
-        },
-        "unique-project": {
-            "type": "integer"
         },
         "client": {
             "anyOf": [
@@ -29,6 +29,17 @@
             ]
         },
         "server": {
+            "anyOf": [
+                {
+                    "type": "string",
+                    "pattern": "^(?!0$)(([1-9]|10)(-[1-9][0-9]*)?)(\\+(([1-9]|10)(-[1-9][0-9]*)?))*$"
+                },
+                {
+                    "type": "integer"
+                }
+            ]
+        },
+        "profiler": {
             "anyOf": [
                 {
                     "type": "string",
@@ -55,7 +66,7 @@
                                     "properties": {
                                         "role": {
                                             "type": "string",
-                                            "enum": [ "client", "server" ]
+                                            "enum": [ "client", "server", "profiler" ]
                                         },
                                         "ids": {
                                             "type": "string",
