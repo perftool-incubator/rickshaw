@@ -245,7 +245,7 @@ def get_mv_params(input_json, name):
     return benchmark_blk
 
 def main():
-    """Main function of get-json-config.py tool"""
+    """Main function of blockbreaker.py tool"""
 
     global args
 
