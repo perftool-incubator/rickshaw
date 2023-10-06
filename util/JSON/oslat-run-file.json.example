@@ -82,7 +82,7 @@
         }
     ],
     "run-params": {
-        "num-samples": "1",
+        "num-samples": 1,
         "test-order": "s"
     }
 }
