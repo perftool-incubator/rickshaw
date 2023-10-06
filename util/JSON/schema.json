@@ -35,9 +35,30 @@
         },
         "run-params": {
             "type": "object",
-            "additionalProperties": {
-                "type": "string"
-            }
+	    "properties": {
+		"num-samples": {
+		    "type": "integer",
+		    "minimum": 1
+		},
+		"max-sample-failures": {
+		    "type": "integer",
+		    "minimum": 1
+		},
+		"test-order": {
+		    "type": "string",
+		    "enum": [
+			"s",
+			"i",
+			"r"
+		    ]
+		},
+		"max-rb-attempts": {
+		    "type": "integer",
+		    "minimum": 1
+		}
+	    },
+	    "additionalProperties": false,
+	    "required": []
         },
         "benchmarks": {
             "type": "array",
