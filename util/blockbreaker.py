@@ -38,6 +38,10 @@ def process_options():
                         default = None,
                         type = str)
 
+    parser.add_argument("--verbose",
+                        action = "store_true",
+                        help = "Increase output verbosity")  
+
     args = parser.parse_args()
     return args
 
@@ -46,6 +50,8 @@ def dump_json(obj, key, idx, format = 'readable'):
     # Parseable format has no indentation
     indentation = None
     sep = ':'
+    err_msg = None
+    warn_msg = None
     if format == 'readable':
         indentation = 4
         sep += ' '
@@ -59,54 +65,59 @@ def dump_json(obj, key, idx, format = 'readable'):
         json_str = json.dumps(blk, indent = indentation, separators = (',', sep),
                               sort_keys = False)
         return json_str
-    except IndexError as err:
-        err_msg = f"{ err }: Index { idx } does not exist in the config block { key }."
-    except KeyError as err:
-        err_msg = f"{ err }: Config block { key } does not exist."
+    except IndexError as warn:
+        warn_msg = f"{ warn }: Index { idx } does not exist in the config block { key }."
+    except KeyError as warn:
+        warn_msg = f"{ warn }: Config block { key } does not exist."
     except Exception as err:
         err_msg = f"{ err }: An unexpected error occurred while processing JSON { obj }."
-        
-    print(err_msg)
-    return None
+    
+    if args.verbose and warn_msg is not None:    
+        print(warn_msg, file=sys.stderr)
+    if err_msg is not None:
+        print(err_msg, file=sys.stderr)
+    return ""
 
 def json_blk_to_file(endpoint_setting, json_filename):
     """Generate json file from endpoints setting block"""
+    err_msg = None
     try:
         with open(json_filename, 'w', encoding='utf-8') as f:
             f.write(endpoint_setting)
             f.close()
+        return True
     except Exception as err:
-         print("Unexpected error writing JSON file %s: %s" % (json_filename, err))
-         return None
-    return True
+        err_msg = f"Unexpected error writing JSON file { json_filename }:{ err }"
+    if err_msg is not None:
+        print(err_msg, file=sys.stderr)
+    return None
 
 def load_json_file(json_file):
     """Load JSON file and return a json object"""
+    err_msg = None
     try:
          input_fp = open(json_file, 'r')
          input_json = json.load(input_fp)
          input_fp.close()
+         return input_json
     except FileNotFoundError as err:
-         print("Could not find JSON file %s: %s" % (json_file, err))
-         return None
+         err_msg = f"Could not find JSON file { json_file }:{ err }"
     except IOError as err:
-         print("Could not open/read JSON file %s: %s" % (json_file, err))
-         return None
+         err_msg = "Could not open/read JSON file { json_file }:{ err }"
     except Exception as err:
-         print("Unexpected error opening JSON file %s: %s" % (json_file, err))
-         return None
+         err_msg = f"Unexpected error opening JSON file { json_file }:{ err }"
     except JSONDecodeError as err:
-         print("Decoding JSON file %s has failed: %s" % (json_file, err))
-         return None
+         err_msg = f"Decoding JSON file %s has failed: { json_file }:{ err }"
     except TypeError as err:
-         print("JSON object type error: %s" % (err))
-         return None
-    return input_json
+         err_msg = f"JSON object type error: { err }"
+    if err_msg is not None:
+         print(err_msg, file=sys.stderr)
+    return None   
 
 def json_to_stream(json_obj, cfg, idx):
     """Parse key:value from a JSON object/block and transform into a stream"""
-    stream = ""
     err_msg = None
+    stream = ""
     if json_obj is None:
         return None
     if cfg == 'endpoint':
@@ -133,7 +144,7 @@ def json_to_stream(json_obj, cfg, idx):
         err_msg=f"{ err }: Failed to parse config { cfg }, index { idx }."
 
     if err_msg is not None:
-        print(f"ERROR: { err_msg }")
+        print(err_msg, file=sys.stderr)
         return None
 
     for key in json_blk:
@@ -198,6 +209,7 @@ def json_to_stream(json_obj, cfg, idx):
 
 def validate_schema(input_json, schema_file = None):
     """Validate json with schema file"""
+    err_msg = None
     # schema_file defaults to general schema.json for the full run-file
     schema_path = "%s/JSON/" % (os.path.dirname(os.path.abspath(__file__)))
     schema_default = "schema.json"
@@ -213,7 +225,8 @@ def validate_schema(input_json, schema_file = None):
             return False
         validate(instance = input_json, schema = schema_obj)
     except Exception as err:
-        print("JSON schema validation error: %s" % (err))
+        err_msg = f"JSON schema validation error: { err }"
+        print(err_msg, file=sys.stderr)
         return False
     return True
 

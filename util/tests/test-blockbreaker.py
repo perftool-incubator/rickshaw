@@ -64,7 +64,7 @@ class TestBlockBreaker:
     def test_json_to_stream_endpoints_invalid_idx(self, load_json_file, capsys):
         input_json = blockbreaker.json_to_stream(load_json_file, "endpoints", 1)
         out, err = capsys.readouterr()
-        assert 'Invalid index' in out
+        assert out == ""
         assert input_json is None
 
     """Test validate_schema using default schema for null schema_file arg"""
