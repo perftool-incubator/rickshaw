@@ -23,7 +23,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
 
       - name: Install dependencies
         run: |
@@ -39,7 +39,7 @@ jobs:
           pytest -v --html=report.html --self-contained-html blockbreaker.py tests/*.py
 
       - name: Upload html report
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v3
         with:
           name: report
           path: bin/report.html
