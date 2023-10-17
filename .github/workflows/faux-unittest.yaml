@@ -2,7 +2,7 @@ name: faux-unittest
 
 on:
   pull_request:
-    branches: [ main ]
+    branches: [ master ]
     paths:
       - LICENSE
       - '**.md'
