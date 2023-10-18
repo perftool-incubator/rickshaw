@@ -6,6 +6,7 @@ on:
     paths:
     - LICENSE
     - '**.md'
+    - .github/workflows/faux-unittest.yaml
     - .github/workflows/faux-crucible-ci.yaml
     - 'docs/**'
     - engine/engine-script-library.py
