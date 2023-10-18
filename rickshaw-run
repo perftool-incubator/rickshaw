@@ -6,6 +6,7 @@
 #
 # Rickshaw will run a benhcmark for you.  Please see README.md for instructions.
 
+# test 2
 
 use strict;
 use warnings;
