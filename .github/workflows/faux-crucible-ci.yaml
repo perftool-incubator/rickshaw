@@ -4,6 +4,7 @@ on:
   pull_request:
     branches: [ master ]
     paths:
+    - '!**'
     - LICENSE
     - '**.md'
     - .github/workflows/faux-unittest.yaml
