@@ -991,8 +991,8 @@ function verify_pods_running() {
     for i in ${verified_pods[@]}; do
         nodes[$i]=1
     done
-    # var is assigned a space-separated list of nodes
-    ref1="${!nodes[@]}"
+    # var is assigned a space-separated list of nodes which host these pods
+    ref1=`echo "${!nodes[@]}" | sed -e 's;[ |,];\n;g' | sort | xargs`
 }
 
 function get_pod_logs() {
