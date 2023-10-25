@@ -1,0 +1,98 @@
+{
+    "benchmarks": [
+        {
+            "name": "cyclictest",
+            "ids": "1",
+            "mv-params": {
+                "global-options": [
+                {
+                    "name": "required",
+                    "params": [
+                            { "arg": "duration", "vals": [ "10" ], "role": "client" },
+                        { "arg": "priority", "vals": [ "1" ], "role": "client" },
+                            { "arg": "smi", "vals": [ "off" ], "role": "client" }
+                    ]
+                }
+                ],
+                "sets": [
+                {
+                    "include": "required"
+                    }
+                ]
+            }
+        }
+    ],
+    "tool-params": [
+        {
+            "tool": "sysstat",
+            "params": [
+                { "arg": "subtools", "val": "mpstat", "enabled": "yes" }
+            ]
+        },
+        {
+            "tool": "procstat"
+        }
+    ],
+    "tags": {
+        "run": "cyclictest-run-file-json",
+        "userenv": "default"
+    },
+    "endpoints": [
+        {
+            "type": "remotehost",
+            "controller-ip": "CONTROLLER_IP",
+            "host": "CI_ENDPOINT_HOST",
+            "user": "CI_ENDPOINT_USER",
+            "userenv": "default",
+            "server": "1",
+            "client": "1-2",
+            "config": [
+                {
+                    "targets": [
+                        { "role": "client", "ids": "1" },
+                        { "role": "server", "ids": "1" }
+                    ],
+                    "settings": {
+                        "osruntime": "podman"
+                    }
+                },
+                {
+                    "targets": [
+                        { "role": "client", "ids": "2" }
+                    ],
+                   "settings": {
+                        "osruntime": "chroot"
+                    }
+                },
+                {
+                   "targets": "default",
+                   "settings": {
+                        "cpu-partitioning": "1"
+                    }
+                }             
+            ]
+        },
+        {
+            "type": "remotehost",
+            "controller-ip": "CONTROLLER_IP",
+            "host": "CI_ENDPOINT_HOST",
+            "user": "CI_ENDPOINT_USER",
+            "userenv": "default",
+            "profiler": "1",
+            "config": [
+                {
+                    "targets": [
+                        { "role": "profiler", "ids": "1" }
+                    ],
+                    "settings": {
+                        "osruntime": "chroot"
+                    }
+                }
+            ]
+        }
+    ],
+    "run-params": {
+	    "num-samples": 1,
+	    "test-order": "s"
+    }
+}

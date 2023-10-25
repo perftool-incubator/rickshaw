@@ -36,13 +36,13 @@ jobs:
         run: |
           cd util
           source .venv/bin/activate
-          pytest -v --html=report.html --self-contained-html blockbreaker.py tests/*.py
+          pytest -v --html=report.html --self-contained-html blockbreaker.py validate_run_file.py tests/*.py
 
       - name: Upload html report
         uses: actions/upload-artifact@v3
         with:
           name: report
-          path: bin/report.html
+          path: util/report.html
 
   unittest-complete:
     runs-on: ubuntu-latest
