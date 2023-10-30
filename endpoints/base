@@ -1053,7 +1053,7 @@ function is_ip() {
 
     if echo "$ip" | grep -E --silent '[[:digit:]]{1,3}\.[[:digit:]]{1,3}\.[[:digit:]]{1,3}\.[[:digit:]]{1,3}'; then
         return 0
-    elif echo "$ip" | grep -E --silent '[[:xdigit:]]{1,4}\:[[:xdigit:]]{1,4}\:[[:xdigit:]]{1,4}\:[[:xdigit:]]{1,4}\:[[:xdigit:]]{1,4}\:[[:xdigit:]]{1,4}\:[[:xdigit:]]{1,4}\:[[:xdigit:]]'; then
+    elif echo "$ip" | grep -E --silent '[[:xdigit:]]{1,4}:[[:xdigit:]]{1,4}:[[:xdigit:]]{1,4}:[[:xdigit:]]{1,4}:[[:xdigit:]]{1,4}:[[:xdigit:]]{1,4}:[[:xdigit:]]{1,4}:[[:xdigit:]]'; then
         return 0
     else
         return 1
