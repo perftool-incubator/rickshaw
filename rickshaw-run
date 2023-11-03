@@ -896,8 +896,7 @@ sub source_container_image {
         if ($count == 0) {
             $userenv_arg = " --userenv " . $rickshaw_project_dir . "/userenvs/" . $userenv . ".json";
             $req_arg = "";
-            #$skip_update = "false";
-            $skip_update = "true";
+            $skip_update = "false";
         } else {
             $req_arg = shift(@requirements);
             $skip_update = "true";
