@@ -366,9 +366,7 @@ sub index_metrics {
     my $latest_end;
     my $coder = JSON::XS->new->canonical;
 
-    {
-       my $dir =  pushd($metr_dir);
-
+    my $dir =  pushd($metr_dir);
     my %eng_env_vars;
     if ($cdm{'ver'} eq 'v7dev') {
         # engine-type and engine-id replace cstype and csid, but cstype/id to be removed later
@@ -546,8 +544,6 @@ sub index_metrics {
     } else {
         return $num_metric_docs_submitted;
     }
-
-    } #pushd
 }
 
 sub indexed_doc_count {
