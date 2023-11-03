@@ -34,7 +34,7 @@ use toolbox::logging;
 use toolbox::run;
 use toolbox::jsonsettings;
 
-$toolbox::logging::debug = 1;
+$toolbox::logging::debug = 0;
 
 my $ug = Data::UUID->new;
 my %defaults = ( "num-samples" => 1, "tool-group" => "default", "test-order" => "s",
@@ -896,7 +896,8 @@ sub source_container_image {
         if ($count == 0) {
             $userenv_arg = " --userenv " . $rickshaw_project_dir . "/userenvs/" . $userenv . ".json";
             $req_arg = "";
-            $skip_update = "false";
+            #$skip_update = "false";
+            $skip_update = "true";
         } else {
             $req_arg = shift(@requirements);
             $skip_update = "true";

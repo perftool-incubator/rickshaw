@@ -989,11 +989,14 @@ function process_roadblocks() {
     roadblock_exit_on_error ${roadblock_rc}
 
 
+
     do_roadblock "engine-init-begin" ${engine_script_start_timeout}
     roadblock_rc=$?
     roadblock_exit_on_error ${roadblock_rc}
 
-    do_roadblock "engine-init-end" ${engine_script_start_timeout}
+    call_endpoint_specific_function "${endpoint_type}" "engine_init" "engine-init-end"
+
+    do_roadblock "engine-init-end" ${engine_script_start_timeout} messages "${msg_file}"
     roadblock_rc=$?
     roadblock_exit_on_error ${roadblock_rc}
 

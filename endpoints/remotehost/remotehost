@@ -48,6 +48,29 @@ osruntime[default]="chroot"
 host_mounts=""
 hypervisor_host="none" # Default is no hypervisor
 
+function endpoint_remotehost_engine_init() {
+    echo "Running endpoint_engine_init"
+
+    msg_file="$endpoint_run_dir/env-vars.json"
+    echo '[' >$msg_file
+    local count=0
+    for this_cs_label in ${clients[@]} ${servers[@]} ${collectors[@]}; do
+        if [ $count -gt 0]; then
+            printf "," >>$msg_file
+        fi
+        echo '{"recipient":{"type":"follower","id":"'$this_cs_label'"},"user-object":{"env-vars":{' >>$msg_file
+        echo '"endpoint_label": "'$endpoint_label'",' >>$msg_file
+        echo '"hosted_by": "'$host'",' >>$msg_file
+        echo '"hypervisor_host": "'$hypervisor_host'",' >>$msg_file
+        echo '"userenv": "'$userenv'",' >>$msg_file
+        echo '"osruntime": "'$os_runtime'"' >>$msg_file
+        echo '}}}' >>$msg_file
+
+        let count=$count+1
+    done
+    echo ']' >>$msg_file
+}
+
 function endpoint_remotehost_test_stop() {
     echo "Running endpoint_remotehost_test_stop"
 }
@@ -358,7 +381,6 @@ function launch_osruntime() {
             base_cmd+=" --cs-label=$this_cs_label"
             base_cmd+=" --base-run-dir=$base_run_dir"
             base_cmd+=" --endpoint=remotehost"
-            base_cmd+=" --osruntime=${os_runtime}"
             base_cmd+=" --max-sample-failures=$max_sample_failures"
             base_cmd+=" --max-rb-attempts=$max_rb_attempts"
             base_cmd+=" --cpu-partitions=${total_cpu_partitions}"
@@ -366,8 +388,6 @@ function launch_osruntime() {
             base_cmd+=" --cpu-partitioning=$cpu_partitioning"
             base_cmd+=" --engine-script-start-timeout=$engine_script_start_timeout"
             base_cmd+=" --disable-tools=$this_disable_tools"
-            base_cmd+=" --hosted-by=$host" # The host that runs the osruntime for this crucible engine
-            base_cmd+=" --hypervisor-host=$hypervisor_host" # The hypervisor host that runs the VM (if this remotehost happens to be a VM)
             if [ $numa_node -gt -1 ]; then
                 base_cmd="numactl -N $numa_node -m $numa_node $base_cmd"
             fi
@@ -389,13 +409,10 @@ function launch_osruntime() {
             echo "cpu_partitions=${total_cpu_partitions}"   >> ${endpoint_run_dir}/${env_file}
             echo "cpu_partition_index=${count}"             >> ${endpoint_run_dir}/${env_file}
             echo "endpoint=remotehost"                      >> ${endpoint_run_dir}/${env_file}
-            echo "osruntime=${os_runtime}"                  >> ${endpoint_run_dir}/${env_file}
             echo "max_sample_failures=$max_sample_failures" >> ${endpoint_run_dir}/${env_file}
             echo "max_rb_attempts=$max_rb_attempts"         >> ${endpoint_run_dir}/${env_file}
             echo "ssh_id=${ssh_id}"                         >> ${endpoint_run_dir}/${env_file}
             echo "disable_tools=$this_disable_tools"        >> ${endpoint_run_dir}/${env_file}
-            echo "hosted_by=$host"                          >> ${endpoint_run_dir}/${env_file} 
-            echo "hypervisor_host=$hypervisor_host"         >> ${endpoint_run_dir}/${env_file}
 
             for cs_rb_opt in $cs_rb_opts; do
                 arg=$(echo $cs_rb_opt | awk -F'=' '{print $1}')

@@ -54,6 +54,7 @@ endpoint_name="k8s"
 # TODO: instead of using a prefix in the pods' names, use a unique k8s project
 pod_prefix="rickshaw"
 project_name="crucible-rickshaw"
+hypervisor_host="none"
 unique_project="0"
 hostNetwork="0"
 hugepage="0"
@@ -82,6 +83,31 @@ function cleanup_json() {
     else
         abort_error "cleanup_json failed to process ${json}" endpoint-deploy-begin
     fi
+}
+
+function endpoint_k8s_engine_init() {
+    echo "Running endpoint_engine_init"
+    msg_file="$endpoint_run_dir/env-vars.json"
+    echo '[' >$msg_file
+    local count=0
+    for this_cs_label in $all_pods; do
+
+        hosted_by=`jq -r .spec.nodeName  $endpoint_run_dir/kubectl-get-pod-$this_cs_label.json`
+
+        if [ $count -gt 0 ]; then
+            printf "," >>$msg_file
+        fi
+        echo '{"recipient":{"type":"follower","id":"'$this_cs_label'"},"user-object":{"env-vars":{' >>$msg_file
+        echo '"endpoint_label": "'$endpoint_label'",' >>$msg_file
+        echo '"hosted_by": "'$hosted_by'",' >>$msg_file
+        echo '"hypervisor_host": "'$hypervisor_host'",' >>$msg_file
+        echo '"userenv": "'$userenv'",' >>$msg_file
+        echo '"osruntime": "'$os_runtime'"' >>$msg_file
+        echo '}}}' >>$msg_file
+
+        let count=$count+1
+    done
+    echo ']' >>$msg_file
 }
 
 function endpoint_k8s_test_stop() {
@@ -1233,7 +1259,7 @@ if [ "${masters_tool_collect}" == "1" ]; then
     verify_pods_running tool_master_nodes $master_tool_pods
     echo "These nodes are hosting the master-tool pods: $master_nodes"
     new_k8s_followers+=" ${master_tool_pods}"
-    all_pods+=" $worker_tool_pods"
+    all_pods+=" $master_tool_pods"
 fi
 
 process_roadblocks k8s ${new_k8s_followers}

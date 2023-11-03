@@ -39,7 +39,7 @@ $toolbox::logging::debug = 0;
 
 my @pids;
 my $index_tools = 1;
-my @suported_cdm_vers = ('v5dev', 'v6dev');
+my @suported_cdm_vers = ('v6dev', 'v7dev');
 my %result;
 my $base_run_dir;
 my %cdm = ( 'ver' => '' );
@@ -369,13 +369,56 @@ sub index_metrics {
     {
        my $dir =  pushd($metr_dir);
 
-    my $eng_env_file = "engine-env.txt";
-    if (! -e $eng_env_file) {
-        $eng_env_file .= ".xz";
-    }
-    if (! -e $eng_env_file) {
-        printf "pwd: %s\nCould not find %s, exiting\n", getcwd(), $eng_env_file;
-        exit 1;
+    my %eng_env_vars;
+    if ($cdm{'ver'} eq 'v7dev') {
+        # engine-type and engine-id replace cstype and csid, but cstype/id to be removed later
+        $eng_env_vars{'engine-type'} = $cstype;
+        $eng_env_vars{'engine-id'} = $csid;
+        # engine-role is the engine's primary purpose (to run a bvenchmark, to collect tool data, etc)
+        if ($cstype =~ /^client$|^server$/) {
+            $eng_env_vars{'engine-role'} = 'benchmarker';
+            $eng_env_vars{'benchmark-role'} = $cstype;
+            # the following to be properly defined in a future enhancement
+            $eng_env_vars{'benchmark-name'} = 'unknown';
+            $eng_env_vars{'benchmark-group'} = 'unknown';
+            # to be 'none' once one-tool-per engine is implemented (and a benchmark engine no longer runs tools)
+            $eng_env_vars{'tool-name'} = 'unknown';
+        } elsif ($cstype =~ /^worker$|^master$|^profiler$/) {
+            $eng_env_vars{'engine-role'} = 'profiler';
+            $eng_env_vars{'benchmark-role'} = 'none';
+            $eng_env_vars{'benchmark-name'} = 'none';
+            # the following to be properly defined once one-tool-per engine is implemented
+            $eng_env_vars{'tool-name'} = 'unknown';
+        }
+
+        # Note that CDM being v7 should not assume all metrics have engine_env.txt because one may be re-postprocessing older crucible runs
+        my $eng_env_file = "engine-env.txt";
+        if (! -e $eng_env_file) {
+            $eng_env_file .= ".xz";
+        }
+        if (! -e $eng_env_file) {
+            printf "pwd: %s\nCould not find %s, will not use engine env vars for metadata\n", getcwd(), $eng_env_file;
+        } else {
+            my $eng_env_fh = new IO::Uncompress::UnXz $eng_env_file, Transparent => 1 || die "[ERROR]could not open file " . $eng_env_file;
+            # Cull out env vars which we want as metadata
+            #printf "Looking for engine env vars\n";
+            my @varnames = ('HOSTNAME', 'engine_type', 'engine_role', 'benchmark_group', 'benchmark_role', 'hosted_by', 'hypervisor_host', 'osruntime', 'endpoint_label', 'userenv');
+            while (<$eng_env_fh>) {
+                chomp;
+                foreach my $varname (@varnames) {
+                    if (/^$varname=(.*)$/) {
+                        my $val = $1;
+                        $varname =~ s/_/-/g;
+                        if ($varname eq "HOSTNAME") {
+                            $varname = "hostname";
+                        }
+                        $eng_env_vars{$varname} = $val;
+                        next;
+                    }
+                }
+            }
+            close $eng_env_fh;
+        }
     }
 
     # Copy data from 'parent' doc so querying directly for metric_desc with
@@ -427,30 +470,14 @@ sub index_metrics {
         # this is where we add engine-related metadata
         $metr_desc_doc{'metric_desc'}{'names'}{'cstype'} = $cstype;
         $metr_desc_doc{'metric_desc'}{'names'}{'csid'} = $csid;
-        my $eng_env_fh = new IO::Uncompress::UnXz $eng_env_file, Transparent => 1 || die "[ERROR]could not open file " . $eng_env_file;
-        # Cull out env vars which we want as metadata
-        printf "Looking for engine env vars\n";
-        my @varnames = ('hosted_by', 'hypervisor_host', 'osruntime');
-        while (<$eng_env_fh>) {
-            
-            chomp;
-            printf "env: %s\n", $_;
-
-            foreach my $varname (@varnames) {
-                if (/^$varname=(.*)$/) {
-                    my $val = $1;
-                    $varname =~ s/_/-/g;
-                    $metr_desc_doc{'metric_desc'}{'names'}{$varname} = $val;
-                    printf "found %s = %s\n", $varname, $val;
-                    next;
-                }
-            }
+        foreach my $env_var (keys %eng_env_vars) {
+            $metr_desc_doc{'metric_desc'}{'names'}{$env_var} = $eng_env_vars{$env_var};
         }
-        close $eng_env_fh;
 
         my @names_list = sort(keys(%{ $metr_desc_doc{'metric_desc'}{'names'} }));
         $metr_desc_doc{'metric_desc'}{'names-list'} = \@names_list;
         my $metr_desc_doc_json = $coder->encode(\%metr_desc_doc);
+        #printf "metric_desc_doc:\n %s\n", $metr_desc_doc_json;
         # We do not use index_es_doc() here because that requires getting all info from the %result,
         # and %result (rickshaw-run.json) by design does not include any metric data, as it would be
         # way too large.
@@ -657,6 +684,7 @@ if (ref $idx_resp_ref eq ref [] ) {
         push(@all_indices, $idx_name);
     }
     my @sorted_vers = sort(keys(%vers));
+    printf "sorted_vers: @sorted_vers \n";
     $latest_ver = $sorted_vers[0];
     if (defined $latest_ver) {
         printf "Latest CDM version found in local ES instance is %s\n", $latest_ver;
@@ -688,6 +716,7 @@ if (ref $idx_resp_ref eq ref [] ) {
 }
 
 $cdm{'ver'} = $latest_ver;
+printf "Latest CDM version found in local ES instance is %s\n", $latest_ver;
 if (not grep(/^$cdm{'ver'}$/, @suported_cdm_vers)) {
     printf "The version of CDM used in ES [%s] is not one that is supported by rickshaw-index: [%s]\n",
            $cdm{'ver'}, join(" ",  @suported_cdm_vers);

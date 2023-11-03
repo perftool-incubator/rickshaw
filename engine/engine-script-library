@@ -1082,6 +1082,8 @@ function stop_tools() {
     tools_disabled=${1}; shift
 
     echo "running stop_tools()"
+    echo "pwd: `/bin/pwd`"
+    local old_dir=`/bin/pwd`
 
     if [ "${tools_disabled}" == "1" ]; then
         echo "Not stopping tools because --disable-tools=1 was used"
@@ -1097,7 +1099,8 @@ function stop_tools() {
                     eval $tool_cmd
                     tool_cmd_rc=$?
                     echo "Stopping tool '${tool_name}' with command '${tool_cmd}' returned ${tool_cmd_rc}"
-
+                    echo "Copying $old_dir/engine-env.txt to `/bin/pwd`"
+                    /bin/cp $old_dir/engine-env.txt .
                     popd >/dev/null
                 else
                     abort_error "stop_tools: Failed to pushd to ${tool_name}" stop-tools-end

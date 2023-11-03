@@ -45,8 +45,6 @@ if ! pushd $cs_dir; then
     abort_error "Could not chdir to $cs_dir" engine-init-begin
     exit 1
 fi
-# There are a number of env vars needed for post-processing metrics
-env >engine-env.txt
 
 if [ "${cpu_partitioning}" == "1" ]; then
     if [ -z "${HK_CPUS}" ]; then
@@ -67,6 +65,26 @@ roadblock_exit_on_error ${roadblock_rc}
 do_roadblock engine-init-end ${engine_script_start_timeout}
 roadblock_rc=$?
 roadblock_exit_on_error ${roadblock_rc}
+msgs_log_file="${roadblock_msgs_dir}/engine-init-end.json"
+if [ -f ${msgs_log_file} ]; then
+    env_vars=`jq -r '.received[] | .payload.message."user-object"."env-vars" ' ${msgs_log_file} | grep -v null`
+    if [ ! -z "${env_vars}" ]; then
+        printf "Found new env vars:"
+        printf "%s\n" "${env_vars}"
+        eval `echo $env_vars | jq -r 'to_entries | .[] | "export " + .key + "=" + .value'`
+        echo $env_vars | jq -r 'to_entries | .[] | "export " + .key + "=" + .value'
+    else
+        printf "Could not find new env vars\n"
+    fi
+else
+    printf "Could not find %s\n" ${msgs_log_file}
+    echo '#/bin/ls -l '$roadblock_msgs_dir
+    /bin/ls -l $roadblock_msgs_dir
+fi
+
+# There are a number of env vars needed for post-processing metrics
+# Do this after engine-init, as some vars can be passed to the engine in that RB
+env >engine-env.txt
 
 
 do_roadblock get-data-begin ${default_timeout}
