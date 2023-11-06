@@ -55,7 +55,7 @@ function endpoint_remotehost_engine_init() {
     echo '[' >$msg_file
     local count=0
     for this_cs_label in ${clients[@]} ${servers[@]} ${collectors[@]}; do
-        if [ $count -gt 0]; then
+        if [ $count -gt 0 ]; then
             printf "," >>$msg_file
         fi
         echo '{"recipient":{"type":"follower","id":"'$this_cs_label'"},"user-object":{"env-vars":{' >>$msg_file
