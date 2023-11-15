@@ -36,9 +36,36 @@ declare -A flavor
 declare -A availability_zone
 declare -A ips
 declare -A active_compute_nodes
+declare -A hypervisor_host
 osruntime[default]="podman"
 availability_zone[default]="nova"
 flavor[default]="m1.small"
+
+
+function endpoint_remotehost_engine_init() {
+
+    echo "Running endpoint_engine_init"
+
+    msg_file="$endpoint_run_dir/env-vars.json"
+    echo '[' >$msg_file
+    local count=0
+    for this_cs_label in ${clients[@]} ${servers[@]}; do
+        if [ $count -gt 0 ]; then
+            printf "," >>$msg_file
+        fi
+        echo '{"recipient":{"type":"follower","id":"'$this_cs_label'"},"user-object":{"env-vars":{' >>$msg_file
+        echo '"endpoint_label": "'$endpoint_label'",' >>$msg_file
+        echo '"hosted_by": "rickshaw-'$run_id-$this_cs_label'",' >>$msg_file
+        echo '"hypervisor_host": "'$hypervisor_host[$this_cs_label]'",' >>$msg_file
+        echo '"userenv": "'$userenv'",' >>$msg_file
+        echo '"osruntime": "'$os_runtime'"' >>$msg_file
+        echo '}}}' >>$msg_file
+
+        let count=$count+1
+    done
+    echo ']' >>$msg_file
+
+}
 
 function endpoint_osp_test_stop() {
     local msgs_dir="$1"; shift
@@ -376,6 +403,7 @@ function create_servers() {
         this_compute_node=`do_ssh ${user}@${host} $osp_pre_cmd openstack server show $vm_name -f json | jq -r '."OS-EXT-SRV-ATTR:hypervisor_hostname"'`
         if [ "[$this_compute_node]" != "[]" ]; then
             active_compute_nodes[$this_compute_node]="1"
+            hypervisor_host[$cs_label]=$this_compute_node
         else
             echo "Something went wrong getting compute node for $vm_name, exiting"
         fi
