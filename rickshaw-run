@@ -2076,6 +2076,13 @@ sub add_ssh_keys() {
     system('cat ' . $config_dir . '/rickshaw_id.rsa.pub >>/root/.ssh/authorized_keys');
 }
 
+sub remove_ssh_keys() {
+    my $remove_key_command = 'grep -v -x -F -f ' . $config_dir . '/rickshaw_id.rsa.pub /root/.ssh/authorized_keys > /root/.ssh/authorized_keys.new';
+    system($remove_key_command);
+    my $replace_keys_command = 'mv /root/.ssh/authorized_keys.new /root/.ssh/authorized_keys';
+    system($replace_keys_command);
+}
+
 sub deploy_endpoints() {
     # Deploy ths endpoints so they are ready to run benchmark and tools.
     # Each endpoint is responible for launching a osruntime for each client and server.
@@ -2434,7 +2441,8 @@ add_ssh_keys();
 deploy_endpoints();
 process_roadblocks();
 organize_run_data();
-# TODO: remove temporary ssh keys from local authorized_keys file
+remove_ssh_keys();
+
 my $run_file = $run_dir . "/rickshaw-run.json";
 $run{'rickshaw-run'}{'schema'}{'version'} = "2020.03.18";
 if (put_json_file($run_file, \%run, $run_schema_file) > 0) {
