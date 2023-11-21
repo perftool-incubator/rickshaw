@@ -34,7 +34,7 @@ use toolbox::logging;
 use toolbox::run;
 use toolbox::jsonsettings;
 
-$toolbox::logging::debug = 0;
+$toolbox::logging::debug = 1;
 
 my $ug = Data::UUID->new;
 my %defaults = ( "num-samples" => 1, "tool-group" => "default", "test-order" => "s",
@@ -903,7 +903,7 @@ sub source_container_image {
         if ($count == 0) {
             $userenv_arg = " --userenv " . $rickshaw_project_dir . "/userenvs/" . $userenv . ".json";
             $req_arg = "";
-            $skip_update = "false";
+            $skip_update = "true";
         } else {
             $req_arg = shift(@requirements);
             $skip_update = "true";
@@ -2075,7 +2075,7 @@ sub prepare_bench_tool_engines() {
     # The "engine-script" will first scp the list (client-files-list or server-files-list).
     # then it will read this list to know what other files to copy over)
     foreach my $cs_type (keys %clients_servers, @all_collector_types) {
-        if ($cs_type =~ /^client|server|profiler?/) {
+        if ($cs_type =~ /^client|server?/) {
             foreach my $cs_ref (@{ $clients_servers{$cs_type} }) {
 	        if (! defined $$cs_ref{'id'}) {
 		    printf "cs_type: [%s] cs_ref{'id'} not defined, skipping\n", $cs_type;

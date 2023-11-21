@@ -113,19 +113,26 @@ do_roadblock start-tools-begin ${default_timeout}
 roadblock_rc=$?
 roadblock_exit_on_error ${roadblock_rc}
 
-start_tools
+start_stop_tools_opt=""
+if [ "$cs_type" == "profiler" ]; then
+    if [ -z "$tool_name" ]; then
+        echo "env:"
+        env
+        exit_error "tool_name not defined [$tool_name], exiting"
+    fi
+start_stop_tools_opt=$tool_name
+fi
+
+start_tools $start_stop_tools_opt
 
 do_roadblock start-tools-end ${default_timeout}
 roadblock_rc=$?
 roadblock_exit_on_error ${roadblock_rc}
 
-
 process_bench_roadblocks
 
-
 do_roadblock stop-tools-begin ${default_timeout}
-do_roadblock stop-tools-end ${default_timeout} wait-for "/usr/local/bin/engine-script-library stop_tools '$(pwd)' '${tool_stop_cmds}' '${disable_tools}'"
-
+do_roadblock stop-tools-end ${default_timeout} wait-for "/usr/local/bin/engine-script-library stop_tools '$(pwd)' '${tool_stop_cmds}' '${disable_tools}' '${start_stop_tools_opt}'"
 
 do_roadblock send-data-begin ${default_timeout}
 do_roadblock send-data-end ${default_timeout} wait-for "/usr/local/bin/engine-script-library send_data '${ssh_id_file}' '${cs_dir}' '${rickshaw_host}' '${archives_dir}/${cs_label}-data.tgz'"
