@@ -2190,12 +2190,12 @@ sub process_roadblocks() {
     if (defined $messages_ref) {
         foreach my $msg (@{ $$messages_ref{'received'} })  {
             if (exists $$msg{'payload'}{'message'}{'user-object'}{'new-followers'}) {
-                @new_followers = @{ $$msg{'payload'}{'message'}{'user-object'}{'new-followers'} };
-                printf "Endpoint created followers: %s\n", join(" ", sort(@new_followers));
-                last;
+                debug_log(sprintf "found these new followers: %s\n", join(" ", @{ $$msg{'payload'}{'message'}{'user-object'}{'new-followers'} }));
+                @new_followers = (@new_followers, @{ $$msg{'payload'}{'message'}{'user-object'}{'new-followers'} });
             }
         }
     }
+    debug_log(sprintf "All new followers: %s\n", join(" ", @new_followers));
 
     $roadblock_rc = do_roadblock("endpoint-deploy-end", $endpoint_deploy_timeout, $messages_ref, @active_followers);
     roadblock_exit_on_error($roadblock_rc);
@@ -2266,8 +2266,13 @@ sub organize_run_data() {
         mkdir($tmp_data_dir);
         my $pushd_dir = pushd($tmp_data_dir);
         foreach my $archive (dir_entries($engine_archives_dir,
-                                        qr/^(\w+)-(\d+)-data\.tgz$/)) {
-            $archive =~ /^(\w+)-(\d+)-data\.tgz$/ or next;
+                                        qr/^(\w+)-(.+)-data\.tgz$/)) {
+            if ($archive =~ /^(\w+)-(.+)-data\.tgz$/) {
+                debug_log("found archive $archive");
+            } else {
+                printf "archive %s is not recognized\n";
+                next;
+            }
             my $archive_full_path = $engine_archives_dir . "/" . $archive;
             my $cs_type = $1;
             my $cs_id = $2;

@@ -388,7 +388,7 @@ function launch_osruntime() {
     echo "Going to create a pod for each tool"
     for tool in $tools; do
         # This label will not work with mulitple remotehost endpoints!
-        engine_label=profiler-$tool_count
+        engine_label=profiler-$endpoint_label-$tool_count
         exec_pod $engine_label $tool
         new_remotehost_followers+=" $engine_label"
         let tool_count=$tool_count+1
