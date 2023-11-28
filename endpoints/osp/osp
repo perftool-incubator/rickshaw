@@ -321,7 +321,7 @@ function create_servers() {
         fi
 
         echo "creating openstack mgmt port for server $vm_name"
-        do_ssh ${user}@${host} "$osp_pre_cmd openstack port create --network management --no-security-group --disable-port-security $mgmt_port_name"
+        do_ssh ${user}@${host} "$osp_pre_cmd openstack port create --network $mgmt_network --no-security-group --disable-port-security $mgmt_port_name"
 
         set_osruntime_numanode_cpupart $cs_label
         echo "cpu_partitioning: [$cpu_partitioning]"
