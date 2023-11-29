@@ -109,10 +109,6 @@ roadblock_rc=$?
 roadblock_exit_on_error ${roadblock_rc}
 
 
-do_roadblock start-tools-begin ${default_timeout}
-roadblock_rc=$?
-roadblock_exit_on_error ${roadblock_rc}
-
 start_stop_tools_opt=""
 if [ "$cs_type" == "profiler" ]; then
     if [ -z "$tool_name" ]; then
@@ -120,8 +116,12 @@ if [ "$cs_type" == "profiler" ]; then
         env
         exit_error "tool_name not defined [$tool_name], exiting"
     fi
-start_stop_tools_opt=$tool_name
+    start_stop_tools_opt=$tool_name
 fi
+
+do_roadblock start-tools-begin ${default_timeout}
+roadblock_rc=$?
+roadblock_exit_on_error ${roadblock_rc}
 
 start_tools $start_stop_tools_opt
 

@@ -297,17 +297,19 @@ function remotehost_req_check() {
 
 function exec_pod() {
         local engine_label=$1; shift
-        local tool=""
-        tool=$1; shift
+        local tool_name="none"
+        if [ $# -gt 0 ]; then
+            tool_name=$1; shift
+        fi
         local os_runtime="pod"
 
         env_tool_file="${engine_label}_env.txt"
-        get_image profiler $tool_count this_image
+        get_image profiler 1 this_image
 
         echo "rickshaw_host=$controller_ipaddr"         >> ${endpoint_run_dir}/${env_tool_file}
         echo "endpoint_run_dir=$endpoint_run_dir"       >> ${endpoint_run_dir}/${env_tool_file}
         echo "cs_label=$engine_label"                   >> ${endpoint_run_dir}/${env_tool_file}
-        echo "tool_name=$tool"                          >> ${endpoint_run_dir}/${env_tool_file}
+        echo "tool_name=$tool_name"                     >> ${endpoint_run_dir}/${env_tool_file}
         echo "base_run_dir=$base_run_dir"               >> ${endpoint_run_dir}/${env_tool_file}
         echo "endpoint=remotehost"                      >> ${endpoint_run_dir}/${env_tool_file}
         echo "max_rb_attempts=$max_rb_attempts"         >> ${endpoint_run_dir}/${env_tool_file}
@@ -382,17 +384,20 @@ function launch_osruntime() {
     set_total_cpupart
 
     # Launch the tool engines (support only pods)
-    local tools=`awk -F: '{print $1}' $config_dir/tool-cmds/profiler/start`
-    echo "Creating a pod for each of these tools: $tools"
-    tool_count=1
-    echo "Going to create a pod for each tool"
-    for tool in $tools; do
-        # This label will not work with mulitple remotehost endpoints!
-        engine_label=profiler-$endpoint_label-$tool_count
-        exec_pod $engine_label $tool
-        new_remotehost_followers+=" $engine_label"
-        let tool_count=$tool_count+1
-    done
+    if [ "$disable_tools" != "1" ]; then
+        local tools=`awk -F: '{print $1}' $config_dir/tool-cmds/profiler/start`
+        echo "Creating a pod for each of these tools: $tools"
+        tool_count=1
+        echo "Going to create a pod for each tool"
+        for tool in $tools; do
+            engine_label=profiler-$endpoint_label-$tool_count
+            exec_pod $engine_label $tool
+            new_remotehost_followers+=" $engine_label"
+            let tool_count=$tool_count+1
+        done
+    else
+        echo "Not launching osruntimes for tools because disable-tools = 1"
+    fi
 
     # For each client and server launch the actual script which will run it.
     count=1
@@ -501,7 +506,6 @@ function launch_osruntime() {
             echo "max_rb_attempts=$max_rb_attempts"         >> ${endpoint_run_dir}/${env_file}
             echo "ssh_id=${ssh_id}"                         >> ${endpoint_run_dir}/${env_file}
             echo "engine_script_start_timeout=${engine_script_start_timeout}" >> ${endpoint_run_dir}/${env_file}
-
             # For one-tool-per-engine, client and server engines never run tools
             echo "disable_tools=1"        >> ${endpoint_run_dir}/${env_file}
 

@@ -34,7 +34,7 @@ use toolbox::logging;
 use toolbox::run;
 use toolbox::jsonsettings;
 
-$toolbox::logging::debug = 1;
+$toolbox::logging::debug = 0;
 
 my $ug = Data::UUID->new;
 my %defaults = ( "num-samples" => 1, "tool-group" => "default", "test-order" => "s",
@@ -2108,6 +2108,7 @@ sub remove_ssh_keys() {
 sub deploy_endpoints() {
     # Deploy ths endpoints so they are ready to run benchmark and tools.
     # Each endpoint is responible for launching a osruntime for each client and server.
+    my %remote_hosts;
     print "\nDeploying endpoints\n";
     $endpoint_deploy_timeout += scalar @endpoints * 120;
     foreach my $engine (keys %clients_servers) {
@@ -2133,6 +2134,21 @@ sub deploy_endpoints() {
         if (defined $run{'bench-ids'}) {
             $bench_ids_opt = " --bench-ids=$run{'bench-ids'}";
         }
+        if ($type eq "remotehost") {
+            # Get the host so we can detect multiple endpoints with the same host and enable tools on only the first one
+            # example opts: host:remote_host1,user:root,client:1,osruntime:podman,userenv:userenv1
+            foreach my $opt (split(",", $opts)) {
+                if ($opt =~ /^host:(.*)$/) {
+                    if (exists $remote_hosts{$1}) {
+                        # This host has already been used, disable tools for the next remotehost command
+                        $opts .= ",disable-tools:1"
+                    } else {
+                        $remote_hosts{$1} = 1;
+                    }
+                }
+            }
+        }
+
         my $this_endpoint_run_dir = $base_endpoint_run_dir . "/" . $label;
         mkdir($this_endpoint_run_dir);
         die "Could not create $this_endpoint_run_dir" if ! -e $this_endpoint_run_dir;
