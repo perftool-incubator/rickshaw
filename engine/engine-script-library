@@ -302,9 +302,12 @@ function validate_core_env() {
     if [ -z "$cs_label" ]; then
         exit_error "The client/server label (--cs-label) was not defined"
     fi
-    regex1='^profiler-\w+-\d+-\w+$'
+    # profiler-remotehost-1-sysstat-1
+    regex1='^profiler-\w+-\d+-\w+-\d+$'
+    # client-1
     regex2='^\w+-\d+$'
     if echo $cs_label | grep -q -P $regex1; then
+        tool_name=`echo $cs_label | awk -F- '{print $4}'`
         echo "engine-label \"$cs_label\" is valid and runs this tool:  $tool_name"
     elif echo $cs_label | grep -q -P $regex2; then
         echo "engine-label \"$cs_label\" is valid"

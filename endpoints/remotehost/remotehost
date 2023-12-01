@@ -40,26 +40,40 @@ else
     exit
 fi
 
+# globals (also check $endpoint_base_dir/base for others!!!)
 chroot_rbind_mounts="proc dev sys lib/firmware lib/modules usr/src boot var/run"
-
 endpoint_name="remotehost"
 image_cache_size=3
+declare -A osruntime
 osruntime[default]="chroot"
 host_mounts=""
-hypervisor_host="none" # Default is no hypervisor
+hypervisor_host="none"
 new_remotehost_followers=""
+remote_base_dir="/var/lib/crucible"
+remote_dir=""
+remote_cfg_dir=""
+remote_logs_dir=""
+remote_data_dir=""
 
 function endpoint_remotehost_engine_init() {
+    local engine_label count
+
+    # globals used:
+    # msg_file endpoint_run_dir clients servers profilers endpoint_label
+    # host hypervisor_host userenv os_runtime
+
     echo "Running endpoint_engine_init"
 
     msg_file="$endpoint_run_dir/env-vars.json"
+    count=0
     echo '[' >$msg_file
-    local count=0
-    for this_cs_label in ${clients[@]} ${servers[@]} ${collectors[@]}; do
+
+    for engine_label in ${clients[@]} ${servers[@]} ${profilers[@]}; do
         if [ $count -gt 0 ]; then
             printf "," >>$msg_file
         fi
-        echo '{"recipient":{"type":"follower","id":"'$this_cs_label'"},"user-object":{"env-vars":{' >>$msg_file
+        set_osruntime_numanode_cpupart ${engine_label}
+        echo '{"recipient":{"type":"follower","id":"'$engine_label'"},"user-object":{"env-vars":{' >>$msg_file
         echo '"endpoint_label": "'$endpoint_label'",' >>$msg_file
         echo '"hosted_by": "'$host'",' >>$msg_file
         echo '"hypervisor_host": "'$hypervisor_host'",' >>$msg_file
@@ -80,9 +94,14 @@ function endpoint_remotehost_test_start() {
     local msgs_dir="$1"; shift
     local test_id="$1"; shift
     local tx_msgs_dir="$1"; shift
+    local this_msg_file="$msgs_dir/$test_id:endpoint-start.json"
+    local line count name ip ports port_list client_outside_endpoint server_outside_endpoint matching_client
+
+    # globals used:
+    # endpoint_run_dir servers clients
+
     echo "Running endpoint_remotehost_test_start"
 
-    local this_msg_file="$msgs_dir/$test_id:endpoint-start.json"
     if [ -e $this_msg_file ]; then
         echo "Found $this_msg_file"
         # We are looking for a specific type of message, where a server is providing a
@@ -101,13 +120,13 @@ function endpoint_remotehost_test_start() {
             # that yet.  The only function here is to relay the IP/port
             # information found in the received message to the client.
             echo "line: $line"
-            local name=`echo $line | awk '{print $1}'`
+            name=`echo $line | awk '{print $1}'`
             line=`echo $line | sed -e s/^$name//`
-            local ip=`echo $line | awk '{print $1}'`
+            ip=`echo $line | awk '{print $1}'`
             line=`echo $line | sed -e s/^$ip//`
-            local ports="$line"
-            local port_list=""
-            local count=1
+            ports="$line"
+            port_list=""
+            count=1
             for port in $ports; do
                 if [ $count -gt 1 ]; then
                     port_list+=", $port"
@@ -117,14 +136,14 @@ function endpoint_remotehost_test_start() {
                 let count=$count+1
             done
 
-            local server_outside_endpoint=1
+            server_outside_endpoint=1
             echo "servers from this endpoint: ${servers[@]}"
             if echo ${servers[@]} | grep -q $name; then
                 echo "This server, $name, is running from this endpoint"
                 server_outside_endpoint=0
             fi
 
-            local client_outside_endpoint=1
+            client_outside_endpoint=1
             matching_client=`echo $name | sed -e s/server/client/`
             if echo ${clients[@]} | grep -q $matching_client; then
                 echo "Matching client, $matching_client, is running from this endpoint"
@@ -147,68 +166,10 @@ function endpoint_remotehost_test_start() {
     fi
 }
 
-function cleanup_osruntime() {
-    local container_name container_image this_cs_label data_file
-    echo "Doing osruntime cleanup"
-    echo
-    echo "All mounts on this remote host:"
-    do_ssh $user@$host mount
-    echo
-    echo "All podman pods:"
-    do_ssh $user@$host podman ps --all
-    echo
-    echo "All podman container mounts:"
-    do_ssh $user@$host podman mount
-    echo
+function manage_image_cache() {
+    # globals used:
+    # endpoint_base_dir user host image_cache_size
 
-    # Clean up tool engines
-
-    echo "Going to remove a pod for each tool"
-    local tools=`awk -F: '{print $1}' $config_dir/tool-cmds/profiler/start`
-    tool_count=1
-    for tool in $tools; do
-        engine_label=profiler-$tool_count
-        container_name="${endpoint_label}_${run_id}_${engine_label}_${os_runtime}"
-        do_ssh $user@$host podman rm ${container_name}
-        let tool_count=$tool_count+1
-    done
-
-    for this_cs_label in ${clients[@]} ${servers[@]} ${collectors[@]}; do
-        set_osruntime_numanode_cpupart ${this_cs_label}
-
-        if [ "${os_runtime}" == "chroot" ]; then
-            data_file=${endpoint_run_dir}/chroot-container-mount.txt
-            if [ -e ${data_file} ]; then
-                while read tmp_cs_label container_mount; do
-                    if [ "${this_cs_label}" == "${tmp_cs_label}" ]; then
-                        for fs in ${chroot_rbind_mounts}; do
-                            echo "Removing ${fs} from ${container_mount}"
-                            do_ssh ${user}@${host} umount --verbose --recursive ${container_mount}/${fs}
-                        done
-                    fi
-                done < ${data_file}
-            else
-                echo "WARNING: the file with container base mount [${data_file}] could not be found"
-            fi
-
-            data_file=$endpoint_run_dir/chroot-container-id.txt
-            if [ -e ${data_file} ]; then
-                while read tmp_cs_label container_id; do
-                    if [ "${this_cs_label}" == "${tmp_cs_label}" ]; then
-                        echo "Removing container with id [${container_id}]"
-                        do_ssh ${user}@${host} podman rm ${container_id}
-                    fi
-                done < ${data_file}
-            else
-                echo "WARNING: the file with container base mount [${data_file}] could not be found"
-            fi
-        elif [ "${os_runtime}" == "podman" ]; then
-            container_name="${endpoint_label}_${run_id}_${this_cs_label}_${os_runtime}"
-            do_ssh $user@$host podman rm ${container_name}
-        fi
-    done
-
-    # manage container image cache on the host
     echo "Performing container image cache management:"
     ${endpoint_base_dir}/remotehost/container-image-manager --remote-host ${user}@${host} --cache-size ${image_cache_size} --debug 0
     echo
@@ -226,9 +187,65 @@ function cleanup_osruntime() {
     echo
 }
 
+function cleanup_osruntime() {
+    local container_name container_image engine_label data_file tools os_runtime tmp_engine_label
+
+    # globals used:
+    # user host clients servers profilers os_runtime chroot_rbind_mounts endpoint_run_dir endpoint_base_dir
+    echo "Doing osruntime cleanup"
+    echo
+    echo "All mounts on this remote host:"
+    do_ssh $user@$host mount
+    echo
+    echo "All podman pods:"
+    do_ssh $user@$host podman ps --all
+    echo
+    echo "All podman container mounts:"
+    do_ssh $user@$host podman mount
+    echo
+
+    for engine_label in ${clients[@]} ${servers[@]} ${profilers[@]}; do
+        set_osruntime_numanode_cpupart $engine_label
+
+        if [ "$os_runtime" == "chroot" ]; then
+            data_file=$endpoint_run_dir/chroot-container-mount.txt
+            if [ -e $data_file ]; then
+                while read tmp_engine_label container_mount; do
+                    if [ "$engine_label" == "$tmp_engine_label" ]; then
+                        for fs in $chroot_rbind_mounts; do
+                            echo "Removing $fs from $container_mount"
+                            do_ssh $user@$host umount --verbose --recursive $container_mount/$fs
+                        done
+                    fi
+                done < $data_file
+            else
+                echo "WARNING: the file with container base mount [$data_file] could not be found"
+            fi
+
+            data_file=$endpoint_run_dir/chroot-container-id.txt
+            if [ -e $data_file ]; then
+                while read tmp_engine_label container_id; do
+                    if [ "$engine_label" == "$tmp_engine_label" ]; then
+                        echo "Removing container with id [$container_id]"
+                        do_ssh $user@$host podman rm $container_id
+                    fi
+                done < $data_file
+            else
+                echo "WARNING: the file with container base mount [$data_file] could not be found"
+            fi
+        elif [ "$os_runtime" == "podman" ]; then
+            container_name="${run_id}_${engine_label}"
+            do_ssh $user@$host podman rm $container_name
+        fi
+    done
+
+    manage_image_cache
+}
+
 function process_remotehost_opts() {
     local endpoint_opts this_opt arg val
     endpoint_opts="$1"
+    echo "#remotehost_opts: [$endpoint_opts]"
     for this_opt in `echo $endpoint_opts | sed -e 's/,/ /g'`; do
         arg=`echo $this_opt | awk -F: '{print $1}'`
         # The $val may have : in it, so don't use awk to get only the second field
@@ -295,128 +312,264 @@ function remotehost_req_check() {
     fi
 }
 
+function stop_pod() {
+    local engine_label=$1; shift
+
+    container_name="${run_id}_${engine_label}"
+    do_ssh $user@$host podman rm $container_name
+}
+
 function exec_pod() {
-        local engine_label=$1; shift
-        local tool_name="none"
-        if [ $# -gt 0 ]; then
-            tool_name=$1; shift
-        fi
-        local os_runtime="pod"
+    local engine_label=$1; shift
+    local image=$1; shift
+    local container_name=${run_id}_${engine_label}
+    local cmd oldIFS fs env_file arg value cs_rb_opt
 
-        env_tool_file="${engine_label}_env.txt"
-        get_image profiler 1 this_image
+    # globals used:
+    # os_runtime cpu_partitioning numa_node controller_ipaddr ssh_id cs_rb_opts
+    # endpoint_run_dir base_run_dir max_rb_attempts total_cpu_partitions
+    # max_sample_failures host_mounts user host remote_cfg_dir
 
-        echo "rickshaw_host=$controller_ipaddr"         >> ${endpoint_run_dir}/${env_tool_file}
-        echo "endpoint_run_dir=$endpoint_run_dir"       >> ${endpoint_run_dir}/${env_tool_file}
-        echo "cs_label=$engine_label"                   >> ${endpoint_run_dir}/${env_tool_file}
-        echo "tool_name=$tool_name"                     >> ${endpoint_run_dir}/${env_tool_file}
-        echo "base_run_dir=$base_run_dir"               >> ${endpoint_run_dir}/${env_tool_file}
-        echo "endpoint=remotehost"                      >> ${endpoint_run_dir}/${env_tool_file}
-        echo "max_rb_attempts=$max_rb_attempts"         >> ${endpoint_run_dir}/${env_tool_file}
-        echo "ssh_id=${ssh_id}"                         >> ${endpoint_run_dir}/${env_tool_file}
+    set_osruntime_numanode_cpupart $engine_label
 
-        # roadblock opts like redis server
-        for cs_rb_opt in $cs_rb_opts; do
-            arg=$(echo $cs_rb_opt | awk -F'=' '{print $1}')
-            value=$(echo $cs_rb_opt | awk -F'=' '{print $2}')
-            arg=$(echo ${arg} | sed -e 's/^--//' -e 's/-/_/g' )
-            echo "${arg}=${value}"                      >> ${endpoint_run_dir}/${env_tool_file}
+    env_file="${engine_label}_env.txt"
+
+    # probably the essential info to get engine to start and do engine-init RB:
+    echo "rickshaw_host=$controller_ipaddr"         >> $endpoint_run_dir/$env_file
+    echo "cs_label=$engine_label"                   >> $endpoint_run_dir/$env_file
+    echo "ssh_id=$ssh_id"                           >> $endpoint_run_dir/$env_file
+    # roadblock opts like redis server
+    for cs_rb_opt in $cs_rb_opts; do
+        arg=$(echo $cs_rb_opt | awk -F'=' '{print $1}')
+        value=$(echo $cs_rb_opt | awk -F'=' '{print $2}')
+        arg=$(echo $arg | sed -e 's/^--//' -e 's/-/_/g' )
+        echo "$arg=$value"                          >> $endpoint_run_dir/$env_file
+    done
+
+    # probably the vars that coule be moved to engine-init RB message:
+    echo "endpoint_run_dir=$endpoint_run_dir"       >> $endpoint_run_dir/$env_file
+    echo "base_run_dir=$base_run_dir"               >> $endpoint_run_dir/$env_file
+    echo "endpoint=remotehost"                      >> $endpoint_run_dir/$env_file
+
+    echo "max_sample_failures=$max_sample_failures" >> $endpoint_run_dir/$env_file
+    # why is this not handled in cs_rb_opt?
+    echo "max_rb_attempts=$max_rb_attempts"         >> $endpoint_run_dir/$env_file
+
+    # TODO
+    #echo "cpu_partitioning=$cpu_partitioning"       >> ${endpoint_run_dir}/${env_file}
+    #echo "cpu_partitions=${total_cpu_partitions}"   >> ${endpoint_run_dir}/${env_file}
+    #echo "cpu_partition_index=${count}"             >> ${endpoint_run_dir}/${env_file}
+
+    # client and server engines never run tools
+    if echo $engine_label | grep -v -P '^profiler' >/dev/null; then
+        echo "disable_tools=1"        >> $endpoint_run_dir/$env_file
+    fi
+
+    # Copy env-file so podman can use it on the remote host
+    if pushd $endpoint_run_dir >/dev/null; then
+        echo "Copying $endpoint_run_dir/$env_file to $user@$host:$remote_cfg_dir"
+        do_scp "" "$env_file" "$user@$host" "$remote_cfg_dir"
+        popd >/dev/null
+    else
+        echo "Failed to pushd to $endpoint_run_dir to scp env file"
+        exit 1
+    fi
+
+    cmd="podman run"
+    cmd+=" --detach=true"
+    cmd+=" --name=$container_name"
+    cmd+=" --env-file $remote_cfg_dir/$env_file"
+    cmd+=" --privileged --ipc=host --pid=host --net=host --security-opt=label=disable"
+    cmd+=" --mount=type=bind,source=$remote_data_dir,destination=/tmp"
+    cmd+=" --mount=type=bind,source=/lib/firmware,destination=/lib/firmware"
+    cmd+=" --mount=type=bind,source=/lib/modules,destination=/lib/modules"
+    cmd+=" --mount=type=bind,source=/usr/src,destination=/usr/src"
+    if [ "$host_mounts" != "" ]; then
+        oldIFS=$IFS
+        IFS=" "
+        for fs in $host_mounts; do
+        cmd+=" --mount=type=bind,source=$fs,destination=$fs"
         done
+        IFS=$oldIFS
+    fi
+    cmd+=" $image"
 
-        if pushd ${endpoint_run_dir} >/dev/null; then
-            echo "Copying ${endpoint_run_dir}/${env_tool_file} to ${user}@${host}:${remote_cfg_dir}"
-            do_scp "" "${env_tool_file}" "${user}@${host}" "${remote_cfg_dir}"
-            popd >/dev/null
-        else
-            echo "Failed to pushd to ${endpoint_run_dir} to scp env file"
-            exit 1
-        fi
+    echo -e "About to run:\ndo_ssh $user@$host ${cmd}\n"
+    do_ssh $user@$host "$cmd"
+    ssh_rc=$?
+    if [ $ssh_rc -gt 0 ]; then
+        echo "running $os_runtime failed"
+        exit 1
+    fi
+}
 
-        tool_cs_cmd="podman run"
-        tool_cs_cmd+=" --detach=true"
-        tool_cs_cmd+=" --name=${endpoint_label}_${run_id}_${engine_label}_podman"
-        tool_cs_cmd+=" --env-file ${remote_cfg_dir}/${env_tool_file}"
-        tool_cs_cmd+=" --privileged --ipc=host --pid=host --net=host --security-opt=label=disable"
-        tool_cs_cmd+=" --mount=type=bind,source=${remote_data_dir},destination=/tmp"
-        tool_cs_cmd+=" --mount=type=bind,source=/lib/firmware,destination=/lib/firmware"
-        tool_cs_cmd+=" --mount=type=bind,source=/lib/modules,destination=/lib/modules"
-        tool_cs_cmd+=" --mount=type=bind,source=/usr/src,destination=/usr/src"
+function pull_images() {
+    local this_image=""
+
+    #echo "ensuring container image is pulled to $host"
+    #for image in ${bench_to_image[@]}; do
+        #do_ssh $user@$host podman pull $image
+    #done
+    #echo "Recording container image usage"
+    #for image in ${bench_to_image[@]}; do
+        #do_ssh $user@$host "echo '$image $(date -u +%s)' >> ${remote_base_dir}/remotehost-container-image-census"
+        #echo "$image" >>$endpoint_run_dir/chroot-container-image.txt
+    #done
+}
+
+function add_profiler_engines() {
+    local tool tools
+
+    # globals used:
+    # disable_tools config_dir endpoint_label new_remotehost_followers
+
+    if [ "$disable_tools" != "1" ]; then
+        # TODO: should probably find a better way to detect what tools to run
+        tools=`awk -F: '{print $1}' $config_dir/tool-cmds/profiler/start`
+
+        for tool in $tools; do
+            echo "tool: $tool"
+            engine_type=profiler-$endpoint_label-$tool
+            engine_label=$engine_type-1
+            #get_image $this_cs_type $this_cs_id this_image
+            #exec_pod $engine_label $tool
+            new_remotehost_followers+=" $engine_label"
+            addto_clients_servers "$engine_type" "1"
+        done
+    fi
+    echo "new_remotehost_followers: $new_remotehost_followers"
+    echo "profilers: ${profilers[@]}"
+}
+
+function check_existing_container() {
+    local container_name=$1; shift
+    local existing_container
+
+    # globals
+    # user host
+
+    existing_container=`do_ssh $user@$host podman ps --all --format "{{.Names}}" | grep ^$container_name$`
+    if [ ! -z "$existing_container" ]; then
+        echo "WARNING: found existing container '$existing_container', deleting"
+        do_ssh $user@$host podman stop $container_name
+        do_ssh $user@$host podman kill $container_name
+        do_ssh $user@$host podman rm $container_name
+    fi
+}
+
+function exec_chroot() {
+    local engine_label=$1; shift
+    local image=$1; shift
+
+    # TODO:
+    #local cpu_part_index=$1; shift
+
+    local container_name=${run_id}_${engine_label}
+    local container_id container_mount oldIFS base_cmd cs_cmd ssh_rc chroot_rbind_mounts
+
+    # globals used:
+    # user host controller_ipaddr endpoint_run_dir cs_rb_opts base_run_dir
+    # max_sample_failures max_rb_attempts total_cpu_partitions engine_script_start_timeout
+    # os_runtime numa_node cpu_partitioning
+
+    set_osruntime_numanode_cpupart $engine_label
+    echo "Preparing to chroot $engne_label"
+    echo "Adding container image mount for chroot osruntime"
+    container_id=$(do_ssh $user@$host podman create --name $container_name $image)
+    echo "container_id: $container_id"
+    echo "$engine_label $container_id" >>$endpoint_run_dir/chroot-container-id.txt
+    container_mount=$(do_ssh $user@$host podman mount "$container_id")
+    echo "container_mount: $container_mount"
+    echo "$engine_label $container_mount" >>$endpoint_run_dir/chroot-container-mount.txt
+    echo "container_name: $container_name"
+    echo "$engine_label $container_name" >>$endpoint_run_dir/chroot-container-name.txt
+    if [ ! -z "$container_mount" ]; then
+        echo "Container mount: $container_mount"
+        # Allow the user to more easily inspect failed runs
+        echo "Mapping container /tmp to host $remote_data_dir"
+        do_ssh $user@$host mkdir -p $container_mount/tmp
+        do_ssh $user@$host mount --verbose --options bind $remote_data_dir $container_mount/tmp
+        echo "Adding host directories to container mount"
         if [ "$host_mounts" != "" ]; then
             local oldIFS=$IFS
             IFS=" "
             for fs in $host_mounts; do
-            tool_cs_cmd+=" --mount=type=bind,source=$fs,destination=$fs"
+                chroot_rbind_mounts+=" $fs"
             done
             IFS=$oldIFS
         fi
-        tool_cs_cmd+=" ${this_image}"
-
-        echo -e "About to run:\ndo_ssh $user@$host ${tool_cs_cmd}\n"
-        # Note: this never really captures non-zero exits
-        do_ssh $user@$host "${tool_cs_cmd}"
-        ssh_rc=$?
-        if [ ${ssh_rc} -gt 0 ]; then
-            echo "running ${os_runtime} failed"
-            exit 1
-        fi
-}
-
-function launch_osruntime() {
-    local this_cs_label this_cs_log_file base_cmd cs_cmd cs_rb_env env_file
-    local env_opts existing_container container_id container_mount container_name fs
-
-    # create working directories
-    do_ssh $user@$host /bin/mkdir -p $remote_cfg_dir
-    do_ssh $user@$host /bin/mkdir -p $remote_logs_dir
-    do_ssh $user@$host /bin/mkdir -p $remote_data_dir
-
-    echo "ensuring container image is pulled to $host"
-    for image in ${bench_to_image[@]}; do
-        do_ssh $user@$host podman pull $image
-    done
-
-    echo "Recording container image usage"
-    for image in ${bench_to_image[@]}; do
-        do_ssh $user@$host "echo '$image $(date -u +%s)' >> ${remote_base_dir}/remotehost-container-image-census"
-        echo "$image" >>$endpoint_run_dir/chroot-container-image.txt
-    done
-
-    set_total_cpupart
-
-    # Launch the tool engines (support only pods)
-    if [ "$disable_tools" != "1" ]; then
-        local tools=`awk -F: '{print $1}' $config_dir/tool-cmds/profiler/start`
-        echo "Creating a pod for each of these tools: $tools"
-        tool_count=1
-        echo "Going to create a pod for each tool"
-        for tool in $tools; do
-            engine_label=profiler-$endpoint_label-$tool_count
-            exec_pod $engine_label $tool
-            new_remotehost_followers+=" $engine_label"
-            let tool_count=$tool_count+1
+        for fs in $chroot_rbind_mounts; do
+            echo "Adding $fs to $container_mount"
+            do_ssh $user@$host mkdir -p $container_mount/$fs
+            do_ssh $user@$host mount --verbose --options rbind /$fs $container_mount/$fs
+            do_ssh $user@$host mount --verbose --make-rslave $container_mount/$fs
+            echo
         done
+        # for chroot osruntime we can also simply copy the ssh key
+        echo "Copying ssh key to $user@$host:$container_mount/tmp/ for chroot runtime"
+        pushd "$config_dir" >/dev/null
+        do_scp "" "rickshaw_id.rsa" "$user@$host" "$container_mount/tmp/"
+        popd >/dev/null
+        do_ssh $user@$host /bin/cp /etc/hosts $container_mount/etc/
+        do_ssh $user@$host /bin/cp /etc/resolv.conf $container_mount/etc/
     else
-        echo "Not launching osruntimes for tools because disable-tools = 1"
+        echo "Container mount not found, exiting"
+        exit 1
     fi
 
-    # For each client and server launch the actual script which will run it.
-    count=1
-    ssh_id=$(sed -z 's/\n/\\n/g' ${config_dir}/rickshaw_id.rsa)
-    for this_cs_label in ${clients[@]} ${servers[@]} ${collectors[@]}; do
+    base_cmd="/usr/local/bin/bootstrap"
+    base_cmd+=" --rickshaw-host=$controller_ipaddr"
+    base_cmd+=" --endpoint-run-dir=$endpoint_run_dir"
+    base_cmd+=" $cs_rb_opts"
+    base_cmd+=" --cs-label=$engine_label"
+    base_cmd+=" --base-run-dir=$base_run_dir"
+    base_cmd+=" --endpoint=remotehost"
+    base_cmd+=" --max-sample-failures=$max_sample_failures"
+    base_cmd+=" --max-rb-attempts=$max_rb_attempts"
+    # TODO:
+    #base_cmd+=" --cpu-partitions=$total_cpu_partitions"
+    #base_cmd+=" --cpu-partition-index=$count"
+    #base_cmd+=" --cpu-partitioning=$cpu_partitioning"
+    base_cmd+=" --engine-script-start-timeout=$engine_script_start_timeout"
+    # chroot is not used for tools
+    base_cmd+=" --disable-tools=1"
+    if [ $numa_node -gt -1 ]; then
+        base_cmd="numactl -N $numa_node -m $numa_node $base_cmd"
+    fi
 
-        this_cs_type=`echo $this_cs_label | awk -F- '{print $1}'`
-        this_cs_id=`echo $this_cs_label | awk -F- '{print $2}'`
-        get_image $this_cs_type $this_cs_id this_image
-        set_osruntime_numanode_cpupart $this_cs_label
+    # Note that --endpoint-run value must be hard-coded to /endpoint-run becaue of chroot
+    # Same will be true for running podman
+    cs_cmd="nohup chroot $container_mount $base_cmd >$remote_logs_dir/$engine_label.txt &"
 
-        echo "Preparing to launch $this_cs_label"
-        container_name="${endpoint_label}_${run_id}_${this_cs_label}_${os_runtime}"
-        existing_container=`do_ssh $user@$host podman ps --all --format "{{.Names}}" | grep ^$container_name$`
-        if [ ! -z "$existing_container" ]; then
-            echo "WARNING: found existing container '$existing_container', deleting"
-            do_ssh $user@$host podman stop $container_name
-            do_ssh $user@$host podman kill $container_name
-            do_ssh $user@$host podman rm $container_name
+    echo -e "About to run:\ndo_ssh $user@$host $cs_cmd\n"
+    do_ssh $user@$host "$cs_cmd"
+    ssh_rc=$?
+    if [ $ssh_rc -gt 0 ]; then
+        echo "running $os_runtime failed"
+        exit 1
+    fi
+}
+
+
+function launch_osruntimes() {
+    local engine_label container_name this_image
+
+    # globals used:
+    # clients servers profilers os_runtime
+
+    pull_images
+    set_total_cpupart
+
+    for engine_label in ${clients[@]} ${servers[@]} ${profilers[@]}; do
+        container_name="${run_id}_${engine_label}"
+        get_image $engine_label this_image
+        check_existing_container $container_name
+        set_osruntime_numanode_cpupart $engine_label
+        echo "About to exec $engine_label via $os_runtime"
+        if [ "$os_runtime" == "chroot" ]; then
+            exec_chroot $engine_label $this_image
+        else
+            exec_pod $engine_label $this_image
         fi
         this_cs_log_file="$this_cs_label.txt"
 
@@ -565,92 +718,116 @@ function launch_osruntime() {
 }
 
 function move_remotehost_logs() {
-    local this_cs_label remote_cs_log_file container_name delete_remote_dir log_file total_rc
+    local engine_label remote_cs_log_file container_name delete_remote_dir log_file
+    local total_rc=0
+    local delete_remote_dir=0
 
-    total_rc=0
-    delete_remote_dir=0
-    mkdir -p "${engine_logs_dir}"
+    # globals used:
+    # clients servers profilers engine_logs_dir user host
 
     echo "Collecting engine logs:"
-    for this_cs_label in ${clients[@]} ${servers[@]} ${collectors[@]}; do
-        set_osruntime_numanode_cpupart $this_cs_label
-        log_file=${this_cs_label}.txt
-        echo "engine: ${this_cs_label}"
-        echo "osruntime: ${os_runtime}"
+    # collect the client and server logs
+    for engine_label in ${clients[@]} ${servers[@]} ${profilers[@]}; do
+        set_osruntime_numanode_cpupart $engine_label
+        log_file=${engine_label}.txt
+        echo "engine: $engine_label"
+        echo "osruntime: $os_runtime"
 
         if [ "${os_runtime}" == "chroot" ]; then
             delete_remote_dir=1
-
-            remote_cs_log_file="${remote_logs_dir}/${log_file}"
-            do_scp "${user}@${host}" "${remote_cs_log_file}" "" ${engine_logs_dir}
-            (( total_rc += ${?} ))
-        elif [ "${os_runtime}" == "podman" ]; then
-            container_name="${endpoint_label}_${run_id}_${this_cs_label}_${os_runtime}"
-            do_ssh ${user}@${host} podman logs ${container_name} > "${engine_logs_dir}/${log_file}"
-            (( total_rc += ${?} ))
+            remote_cs_log_file="$remote_logs_dir/$log_file"
+            do_scp "$user@$host" "$remote_cs_log_file" "" $engine_logs_dir
+            (( total_rc += $? ))
+        elif [ "$os_runtime" == "podman" ]; then
+            container_name="${run_id}_${engine_label}"
+            do_ssh $user@$host podman logs $container_name > "$engine_logs_dir/$log_file"
+            (( total_rc += $? ))
         fi
     done
 
-    if [ "${delete_remote_dir}" == "1" -a ${total_rc} == 0 ]; then
+    if [ "$delete_remote_dir" == "1" -a $total_rc == 0 ]; then
         echo "Deleting remote directory:"
-        do_ssh ${user}@${host} /bin/rm -rv ${remote_dir}
-        (( total_rc += ${?} ))
+        do_ssh $user@$host /bin/rm -rv $remote_dir
+        (( total_rc += $? ))
     fi
 
-    return ${total_rc}
+    return $total_rc
 }
 
 function endpoint_remotehost_cleanup() {
     local log_rc cleanup_rc
 
+    # globals
+    # <none>
+
     move_remotehost_logs
-    log_rc=${?}
+    log_rc=$?
 
     cleanup_osruntime
-    cleanup_rc=${?}
+    cleanup_rc=$?
 
-    return $(( ${log_rc} + ${cleanup_rc} ))
+    return $(( $log_rc + $cleanup_rc ))
 }
 
 function endpoint_remotehost_sysinfo() {
-    local local_dir packrat_rc
+    local local_dir="$endpoint_run_dir/sysinfo"
+    local packrat_rc=0
 
-    packrat_rc=0
+    # globals used:
+    # endpoint_run_dir user host
 
-    local_dir="${endpoint_run_dir}/sysinfo"
-    mkdir ${local_dir}
+    mkdir $local_dir
 
-    do_scp "" "${packrat_dir}/packrat" "${user}@${host}" "${remote_dir}"
-    (( packrat_rc += ${?} ))
+    do_scp "" "$packrat_dir/packrat" "$user@$host" "$remote_dir"
+    (( packrat_rc += $? ))
 
-    do_ssh ${user}@${host} mkdir -p ${remote_dir}/sysinfo
-    (( packrat_rc += ${?} ))
+    do_ssh $user@$host mkdir -p $remote_dir/sysinfo
+    (( packrat_rc += $? ))
 
-    do_ssh ${user}@${host} ${remote_dir}/packrat ${remote_dir}/sysinfo
-    (( packrat_rc += ${?} ))
+    do_ssh $user@$host $remote_dir/packrat $remote_dir/sysinfo
+    (( packrat_rc += $? ))
 
-    do_scp "${user}@${host}" "${remote_dir}/sysinfo/packrat-archive" "" "${local_dir}"
-    (( packrat_rc += ${?} ))
+    do_scp "$user@$host" "$remote_dir/sysinfo/packrat-archive" "" "$local_dir"
+    (( packrat_rc += $? ))
 
-    do_ssh ${user}@${host} rm -Rf ${remote_dir}/packrat ${remote_dir}/sysinfo
-    (( packrat_rc += ${?} ))
+    do_ssh $user@$host rm -Rf $remote_dir/packrat $remote_dir/sysinfo
+    (( packrat_rc += $? ))
 
-    return ${packrat_rc}
+    return $packrat_rc
+}
+
+function set_ssh_id() {
+    # globals used:
+    # config_dir ssh_id
+
+    if [ ! -f $config_dir/rickshaw_id.rsa ]; then
+        echo "could not find $config_dir/rickshaw_id.rsa"
+        exit 1;
+    fi
+    ssh_id=$(sed -z 's/\n/\\n/g' $config_dir/rickshaw_id.rsa)
+}
+
+function init_remotehost_dirs() {
+    # globals used:
+    # do_validate user host remote_cfg_dir remote_logs_dir remote_data_dir
+
+    # create working directories
+    if [ "$do_validate" != "1" ]; then
+        do_ssh $user@$host /bin/mkdir -p $remote_cfg_dir
+        do_ssh $user@$host /bin/mkdir -p $remote_logs_dir
+        do_ssh $user@$host /bin/mkdir -p $remote_data_dir
+    fi
 }
 
 process_opts $@
 process_common_endpoint_opts rh_opts $endpoint_opts
-echo "#rh_opts: [$rh_opts]"
 process_remotehost_opts $rh_opts
 init_common_dirs
+init_remotehost_dirs
 load_settings
 remotehost_req_check
-if [ ! -f $config_dir/rickshaw_id.rsa ]; then
-    echo "could not find $config_dir/rickshaw_id.rsa"
-    exit 1;
-fi
-ssh_id=$(sed -z 's/\n/\\n/g' ${config_dir}/rickshaw_id.rsa)
+set_ssh_id
 base_req_check
-launch_osruntime
-echo "about to call: process_roadblocks remotehost $new_remotehost_followers"
+add_profiler_engines
+launch_osruntimes
 process_roadblocks remotehost $new_remotehost_followers

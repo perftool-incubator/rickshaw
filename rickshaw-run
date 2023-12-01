@@ -34,7 +34,7 @@ use toolbox::logging;
 use toolbox::run;
 use toolbox::jsonsettings;
 
-$toolbox::logging::debug = 0;
+$toolbox::logging::debug = 1;
 
 my $ug = Data::UUID->new;
 my %defaults = ( "num-samples" => 1, "tool-group" => "default", "test-order" => "s",
@@ -1610,6 +1610,9 @@ sub validate_endpoints() {
             if ($line =~ /(client|server|profiler)\s+(.+)$/) {
                 my $engine = $1;
                 my $ids = $2;
+                # An endpoint with a profiler adds its engines' roadblock followers
+                # at endpoint-deployment phase
+                next if ($engine eq "profiler");
                 foreach my $id (split(/\s+/, $ids)) {
                     die "[ERROR]client/server ID cannot be below 1\n" if ($id < 1);
                     my %info = ( 'endpoint-type' => $$endpoint{'type'}, 'id' => $id );
