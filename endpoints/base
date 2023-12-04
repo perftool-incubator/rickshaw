@@ -338,11 +338,17 @@ function addto_clients_servers() {
 }
 
 function set_total_cpupart() {
-    for this_cs_label in ${clients[@]} ${servers[@]}; do
+    local engine_label cpu_partitioning
+
+    # globals used:
+    # cpu_part_idx clients servers cpuPartitioning
+
+    cpu_part_idx=0
+    for engine_label in ${clients[@]} ${servers[@]}; do
         set +u
         cpu_partitioning=0
-        if [ ! -z "${cpuPartitioning[$this_cs_label]}" ]; then
-            cpu_partitioning=${cpuPartitioning[$this_cs_label]}
+        if [ ! -z "${cpuPartitioning[$engine_label]}" ]; then
+            cpu_partitioning=${cpuPartitioning[$engine_label]}
         elif [ ! -z "${cpuPartitioning[default]}" ]; then
             cpu_partitioning=${cpuPartitioning[default]}
         fi
@@ -357,7 +363,11 @@ function set_total_cpupart() {
 function set_osruntime_numanode_cpupart() {
     local this_cs_label=$1
     set +u
-    if [ ! -z "${osruntime[$this_cs_label]}" ]; then
+    # Always force tools to podman because they tend to clean
+    # themselves up reliably
+    if echo $this_cs_label | grep -P '^profiler-\w+-\d+-\w+-\d+$'; then
+        os_runtime="pod"
+    elif [ ! -z "${osruntime[$this_cs_label]}" ]; then
         os_runtime=${osruntime[$this_cs_label]}
     else
         os_runtime=${osruntime[default]}

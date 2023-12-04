@@ -191,7 +191,7 @@ function cleanup_osruntime() {
     local container_name container_image engine_label data_file tools os_runtime tmp_engine_label
 
     # globals used:
-    # user host clients servers profilers os_runtime chroot_rbind_mounts endpoint_run_dir endpoint_base_dir
+    # user host clients servers profilers os_runtime endpoint_run_dir endpoint_base_dir chroot_rbind_mounts
     echo "Doing osruntime cleanup"
     echo
     echo "All mounts on this remote host:"
@@ -465,15 +465,15 @@ function exec_chroot() {
     #local cpu_part_index=$1; shift
 
     local container_name=${run_id}_${engine_label}
-    local container_id container_mount oldIFS base_cmd cs_cmd ssh_rc chroot_rbind_mounts
+    local container_id container_mount oldIFS base_cmd cs_cmd ssh_rc
 
     # globals used:
     # user host controller_ipaddr endpoint_run_dir cs_rb_opts base_run_dir
     # max_sample_failures max_rb_attempts total_cpu_partitions engine_script_start_timeout
-    # os_runtime numa_node cpu_partitioning
+    # os_runtime numa_node cpu_partitioning chroot_rbind_mounts
 
     set_osruntime_numanode_cpupart $engine_label
-    echo "Preparing to chroot $engne_label"
+    echo "Preparing to chroot $engine_label"
     echo "Adding container image mount for chroot osruntime"
     container_id=$(do_ssh $user@$host podman create --name $container_name $image)
     echo "container_id: $container_id"
@@ -526,10 +526,14 @@ function exec_chroot() {
     base_cmd+=" --endpoint=remotehost"
     base_cmd+=" --max-sample-failures=$max_sample_failures"
     base_cmd+=" --max-rb-attempts=$max_rb_attempts"
-    # TODO:
-    #base_cmd+=" --cpu-partitions=$total_cpu_partitions"
-    #base_cmd+=" --cpu-partition-index=$count"
-    #base_cmd+=" --cpu-partitioning=$cpu_partitioning"
+
+    if echo $engine_label | grep -P '$(client|server)-\d+$' >/dev/null; then
+        base_cmd+=" --cpu-partitions=$total_cpu_partitions"
+        base_cmd+=" --cpu-partition-index=$cpu_part_idx"
+        base_cmd+=" --cpu-partitioning=$cpu_partitioning"
+        let cpu_part_idx=$cpu_part_idx+1
+    fi
+
     base_cmd+=" --engine-script-start-timeout=$engine_script_start_timeout"
     # chroot is not used for tools
     base_cmd+=" --disable-tools=1"
