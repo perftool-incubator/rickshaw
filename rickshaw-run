@@ -89,6 +89,7 @@ my $engine_roadblock_module;
 my $iterations_dir;
 my $rickshaw_project_dir;
 my $roadblock_msgs_dir;
+my $roadblock_logs_dir;
 my $endpoint_roadblock_opt = "";
 my $workshop_roadblock_opt = "";
 my %utility_configs;
@@ -203,6 +204,7 @@ sub do_roadblock {
     my $uuid = $run{'id'} . ":" . $label;
 
     my $msgs_log_file = $roadblock_msgs_dir . "/" . $label . ".json";
+    my $rb_log_file = $roadblock_logs_dir . "/" . $label . ".txt";
     (my $date_cmd, my $date, my $date_rc) = run_cmd('date');
     chomp $date;
     printf "Roadblock: %s ", $date;
@@ -225,6 +227,10 @@ sub do_roadblock {
         ($cmd, $output, $rc) = run_cmd($cmd);
         debug_log(sprintf "roadblock leader rc:%s\n", $rc);
         debug_log(sprintf "roadblock leader output:\n%s\n", $output);
+        my $rb_log_fh = open_write_text_file($rb_log_file) ||
+            die "[ERROR]could not open roadblock log file [" . $rb_log_file . "] for writing\n";
+        printf $rb_log_fh "%s", $output;
+        close($rb_log_fh);
         ($file_rc, $_[0]) = get_json_file($msgs_log_file);
         if ($file_rc > 0 or ! defined $_[0]) {
             printf "Could not open the messages log file: %s\n", $msgs_log_file;
@@ -1481,6 +1487,8 @@ sub make_run_dirs() {
     mkdir($iterations_dir);
     $roadblock_msgs_dir = $run_dir . "/roadblock-msgs";
     mkdir($roadblock_msgs_dir);
+    $roadblock_logs_dir = $run_dir . "/roadblock-logs";
+    mkdir($roadblock_logs_dir);
     # If there are no endpoints, assume 1 endpoint using the 'local' extension
     if (scalar @endpoints == 0) {
         printf "ERROR: you must declare endpoints\n";
