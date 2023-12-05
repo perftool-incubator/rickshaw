@@ -328,7 +328,7 @@ function exec_pod() {
     # globals used:
     # os_runtime cpu_partitioning numa_node controller_ipaddr ssh_id cs_rb_opts
     # endpoint_run_dir base_run_dir max_rb_attempts total_cpu_partitions
-    # max_sample_failures host_mounts user host remote_cfg_dir
+    # max_sample_failures host_mounts user host remote_cfg_dir cpu_part_idx
 
     set_osruntime_numanode_cpupart $engine_label
 
@@ -355,10 +355,13 @@ function exec_pod() {
     # why is this not handled in cs_rb_opt?
     echo "max_rb_attempts=$max_rb_attempts"         >> $endpoint_run_dir/$env_file
 
-    # TODO
-    #echo "cpu_partitioning=$cpu_partitioning"       >> ${endpoint_run_dir}/${env_file}
-    #echo "cpu_partitions=${total_cpu_partitions}"   >> ${endpoint_run_dir}/${env_file}
-    #echo "cpu_partition_index=${count}"             >> ${endpoint_run_dir}/${env_file}
+    echo "cpu_partitioning=$cpu_partitioning"       >> ${endpoint_run_dir}/${env_file}
+    if [ "$cpu_partitioning" == "1" ]; then
+        echo "cpu_partitions=$total_cpu_partitions" >> $endpoint_run_dir/$env_file
+        echo "cpu_partition_index=$cpu_part_idx"    >> ${endpoint_run_dir}/${env_file}
+        let cpu_part_idx=$cpu_part_idx+1
+    fi
+
 
     # client and server engines never run tools
     if echo $engine_label | grep -v -P '^profiler' >/dev/null; then
@@ -470,7 +473,7 @@ function exec_chroot() {
     # globals used:
     # user host controller_ipaddr endpoint_run_dir cs_rb_opts base_run_dir
     # max_sample_failures max_rb_attempts total_cpu_partitions engine_script_start_timeout
-    # os_runtime numa_node cpu_partitioning chroot_rbind_mounts
+    # os_runtime numa_node cpu_partitioning chroot_rbind_mounts cpu_part_idx
 
     set_osruntime_numanode_cpupart $engine_label
     echo "Preparing to chroot $engine_label"
@@ -527,10 +530,10 @@ function exec_chroot() {
     base_cmd+=" --max-sample-failures=$max_sample_failures"
     base_cmd+=" --max-rb-attempts=$max_rb_attempts"
 
-    if echo $engine_label | grep -P '$(client|server)-\d+$' >/dev/null; then
-        base_cmd+=" --cpu-partitions=$total_cpu_partitions"
-        base_cmd+=" --cpu-partition-index=$cpu_part_idx"
+    base_cmd+=" --cpu-partitions=$total_cpu_partitions"
+    if [ "$cpu_partitioning" == "1" ]; then
         base_cmd+=" --cpu-partitioning=$cpu_partitioning"
+        base_cmd+=" --cpu-partition-index=$cpu_part_idx"
         let cpu_part_idx=$cpu_part_idx+1
     fi
 

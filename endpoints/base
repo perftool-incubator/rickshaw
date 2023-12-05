@@ -338,11 +338,15 @@ function addto_clients_servers() {
 }
 
 function set_total_cpupart() {
+    # To be called only once at endpoint-deploy
     local engine_label cpu_partitioning
 
     # globals used:
-    # cpu_part_idx clients servers cpuPartitioning
+    # cpu_part_idx clients servers cpuPartitioning total_cpu_partitions
 
+    # Multiple osruntimes hosted need to differentiate their
+    # cpu-allocation by an assigned index.  For each osruntime launched
+    # with cpu-partitioning must increment this index.
     cpu_part_idx=0
     for engine_label in ${clients[@]} ${servers[@]}; do
         set +u
@@ -373,7 +377,10 @@ function set_osruntime_numanode_cpupart() {
         os_runtime=${osruntime[default]}
     fi
 
-    if [ ! -z "${cpuPartitioning[$this_cs_label]}" ]; then
+    # profilers never use cpu-partitioning
+    if echo $this_cs_label | grep -P '^profiler-\w+-\d+-\w+-\d+$'; then
+        cpu_partitioning=0
+    elif [ ! -z "${cpuPartitioning[$this_cs_label]}" ]; then
         cpu_partitioning=${cpuPartitioning[$this_cs_label]}
     elif [ ! -z "${cpuPartitioning[default]}" ]; then
         cpu_partitioning=${cpuPartitioning[default]}
