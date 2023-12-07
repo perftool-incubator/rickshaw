@@ -90,6 +90,7 @@ my $iterations_dir;
 my $rickshaw_project_dir;
 my $roadblock_msgs_dir;
 my $roadblock_logs_dir;
+my $roadblock_followers_dir;
 my $endpoint_roadblock_opt = "";
 my $workshop_roadblock_opt = "";
 my %utility_configs;
@@ -189,12 +190,12 @@ sub do_roadblock {
     my $timeout = shift;
     # $_[0] is for a reference to the messages data structure
 
-    my $follower;
-    my $follower_param = "";
+    my $rb_followers_file = $roadblock_followers_dir . "/" . $label . ".txt";
+    open(RB_FOLLOWERS, ">", $rb_followers_file) || die("[ERROR] Could not open the roadblock followers file for writing [" . $rb_followers_file . "]!\n");
     for (my $i=1; $i<scalar(@_); $i++) {
-        $follower = $_[$i];
-        $follower_param .= " --followers=" . $follower;
+        printf RB_FOLLOWERS "%s\n", $_[$i];
     }
+    close(RB_FOLLOWERS);
 
     my $attempts = 0;
     my $rc = 99;
@@ -219,7 +220,7 @@ sub do_roadblock {
             " --uuid=" . $this_uuid .
             " --timeout=" . $timeout .
             " --message-log=" . $msgs_log_file .
-            $follower_param;
+            " --followers-file=" . $rb_followers_file;
         if ($abort_via_roadblock) {
             $cmd .= " --abort";
         }
@@ -1489,6 +1490,8 @@ sub make_run_dirs() {
     mkdir($roadblock_msgs_dir);
     $roadblock_logs_dir = $run_dir . "/roadblock-logs";
     mkdir($roadblock_logs_dir);
+    $roadblock_followers_dir = $run_dir . "/roadblock-followers";
+    mkdir($roadblock_followers_dir);
     # If there are no endpoints, assume 1 endpoint using the 'local' extension
     if (scalar @endpoints == 0) {
         printf "ERROR: you must declare endpoints\n";
