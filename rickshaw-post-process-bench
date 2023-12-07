@@ -229,7 +229,7 @@ for (my $i = 1; $i <= scalar @{ $run{'iterations'} }; $i++) {
         my @samples;
         my $primary_metric;
         my $primary_period;
-            for my $samp_dir (@samp_dirs) {
+        for my $samp_dir (@samp_dirs) {
             my @pids;
             my %sample; # sample data from all clients/servers
             my @cons_periods; # consolidated periods across clients/servers get merged here
@@ -262,11 +262,11 @@ for (my $i = 1; $i <= scalar @{ $run{'iterations'} }; $i++) {
                                     if ($rc == -1) {
                                         printf "Failed to execute '%s%s'!\n", $pp_cmd, $iter_params;
                                     } elsif ($rc & 127) {
-                                        printf "'%s%s' died with signal %d, %s coredump!\n", $pp_cmd, $iter_params, ($rc & 127), ($rc & 128) ? 'with' : 'without';
+                                        printf "'%s %s' died with signal %d, %s coredump!\n", $pp_cmd, $iter_params, ($rc & 127), ($rc & 128) ? 'with' : 'without';
                                     } else {
                                         $rc = $rc >> 8;
                                         if ($rc != 0) {
-                                        printf "'%s%s' exited with non-zero value %d\n", $pp_cmd, $iter_params, $rc;
+                                        printf "'%s %s' exited with non-zero value %d\n", $pp_cmd, $iter_params, $rc;
                                         }
                                     }
                                     exit;
