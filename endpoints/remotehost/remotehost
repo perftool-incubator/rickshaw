@@ -412,6 +412,7 @@ function launch_osruntime() {
             echo "max_sample_failures=$max_sample_failures" >> ${endpoint_run_dir}/${env_file}
             echo "max_rb_attempts=$max_rb_attempts"         >> ${endpoint_run_dir}/${env_file}
             echo "ssh_id=${ssh_id}"                         >> ${endpoint_run_dir}/${env_file}
+            echo "engine_script_start_timeout=${engine_script_start_timeout}" >> ${endpoint_run_dir}/${env_file}
             echo "disable_tools=$this_disable_tools"        >> ${endpoint_run_dir}/${env_file}
 
             for cs_rb_opt in $cs_rb_opts; do
