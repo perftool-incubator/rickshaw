@@ -22,6 +22,7 @@ disable_tools=0
 abort=0
 userenv=""
 user=""
+engine_script_start_timeout=""
 max_sample_failures=""
 total_cpu_partitions=0
 export ssh_opts="-q -o StrictHostKeyChecking=no -o PasswordAuthentication=no"
@@ -1144,8 +1145,11 @@ function load_settings() {
     load_json_setting "roadblock.timeouts.default" default_timeout
     load_json_setting "roadblock.timeouts.collect-sysinfo" collect_sysinfo_timeout
     load_json_setting "roadblock.timeouts.endpoint-deploy" endpoint_deploy_timeout
-    load_json_setting "roadblock.timeouts.engine-start" engine_script_start_timeout
     load_json_setting "roadblock.timeouts.move-data" endpoint_move_data_timeout
+
+    if [ -z "${engine_script_start_timeout}" ]; then
+        load_json_setting "roadblock.timeouts.engine-start" engine_script_start_timeout
+    fi
 
     if [ -z "${userenv}" -o "${userenv}" == "default" ]; then
         load_json_setting "userenvs.default" userenv
