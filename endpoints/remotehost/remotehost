@@ -236,6 +236,8 @@ function cleanup_osruntime() {
         elif [ "$os_runtime" == "podman" ]; then
             container_name="${run_id}_${engine_label}"
             do_ssh $user@$host podman rm $container_name
+        else
+            echo "WARNING: os_runtime $os_runtime not supported"
         fi
     done
 
@@ -575,8 +577,10 @@ function launch_osruntimes() {
         echo "About to exec $engine_label via $os_runtime"
         if [ "$os_runtime" == "chroot" ]; then
             exec_chroot $engine_label $this_image
-        else
+        elif [ "$os_runtime" == "podman" ]; then
             exec_pod $engine_label $this_image
+        else
+            echo "WARNING: os_runtime $os_runtime not supported"
         fi
         this_cs_log_file="$this_cs_label.txt"
 
@@ -737,8 +741,6 @@ function move_remotehost_logs() {
     for engine_label in ${clients[@]} ${servers[@]} ${profilers[@]}; do
         set_osruntime_numanode_cpupart $engine_label
         log_file=${engine_label}.txt
-        echo "engine: $engine_label"
-        echo "osruntime: $os_runtime"
 
         if [ "${os_runtime}" == "chroot" ]; then
             delete_remote_dir=1
@@ -749,6 +751,8 @@ function move_remotehost_logs() {
             container_name="${run_id}_${engine_label}"
             do_ssh $user@$host podman logs $container_name > "$engine_logs_dir/$log_file"
             (( total_rc += $? ))
+        else
+            echo "WARNING: os_runtime $os_runtime not supported"
         fi
     done
 

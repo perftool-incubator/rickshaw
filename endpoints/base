@@ -370,7 +370,7 @@ function set_osruntime_numanode_cpupart() {
     # Always force tools to podman because they tend to clean
     # themselves up reliably
     if echo $this_cs_label | grep -P '^profiler-\w+-\d+-\w+-\d+$'; then
-        os_runtime="pod"
+        os_runtime="podman"
     elif [ ! -z "${osruntime[$this_cs_label]}" ]; then
         os_runtime=${osruntime[$this_cs_label]}
     else
@@ -1259,27 +1259,23 @@ function get_opt_field() {
 
 function get_image() {
     local label=$1; shift
-    local var value type id
+    local var image type id bench_or_tool
+
     typeset -n var=$1; shift
     type=`echo $label | awk -F- '{print $1}'`
-    id=`echo $label | sed -e s/^$type-//`
 
-    if [ "$type" != "client" -a "$type" != "server" ]; then
-        # For any engine which is not running a benchmark client or server:
-        # We don't care what benchmark is in the image.  We only care that
-        # an image exists for the ID.  Since the ID for a non-client/server
-        # can exceed the ID range of a benchmark client[/server], (for example
-        # there could be a "worker-2" when there is only client-1 and server-1)
-        # always force the ID to 1 for purposes of looking up benchmark->image.
-        # When we build separate images for tools and benchmarks, this will 
-        # change (significantly) and a new method to find the correct image for
-        # en engine will be implemented.
-        id="1"
+    if [ "$type" == "profiler" ]; then
+        # example label: profiler-remotehost-2-sysstat-1
+        # we need only 'sysstat'
+        bench_or_tool=`echo $label | awk -F- '{print $4}'`
+    else
+        id=`echo $label | sed -e s/^$type-//`
+        bench_or_tool=${id_to_bench[$id]}
     fi
-    bench=${id_to_bench[$id]}
-    value=${bench_to_image[$bench]}
-    echo "image for $label is [$value]"
-    var=$value
+
+    image=${bench_to_image[$bench_or_tool]}
+    echo "image for $label is [$image]"
+    var=$image
 }
 
 

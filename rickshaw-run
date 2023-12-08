@@ -34,7 +34,7 @@ use toolbox::logging;
 use toolbox::run;
 use toolbox::jsonsettings;
 
-$toolbox::logging::debug = 1;
+$toolbox::logging::debug = 0;
 
 my $ug = Data::UUID->new;
 my %defaults = ( "num-samples" => 1, "tool-group" => "default", "test-order" => "s",
@@ -51,7 +51,7 @@ my %benchmark_to_ids;
 my %ids_to_benchmark;
 my @endpoints;
 #my %userenvs;
-my %image_ids; # {$benchmark-type}{$userenv}
+my %image_ids; # {$benchmark-or-tool}{$userenv}
 my %run; # A multi-dimensional, nested hash, schema TBD
          # This hash documents what was run.
 my $redis_passwd = "flubber"; # TODO: make this cmdline setting
@@ -796,9 +796,6 @@ sub build_reqs {
             }
         }
     }
-    foreach my $tool_entry (@tools_params) {
-        push(@$req_ref, "--requirement " . $run{'tools-dir'} . "/" .  $$tool_entry{'tool'} . "/workshop.json ");
-    }
     push (@$req_ref, "--requirement " . $bench_dirs{$benchmark} . "/workshop.json");
 }
 
@@ -881,7 +878,7 @@ sub source_container_image {
     " 2>&1";
 
     get_image_urls;
-    printf "Sourcing container image for userenv '%s' and benchmark '%s'; this may take a few minutes\n", $userenv, $benchmark;
+    printf "Sourcing container image for userenv '%s' and benchmark/tool '%s'; this may take a few minutes\n", $userenv, $benchmark;
 
     my @requirements;
     build_reqs(\@requirements, $userenv, $benchmark);
@@ -979,10 +976,6 @@ sub source_container_image {
         push(@local_images, $userenv_image);
     }
     my $x = 0;
-    while ($x < $i) {
-        printf "Processing stage %d (%s)...\n\tReady\n", $x + 1, $workshop_args[$x]{'tag'};
-        $x++;
-    }
     while ($i <= $num_images - 1) {
         printf "Processing stage %d (%s)...\n", $i + 1, $workshop_args[$i]{'tag'};
         my $begin = time();
@@ -1414,7 +1407,8 @@ sub load_tool_params() {
     # Load a tool configuration for every tool the user is asking for
     foreach my $tool_entry (@tools_params) {
         my $tool_name = $$tool_entry{'tool'};
-        my $this_tool_config = $run{'tools-dir'} . "/" . $tool_name . "/rickshaw.json";
+        my $this_tool_dir = $run{'tools-dir'} . "/" . $tool_name;
+        my $this_tool_config = $this_tool_dir . "/rickshaw.json";
         my ($rc, $json_ref) = get_json_file($this_tool_config, $tool_schema_file);
         if ($rc > 0 or ! defined $json_ref) {
             printf "Could not open the tool config file: %s\n", $this_tool_config;
@@ -1429,6 +1423,11 @@ sub load_tool_params() {
             exit 1;
         }
         $tools_configs{$$json_ref{'tool'}} = $json_ref;
+        $bench_dirs{$tool_name} = $this_tool_dir;
+
+        # Populate the image_ids with tools
+        my %userenv_info = ( 'image' => '' );
+        $image_ids{$tool_name}{'fedora38'} = \%userenv_info;
     }
 }
 
@@ -2129,8 +2128,8 @@ sub deploy_endpoints() {
         my $endpoint_image_opt = "";
         my $bench_ids_opt = "";
         if (defined $endpoints[$i]{'userenv'}) {
-            foreach my $bench (keys %bench_configs) {
-                $endpoint_image_opt .= "," . $bench . "::" . $image_ids{$bench}{$endpoints[$i]{'userenv'}}{'image'};
+            foreach my $bench_or_tool (keys %image_ids) {
+                $endpoint_image_opt .= "," . $bench_or_tool . "::" . $image_ids{$bench_or_tool}{$endpoints[$i]{'userenv'}}{'image'};
             }
             $endpoint_image_opt =~ s/^,/ --image=/;
         }
@@ -2295,6 +2294,7 @@ sub organize_run_data() {
             my $archive_full_path = $engine_archives_dir . "/" . $archive;
             my $cs_type = $1;
             my $cs_id = $2;
+            printf "cs_type: %s, cs_id: %s\n", $cs_type, $cs_id;
             my $tar_cmd = "tar zmxf " . $archive_full_path;
             ($tar_cmd, my $tar_output, my $tar_cmd_rc) = run_cmd($tar_cmd);
             if ($1 =~ /^(client|server)$/) {
@@ -2317,12 +2317,16 @@ sub organize_run_data() {
                     }
                 }
             }
-            if (-e "tool-data" and scalar dir_entries("tool-data", qr/\w+/) > 0) {
-                my $tool_dir = pushd("tool-data");
-                my $cs_tool_dest_path = $run_dir . "/tool-data/" . $cs_type . "/" . $cs_id;
-                make_path($cs_tool_dest_path);
-                my $mv_cmd = "/bin/mv * " . $cs_tool_dest_path;
-                ($mv_cmd, my $mv_output, my $mv_cmd_rc) = run_cmd($mv_cmd);
+            if (-e "tool-data") {
+                if (scalar dir_entries("tool-data", qr/\w+/) > 0) {
+                    my $tool_dir = pushd("tool-data");
+                    my $cs_tool_dest_path = $run_dir . "/tool-data/" . $cs_type . "/" . $cs_id;
+                    make_path($cs_tool_dest_path);
+                    my $mv_cmd = "/bin/mv * " . $cs_tool_dest_path;
+                    ($mv_cmd, my $mv_output, my $mv_cmd_rc) = run_cmd($mv_cmd);
+                } else {
+                    printf "WARNING: did not find expected sub-directories in %s\n", $pushd_dir . "/" . "tool-data";
+                }
             }
             if (scalar dir_entries("sysinfo", qr/\w+/) > 0) {
                 my $sysinfo_dir = pushd("sysinfo");
@@ -2469,16 +2473,16 @@ build_test_order();
 prepare_bench_tool_engines();
 print "Preparing userenvs:\n";
 debug_log (sprintf "image_ids (before):\n" . Dumper \%image_ids);
-foreach my $bench (keys %bench_configs) {
-    printf "Working on %s benchmark\n", $bench;
-    foreach my $userenv (keys %{ $image_ids{$bench} }) {
+foreach my $bench_or_tool (keys %image_ids) {
+    printf "Working on %s benchmark or tool\n", $bench_or_tool;
+    foreach my $userenv (keys %{ $image_ids{$bench_or_tool} }) {
         printf "Working on %s userenv\n", $userenv;
-        my $image = source_container_image($userenv, $bench, $arch);
+        my $image = source_container_image($userenv, $bench_or_tool, $arch);
         if (!defined $image) {
-            die "Could not get valid image [" . $image_ids{$bench}{$userenv}{'image'} . "] for container image build for userenv [" . $userenv . "] and benchmark [" . $bench . "]\n";
+            die "Could not get valid image [" . $image_ids{$bench_or_tool}{$userenv}{'image'} . "] for container image build for userenv [" . $userenv . "] and benchmark [" . $bench_or_tool . "]\n";
         }
         printf "Image is: %s\n", $image;
-        $image_ids{$bench}{$userenv}{'image'} = $image;
+        $image_ids{$bench_or_tool}{$userenv}{'image'} = $image;
     }
 }
 debug_log(sprintf "image_ids(after):\n" . Dumper \%image_ids);

@@ -307,7 +307,7 @@ function validate_core_env() {
     # client-1
     regex2='^\w+-\d+$'
     if echo $cs_label | grep -q -P $regex1; then
-        tool_name=`echo $cs_label | awk -F- '{print $4}'`
+        export tool_name=`echo $cs_label | awk -F- '{print $4}'`
         echo "engine-label \"$cs_label\" is valid and runs this tool:  $tool_name"
     elif echo $cs_label | grep -q -P $regex2; then
         echo "engine-label \"$cs_label\" is valid"
