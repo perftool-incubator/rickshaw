@@ -209,6 +209,21 @@ foreach my $benchmark_and_id ( split(/,/, $run{'bench-ids'}) ) {
     }
 }
 
+# determine the max number of forked jobs
+my $max_forked_jobs = 0;
+open(PROCCPUINFO, "<", "/proc/cpuinfo") || die("[ERROR] Could not open /proc/cpuinfo for reading\n");
+while(<PROCCPUINFO>) {
+    if ($_ =~ /^processor/) {
+        $max_forked_jobs++;
+    }
+}
+close(PROCCPUINFO);
+
+if ($max_forked_jobs > 0) {
+    printf "Will fork a maximum of %d jobs at a time\n", $max_forked_jobs;
+} else {
+    die("[ERROR] Could not determine the maximum number of jobs to fork at a time\n");
+}
 
 printf "Launching a post-process job for each iteration x sample x [client|server] for %s\n", $run{'benchmark'};
 for (my $i = 1; $i <= scalar @{ $run{'iterations'} }; $i++) {
@@ -229,7 +244,7 @@ for (my $i = 1; $i <= scalar @{ $run{'iterations'} }; $i++) {
         my @samples;
         my $primary_metric;
         my $primary_period;
-            for my $samp_dir (@samp_dirs) {
+        for my $samp_dir (@samp_dirs) {
             my @pids;
             my %sample; # sample data from all clients/servers
             my @cons_periods; # consolidated periods across clients/servers get merged here
@@ -252,6 +267,12 @@ for (my $i = 1; $i <= scalar @{ $run{'iterations'} }; $i++) {
                             my $iter_params = dump_params($run{'iterations'}[$i - 1]{'params'}, $cs_id, $cs_name);
                             my $cs_id_dir = $cs_name_dir . "/" . $cs_id;
                             if (-d $run_dir . "/" . $cs_id_dir) {
+                                if (scalar @pids >= $max_forked_jobs) {
+                                    printf "Waiting for %d post-processing jobs to complete before starting more\n", scalar @pids;
+                                    while(wait() > -1) {}
+                                    printf "Starting more jobs...\n";
+                                    @pids = ();
+                                }
                                 if (my $pid = fork) {
                                     push(@pids, $pid);
                                 } else {
@@ -262,11 +283,11 @@ for (my $i = 1; $i <= scalar @{ $run{'iterations'} }; $i++) {
                                     if ($rc == -1) {
                                         printf "Failed to execute '%s%s'!\n", $pp_cmd, $iter_params;
                                     } elsif ($rc & 127) {
-                                        printf "'%s%s' died with signal %d, %s coredump!\n", $pp_cmd, $iter_params, ($rc & 127), ($rc & 128) ? 'with' : 'without';
+                                        printf "'%s %s' died with signal %d, %s coredump!\n", $pp_cmd, $iter_params, ($rc & 127), ($rc & 128) ? 'with' : 'without';
                                     } else {
                                         $rc = $rc >> 8;
                                         if ($rc != 0) {
-                                        printf "'%s%s' exited with non-zero value %d\n", $pp_cmd, $iter_params, $rc;
+                                        printf "'%s %s' exited with non-zero value %d\n", $pp_cmd, $iter_params, $rc;
                                         }
                                     }
                                     exit;
@@ -276,8 +297,10 @@ for (my $i = 1; $i <= scalar @{ $run{'iterations'} }; $i++) {
                     }
                 }
             }
-            printf "Waiting for %d post-processing jobs to complete\n", scalar @pids;
-            while (wait() > -1) {}
+            if (wait() > -1) {
+                printf "Waiting for %d post-processing jobs to complete\n", scalar @pids;
+                while (wait() > -1) {}
+            }
             print "Post-processing complete\n";
         }
     }
