@@ -25,7 +25,8 @@ user=""
 engine_script_start_timeout=""
 max_sample_failures=""
 total_cpu_partitions=0
-export ssh_opts="-q -o StrictHostKeyChecking=no -o PasswordAuthentication=no"
+export ssh_opts="-q -o StrictHostKeyChecking=no -o PasswordAuthentication=no -o ControlMaster=auto -o ControlPath=~/.ssh/sockets/%r@%h-%p -o ControlPersist=60"
+mkdir -p ~/.ssh/sockets
 declare -A clients
 declare -A servers
 declare -A collectors # For a remotehost that has no client or server, but runs tools
