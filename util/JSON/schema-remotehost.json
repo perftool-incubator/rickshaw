@@ -18,37 +18,13 @@
             "type": "string"
         },
         "client": {
-            "anyOf": [
-                {
-                    "type": "string",
-                    "pattern": "^(([1-9][0-9]*)(-[1-9][0-9]*)?)(\\+(([1-9][0-9]*)(-[1-9][0-9]*)?))*$"
-                },
-                {
-                    "type": "integer"
-                }
-            ]
+            "$ref": "#/definitions/number-lists"
         },
         "server": {
-            "anyOf": [
-                {
-                    "type": "string",
-                    "pattern": "^(([1-9][0-9]*)(-[1-9][0-9]*)?)(\\+(([1-9][0-9]*)(-[1-9][0-9]*)?))*$"
-                },
-                {
-                    "type": "integer"
-                }
-            ]
+            "$ref": "#/definitions/number-lists"
         },
         "profiler": {
-            "anyOf": [
-                {
-                    "type": "string",
-                    "pattern": "^(([1-9][0-9]*)(-[1-9][0-9]*)?)(\\+(([1-9][0-9]*)(-[1-9][0-9]*)?))*$"
-                },
-                {
-                    "type": "integer"
-                }
-            ]
+            "$ref": "#/definitions/number-lists"
         },
         "config": {
             "type": "array",
@@ -69,8 +45,7 @@
                                             "enum": [ "client", "server", "profiler" ]
                                         },
                                         "ids": {
-                                            "type": "string",
-                                            "pattern": "^(([1-9][0-9]*)(-[1-9][0-9]*)?)(\\+(([1-9][0-9]*)(-[1-9][0-9]*)?))*$"
+                                            "$ref": "#/definitions/number-lists"
                                         }
                                     },
                                     "additionalProperties": false,
@@ -108,6 +83,32 @@
         "settings": {
             "type": "object",
             "additionalProperties": true
+        },
+        "number-lists": {
+            "anyOf": [
+                {
+                    "type": "string",
+                    "pattern": "^(([1-9][0-9]*)(-[1-9][0-9]*)?)(\\+(([1-9][0-9]*)(-[1-9][0-9]*)?))*$"
+                },
+                {
+                    "type": "integer"
+                },
+                {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                        "anyOf": [
+                            {
+                                "type": "string",
+                                "pattern": "^(([1-9][0-9]*)(-[1-9][0-9]*)?)$"
+                            },
+                            {
+                                "type": "integer"
+                            }
+                        ]
+                    }
+                }
+            ]
         }
    }
 }

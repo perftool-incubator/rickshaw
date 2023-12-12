@@ -161,7 +161,14 @@ def json_to_stream(json_obj, cfg, idx):
                     tg_list = [ targets ]
                 elif isinstance(targets, list):
                     for tg in targets:
-                        tg_name = tg['role'] + '-' + str(tg['ids'])
+                        tg_name = tg['role'] + '-'
+                        if isinstance(tg['ids'], str) or isinstance(tg['ids'], int):
+                            tg_name += str(tg['ids'])
+                        elif isinstance(tg['ids'], list):
+                            for idx in range(len(tg['ids'])):
+                                tg_name += str(tg['ids'][idx]) + '+'
+                            # remove last '+'
+                            tg_name = tg_name[:-1]
                         tg_list.append(tg_name)
 
                 # get the individual sections e.g. 'securityContext'
@@ -181,7 +188,15 @@ def json_to_stream(json_obj, cfg, idx):
                         stream += st + ':' + tg_name + ':' + str(st_val) + ','
         else:
             val = json_blk[key]
-            if isinstance(val, list):
+            if key in ("client", "server", "profile") and isinstance(val, list):
+                stream += key + ':'
+                for idx in range(len(val)):
+                    item_val = str(val[idx])
+                    stream += item_val + '+'
+                # remove last '+'
+                stream = stream[:-1]
+                stream += ','
+            elif isinstance(val, list):
                 for idx in range(len(val)):
                     item_val = val[idx]
                     stream += key + ':' + item_val + ','
