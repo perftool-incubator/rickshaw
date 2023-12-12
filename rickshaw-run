@@ -2244,7 +2244,7 @@ sub process_roadblocks() {
 }
 
 sub organize_run_data() {
-    debug_log("Moving per-client/server/tool data into common iterations and tool-data directories\n");
+    printf "Moving per-client/server/tool data into common iterations and tool-data directories\n";
     # Organize the data from the clients/servers into a common directory structure, organized by
     # iteration, then by sample, then finally by client/server.  This is needed to have
     # the benchmark's postprocessing script work.
