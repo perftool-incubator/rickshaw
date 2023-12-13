@@ -255,9 +255,17 @@ def get_bench_ids(json_obj, cfg):
         if bench_count > 0:
             for idx in range(0, bench_count):
                 json_blk = json_obj[cfg][idx]
-                stream+=json_blk["name"]+":"+json_blk["ids"]+","
+                stream += json_blk["name"] + ":"
+                if isinstance(json_blk["ids"], str) or isinstance(json_blk["ids"], int):
+                    stream += str(json_blk["ids"]) + ","
+                elif isinstance(json_blk["ids"], list):
+                    for idx in range(len(json_blk["ids"])):
+                        stream += str(json_blk["ids"][idx]) + '+'
+                    # remove last '+'
+                    stream = stream[:-1]
+                    stream += ','
             # remove last ","
-            if len(stream)>0:
+            if len(stream) > 0:
                 stream = stream[:-1]
     except:
         pass
