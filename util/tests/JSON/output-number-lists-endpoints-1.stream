@@ -1,0 +1,1 @@
+remotehost,host:ENDPOINT_HOST_2,user:root,userenv:rhubi8,server:11+12-20+21-30,client:1-10+31-40,profiler:2,osruntime:server-11+12-20+21-30:chroot,osruntime:profiler-2:chroot,osruntime:client-1-10+31-40:podman

@@ -70,20 +70,7 @@
                         "type": "string"
                     },  
                     "ids": {
-                        "anyOf": [
-                            {
-                                "type": "string",
-                                "pattern": "^[1-9][0-9]*(-[1-9][0-9]*)?$"
-                            },
-                            {
-                                "type": "array",
-                                "minItems": 1,
-                                "items": {
-                                    "type": "string",
-                                    "pattern": "^[1-9][0-9]*(-[1-9][0-9]*)?$"
-                                }
-                            }
-                        ]
+			"$ref": "#/definitions/number-lists"
                     },
                     "mv-params": {
                         "anyOf": [
@@ -112,5 +99,33 @@
     "additionalProperties": false,
     "required": [
         "benchmarks"
-    ]
+    ],
+    "definitions": {
+        "number-lists": {
+            "anyOf": [
+                {
+                    "type": "string",
+                    "pattern": "^(([1-9][0-9]*)(-[1-9][0-9]*)?)(\\+(([1-9][0-9]*)(-[1-9][0-9]*)?))*$"
+                },
+                {
+                    "type": "integer"
+                },
+                {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                        "anyOf": [
+                            {
+                                "type": "string",
+                                "pattern": "^(([1-9][0-9]*)(-[1-9][0-9]*)?)$"
+                            },
+                            {
+                                "type": "integer"
+                            }
+                        ]
+                    }
+                }
+            ]
+        }
+    }
 }

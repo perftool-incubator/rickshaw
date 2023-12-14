@@ -171,15 +171,11 @@ function process_opts() {
                     range=`echo $bench_and_range | awk -F: '{print $2}'`
                     echo "bench: [$bench]"
                     echo "range: [$range]"
-                    if echo $range | grep -q "-"; then
-                        range_start=`echo $range | awk -F- '{print $1}'`
-                        range_end=`echo $range | awk -F- '{print $2}'`
-                        for id in `seq $range_start $range_end`; do
-                            id_to_bench[$id]=$bench
-                        done
-                    else
-                        id_to_bench[$range]=$bench
-                    fi
+                    list=$(range_to_list "$range")
+                    echo "list:  [$list]"
+                    for id in $list; do
+                        id_to_bench[$id]=$bench
+                    done
                 done
                 ;;
             --)

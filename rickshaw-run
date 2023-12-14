@@ -1305,7 +1305,18 @@ sub validate_controller_env() {
 sub assign_bench_ids() {
     foreach my $benchmark_and_id ( split(/,/, $run{'bench-ids'}) ) {
         (my $bench, my $ids) = split(/:/, $benchmark_and_id);
-        my @id_ranges = split(/,/, $ids);
+        my @tmp_id_ranges = split(/,/, $ids);
+        my @id_ranges;
+        foreach my $id_range (@tmp_id_ranges) {
+            if ($id_range =~ /\+/) {
+                my @other_tmp_id_ranges = split(/\+/, $id_range);
+                foreach my $tmp_id_range (@other_tmp_id_ranges) {
+                    push @id_ranges, $tmp_id_range;
+                }
+            } else {
+                push @id_ranges, $id_range;
+            }
+        }
         foreach my $id_range (@id_ranges) {
             if ($id_range =~ /^(\d+)\-(\d+)$/) {
                 for (my $id = $1; $id <= $2; $id++) {
