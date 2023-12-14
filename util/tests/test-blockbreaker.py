@@ -180,3 +180,30 @@ class TestBlockBreaker:
         input_json = blockbreaker.dump_json(benchmark_blk, "mv-params", 0)
         expected_output = self._load_file("output-multibench-k8s-remotehost-mvparams1.json")
         assert input_json == expected_output
+
+    """Test if get_bench_ids returns the correct stream"""
+    @pytest.mark.parametrize("load_json_file",
+                             [ "input-number-lists.json" ], indirect = True)
+    def test_get_bench_ids_benchmarks(self, load_json_file):
+        benchmarks_stream = blockbreaker.get_bench_ids(load_json_file, "benchmarks")
+        expected_stream = self._load_file("output-number-lists-benchmarks.stream")
+
+        assert expected_stream == benchmarks_stream
+
+    """Test if json_to_stream properly processes input-number-lists.json endpoint 0"""
+    @pytest.mark.parametrize("load_json_file",
+                             [ "input-number-lists.json" ], indirect = True)
+    def test_json_to_stream_endpoints_number_lists_0(self, load_json_file):
+        endpoint_0_stream = blockbreaker.json_to_stream(load_json_file, "endpoints", 0)
+        expected_stream = self._load_file("output-number-lists-endpoints-0.stream")
+
+        assert expected_stream == endpoint_0_stream
+
+    """Test if json_to_stream properly processes input-number-lists.json endpoint 1"""
+    @pytest.mark.parametrize("load_json_file",
+                             [ "input-number-lists.json" ], indirect = True)
+    def test_json_to_stream_endpoints_number_lists_1(self, load_json_file):
+        endpoint_1_stream = blockbreaker.json_to_stream(load_json_file, "endpoints", 1)
+        expected_stream = self._load_file("output-number-lists-endpoints-1.stream")
+
+        assert expected_stream == endpoint_1_stream

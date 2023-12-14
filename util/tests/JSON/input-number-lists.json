@@ -1,0 +1,134 @@
+{
+    "benchmarks": [
+	{
+	    "name": "iperf",
+	    "ids": "1-10+21-30",
+	    "mv-params": {
+		"global-options": [
+		    {
+			"name": "required",
+			"params": [
+			    { "arg": "time", "vals": [ "10" ], "role": "client" },
+			    { "arg": "protocol", "vals": [ "tcp" ] },
+			    { "arg": "bitrate", "vals": [ "0" ] },
+			    { "arg": "ifname", "vals": [ "default-route" ], "role": "server" }
+			]
+		    }
+		],
+		"sets": [
+		    {
+			"include": "required",
+			"params": [
+			    { "arg": "length", "vals": [ "256" ] }
+			]
+		    }
+		]
+	    }
+	},
+	{
+	    "name": "uperf",
+	    "ids": [
+		"11-20",
+		"31-39",
+		40
+	    ],
+	    "mv-params": {
+		"global-options": [
+		    {
+			"name": "required",
+			"params": [
+			    { "arg": "protocol", "vals": [ "tcp" ], "role": "client" },
+			    { "arg": "wsize", "vals": [ "256" ], "role": "client" },
+			    { "arg": "rsize", "vals": [ "256" ], "role": "client" },
+			    { "arg": "duration", "vals": [ "10" ], "role": "client" },
+			    { "arg": "ifname", "vals" : [ "default-route" ], "role": "server" }
+			]
+		    }
+		],
+		"sets": [
+		    {
+			"include": "required",
+			"params": [
+			    { "arg": "test-type", "vals": [ "stream" ], "role": "client" },
+			    { "arg": "nthreads", "vals": [ "1" ], "role": "client" }
+			]
+		    }
+		]
+	    }
+	}
+    ],
+    "tags": {
+	"foo": "bar"
+    },
+    "tool-params": [],
+    "endpoints": [
+	{
+	    "type": "remotehost",
+	    "host": "ENDPOINT_HOST_1",
+	    "user": "root",
+	    "userenv": "rhubi9",
+	    "server": "1-10+31-40",
+	    "client": [
+		"11-20",
+		"21-29",
+		30
+	    ],
+	    "profiler": 1,
+	    "config": [
+		{
+		    "targets": [
+			{ "role": "server", "ids": "1-10+31-40" },
+			{ "role": "profiler", "ids": 1 }
+		    ],
+		    "settings": {
+			"osruntime": "chroot"
+		    }
+		},
+		{
+		    "targets": [
+			{ "role": "client", "ids": [ "11-20", "21-29", 30 ] }
+		    ],
+		    "settings": {
+			"osruntime": "podman"
+		    }
+		}
+	    ]
+	},
+	{
+	    "type": "remotehost",
+	    "host": "ENDPOINT_HOST_2",
+	    "user": "root",
+	    "userenv": "rhubi8",
+	    "server": [
+		11,
+		"12-20",
+		"21-30"
+	    ],
+	    "client": "1-10+31-40",
+	    "profiler": 2,
+	    "config": [
+		{
+		    "targets": [
+			{ "role": "server", "ids": [ 11, "12-20", "21-30" ] },
+			{ "role": "profiler", "ids": 2 }
+		    ],
+		    "settings": {
+			"osruntime": "chroot"
+		    }
+		},
+		{
+		    "targets": [
+			{ "role": "client", "ids": "1-10+31-40" }
+		    ],
+		    "settings": {
+			"osruntime": "podman"
+		    }
+		}
+	    ]
+	}
+    ],
+    "run-params": {
+	"num-samples": 1,
+	"test-order": "s"
+    }
+}
