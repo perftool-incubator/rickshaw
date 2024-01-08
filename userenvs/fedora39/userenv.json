@@ -1,0 +1,22 @@
+  "userenv": {
+    "name": "fedora39",
+    "label": "Fedora 39",
+    "origin": {
+      "image": "registry.fedoraproject.org/fedora",
+      "tag": "39"
+    },
+    "properties": {
+      "platform": [
+        {
+          "architecture": "x86_64"
+        },
+        {
+          "architecture": "aarch64"
+        }
+      ],
+      "packages": {
+        "type": "rpm",
+        "manager": "dnf"
+      }
+    }
+  },
