@@ -5,11 +5,11 @@
     }
   },
   "userenv": {
-    "name": "fedora37",
-    "label": "Fedora 37",
+    "name": "fedora39",
+    "label": "Fedora 39",
     "origin": {
       "image": "registry.fedoraproject.org/fedora",
-      "tag": "37"
+      "tag": "39"
     },
     "properties": {
       "platform": [
