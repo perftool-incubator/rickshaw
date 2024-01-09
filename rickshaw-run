@@ -96,6 +96,7 @@ my $workshop_roadblock_opt = "";
 my %utility_configs;
 my %tools_configs;
 my @tools_params;
+my $default_tool_userenv = 'fedora39';
 {
     # Get the absolute path of the rickshaw project directory
     my $pushd_dir = pushd(dirname($0));
@@ -149,6 +150,24 @@ sub usage {
     print "                        'i' = run all iterations of a sample first\n";
     print "                        'r' = run a sample from a random iteration one at a time (ie. chaos mode)\n\n";
     print "--max-rb-attempts       The number of times to try a given roadblock\n";
+}
+
+sub find_index {
+    my $arr_ref = shift;
+    my $field = shift;
+    my $value = shift;
+    printf "looking for index for:\n";
+    print Dumper $arr_ref;
+    printf "field: [%s]\n", $field;
+    printf "value: [%s]\n", $value;
+    for (my $index = 0; $index < scalar @$arr_ref; $index++) {
+        if (exists $$arr_ref[$index]{$field} and $$arr_ref[$index]{$field} eq $value) {
+            printf "found field: [%s] with value: [%s] at index [%d]\n", $field, $value, $index;
+            return $index;
+        }
+    }
+    printf "field: [%s] with value: [%s] not found\n";
+    return -1;
 }
 
 sub find_files {
@@ -1407,6 +1426,10 @@ sub load_tool_params() {
     # Load a tool configuration for every tool the user is asking for
     foreach my $tool_entry (@tools_params) {
         my $tool_name = $$tool_entry{'tool'};
+        if (not exists($$tool_entry{'userenv'})) {
+            $$tool_entry{'userenv'} = $default_tool_userenv;
+        }
+
         my $this_tool_dir = $run{'tools-dir'} . "/" . $tool_name;
         my $this_tool_config = $this_tool_dir . "/rickshaw.json";
         my ($rc, $json_ref) = get_json_file($this_tool_config, $tool_schema_file);
@@ -1427,7 +1450,7 @@ sub load_tool_params() {
 
         # Populate the image_ids with tools
         my %userenv_info = ( 'image' => '' );
-        $image_ids{$tool_name}{'fedora38'} = \%userenv_info;
+        $image_ids{$tool_name}{$$tool_entry{'userenv'}} = \%userenv_info;
     }
 }
 
@@ -2124,12 +2147,28 @@ sub deploy_endpoints() {
         my $type = $endpoints[$i]{'type'};
         my $opts = $endpoints[$i]{'opts'};
         my $label = $endpoints[$i]{'label'};
-        my $userenv = $endpoints[$i]{'userenv'};
+        my $userenv;
         my $endpoint_image_opt = "";
         my $bench_ids_opt = "";
         if (defined $endpoints[$i]{'userenv'}) {
             foreach my $bench_or_tool (keys %image_ids) {
-                $endpoint_image_opt .= "," . $bench_or_tool . "::" . $image_ids{$bench_or_tool}{$endpoints[$i]{'userenv'}}{'image'};
+                # Is this a tool?  Then get the userenv from tools_params
+                my $index = find_index(\@tools_params, "tool", $bench_or_tool);
+                if ($index > -1) {
+                    $userenv = $tools_params[$index]{'userenv'};
+                    print Dumper \$tools_params[$index];
+                    printf "userenv: [%s]\n", $userenv;
+                } else {
+                    $userenv = $endpoints[$i]{'userenv'};
+                }
+                printf "userenv: [%s]\n", $userenv;
+                if (! exists($image_ids{$bench_or_tool}{$userenv}{'image'})) {
+                    printf "ERROR: image for bench or tool: [%s] for userenv: [%s] could not be found in image_ids:\n", $bench_or_tool, $endpoints[$i]{'userenv'};
+                    print Dumper \%image_ids;
+                    exit 1;
+                }
+                #$endpoint_image_opt .= "," . $bench_or_tool . "::" . $image_ids{$bench_or_tool}{$endpoints[$i]{'userenv'}}{'image'};
+                $endpoint_image_opt .= "," . $bench_or_tool . "::" . $image_ids{$bench_or_tool}{$userenv}{'image'}
             }
             $endpoint_image_opt =~ s/^,/ --image=/;
         }

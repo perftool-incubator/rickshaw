@@ -47,6 +47,9 @@
           "yes",
           "no"
         ]
+      },
+      "userenv": {
+        "type": "string"
       }
     },
     "required": [
