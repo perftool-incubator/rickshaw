@@ -1011,7 +1011,11 @@ function process_roadblocks() {
 
     call_endpoint_specific_function "${endpoint_type}" "engine_init" "engine-init-end"
 
-    do_roadblock "engine-init-end" ${engine_script_start_timeout} messages "${msg_file}"
+    if [ "$msg_file" != "" -a -e "$msg_file" ]; then
+        do_roadblock "engine-init-end" ${engine_script_start_timeout} messages $msg_file
+    else
+        do_roadblock "engine-init-end" ${engine_script_start_timeout}
+    fi
     roadblock_rc=$?
     roadblock_exit_on_error ${roadblock_rc}
 

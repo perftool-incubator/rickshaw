@@ -54,6 +54,7 @@ remote_dir=""
 remote_cfg_dir=""
 remote_logs_dir=""
 remote_data_dir=""
+msg_file=""
 
 function endpoint_remotehost_engine_init() {
     local engine_label count
@@ -63,6 +64,11 @@ function endpoint_remotehost_engine_init() {
     # host hypervisor_host userenv os_runtime
 
     echo "Running endpoint_engine_init"
+    echo "engines: [${clients[@]}${servers[@]}${profilers[@]}]"
+    if [ "[${clients[@]}${servers[@]}${profilers[@]}]" == "[]" ]; then
+        echo "No engines, so not creating env-vars.json file(s)"
+        return
+    fi
 
     msg_file="$endpoint_run_dir/env-vars.json"
     count=0
