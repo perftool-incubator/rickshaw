@@ -127,7 +127,9 @@ function endpoint_k8s_test_stop() {
     services=`do_ssh $user@$host kubectl -n $project_name get svc | grep rickshaw | awk '{print $1}'`
     echo "Services to delete:"
     echo $services
-    do_ssh $user@$host kubectl -n $project_name delete svc $services
+    if [[ ! -z "$services" ]]; then
+       do_ssh $user@$host kubectl -n $project_name delete svc $services
+    fi
 }
 
 function endpoint_k8s_test_start() {
