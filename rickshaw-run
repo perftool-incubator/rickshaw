@@ -2472,7 +2472,8 @@ $run{'max-rb-attempts'} += 0;
 $run{'max-sample-failures'} += 0;
 $run{'num-samples'} += 0;
 if (put_json_file($run_file, \%run, $run_schema_file) > 0) {
-    printf "main(): put_json_file() failed for %s\n", $run_file
+    printf "main(): put_json_file() failed for %s\n", $run_file;
+    print Dumper \%run;
 }
 if (defined $abort_test_id) {
     printf "WARNING: test %s was aborted. and all subsequent tests were not attempted.  " .
