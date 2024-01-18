@@ -29,10 +29,20 @@ BEGIN {
         print "then use 'export TOOLBOX_HOME=/path/to/toolbox' so that it can be located.\n";
         exit 1;
     }
+
+    if (!(exists $ENV{'RICKSHAW_HOME'} && -d "$ENV{'RICKSHAW_HOME'}")) {
+        print "This script requires libraries that are provided by the rickshaw project.\n";
+        print "Since this script is part of rickshaw you should already have it.  You can then\n";
+        print "use 'export RICKSHAW_HOME=/path/to/rickshaw so that it can be located.\n";
+        exit 1;
+    }
 }
 use lib "$ENV{'TOOLBOX_HOME'}/perl";
 use toolbox::json;
 use toolbox::logging;
+
+use lib "$ENV{'RICKSHAW_HOME'}";
+use rickshaw::fixup;
 
 $| = 1; # flush stdout
 $toolbox::logging::debug = 0;
@@ -649,7 +659,14 @@ $bench_metric_schema_file = $rickshaw_project_dir . "/schema/bench-metric.json";
 # All ES document creation starts with the rickshaw-result.json which is a product of running
 # rickshaw-run, rickshaw-postprocess-bench, and rickshaw-postprocess-tools
 my $result_file = $run_dir . "/rickshaw-run.json";
-debug_log(sprintf "Opening %s\n", $result_file);
+
+my $fixup_status = rickshaw_run_schema_fixup($result_file, $result_schema_file);
+if ($fixup_status != 0) {
+    exit $fixup_status;
+}
+
+# start processing rickshaw-run.json "for real"
+debug_log(sprintf "Opening %s for normal processing\n", $result_file);
 ($file_rc, my $result_ref) = get_json_file($result_file, $result_schema_file);
 if ($file_rc > 0 or ! defined $result_ref) {
     print "Could not open the rickshaw-run  file\n";

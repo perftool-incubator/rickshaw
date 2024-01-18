@@ -46,10 +46,20 @@ BEGIN {
         print "then use 'export TOOLBOX_HOME=/path/to/toolbox' so that it can be located.\n";
         exit 1;
     }
+
+    if (!(exists $ENV{'RICKSHAW_HOME'} && -d "$ENV{'RICKSHAW_HOME'}")) {
+        print "This script requires libraries that are provided by the rickshaw project.\n";
+        print "Since this script is part of rickshaw you should already have it.  You can then\n";
+        print "use 'export RICKSHAW_HOME=/path/to/rickshaw so that it can be located.\n";
+        exit 1;
+    }
 }
 use lib "$ENV{'TOOLBOX_HOME'}/perl";
 use toolbox::json;
 use toolbox::logging;
+
+use lib "$ENV{'RICKSHAW_HOME'}";
+use rickshaw::fixup;
 
 $toolbox::logging::debug = 0;
 
@@ -145,7 +155,13 @@ my $iter_dir = $run_dir . "/iterations";
 
 # Load the existing rickshaw-run.json
 $run_file = $run_dir . "/rickshaw-run.json";
-debug_log(sprintf "Opening %s\n", $run_file);
+
+my $fixup_status = rickshaw_run_schema_fixup($run_file, $run_schema_file);
+if ($fixup_status != 0) {
+    exit $fixup_status;
+}
+
+debug_log(sprintf "Opening %s for normal processing\n", $run_file);
 ($file_rc, my $run_ref) = get_json_file($run_file, $run_schema_file);
 if ($file_rc > 0 or ! defined $run_ref) {
     print "Could not open the tool config file\n";

@@ -15,9 +15,104 @@
           "required": [
             "version"
           ],
-          "addtionalProperties": false
+          "additionalProperties": false
         }
       }
+    },
+    "base-run-dir": {
+      "type": "string",
+      "pattern": "^.+$"
+    },
+    "bench-dir": {
+      "type": "string",
+      "pattern": "^.+$"
+    },
+    "bench-ids": {
+      "type": "string",
+      "pattern": "^.+$"
+    },
+    "bench-params": {
+      "type": "string",
+      "pattern": "^.+$"
+    },
+    "benchmark": {
+      "type": "string",
+      "pattern": "^.+$"
+    },
+    "dest-image-url": {
+      "type": "string",
+      "pattern": "^.+$"
+    },
+    "engine-dir": {
+      "type": "string",
+      "pattern": "^.+$"
+    },
+    "max-rb-attempts": {
+      "type": "integer"
+    },
+    "max-sample-failures": {
+      "type": "integer"
+    },
+    "num-samples": {
+      "type": "integer"
+    },
+    "packrat-dir": {
+      "type": "string",
+      "pattern": "^.+$"
+    },
+    "reg-auth": {
+      "type": "string",
+      "pattern": "^.+$"
+    },
+    "reg-host": {
+      "type": "string",
+      "pattern": "^.+$"
+    },
+    "reg-host-port": {
+      "type": "string"
+    },
+    "reg-label": {
+      "type": "string",
+      "pattern": "^.+$"
+    },
+    "reg-proj": {
+      "type": "string",
+      "pattern": "^.+$"
+    },
+    "reg-proto": {
+      "type": "string"
+    },
+    "reg-repo": {
+      "type": "string",
+      "pattern": "^.+$"
+    },
+    "reg-tls-verify": {
+      "type": "string",
+      "pattern": "^.+$"
+    },
+    "roadblock-dir": {
+      "type": "string",
+      "pattern": "^.+$"
+    },
+    "source-image-url": {
+      "type": "string",
+      "pattern": "^.+$"
+    },
+    "tool-group": {
+      "type": "string",
+      "pattern": "^.+$"
+    },
+    "tool-params": {
+      "type": "string",
+      "pattern": "^.+$"
+    },
+    "tools-dir": {
+      "type": "string",
+      "pattern": "^.+$"
+    },
+    "workshop-dir": {
+      "type": "string",
+      "pattern": "^.+$"
     },
     "bechmark": {
       "type": "string",
@@ -40,13 +135,24 @@
                 "val": {
                   "type": "string",
                   "pattern": "^.+$"
+                },
+                "benchmark": {
+                  "type": "string",
+                  "pattern": "^.+$"
+                },
+                "role": {
+                  "type": "string",
+                  "enum": [
+                    "client",
+                    "server"
+                  ]
                 }
               },
               "required": [
                 "arg",
                 "val"
               ],
-              "addtionalProperties": false
+              "additionalProperties": false
             },
             "additionalItems": false
           }
@@ -54,7 +160,7 @@
         "required": [
           "params"
         ],
-        "addtionalProperties": false
+        "additionalProperties": false
       },
       "additionalItems": false
     },
@@ -110,7 +216,7 @@
           "name",
           "val"
         ],
-        "addtionalProperties": false
+        "additionalProperties": false
       },
       "additionalItems": false
     },
@@ -128,5 +234,5 @@
     "benchmark",
     "rickshaw-run"
   ],
-  "addtionalProperties": false
+  "additionalProperties": false
 }
