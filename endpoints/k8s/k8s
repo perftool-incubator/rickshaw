@@ -1145,6 +1145,9 @@ function endpoint_k8s_cleanup() {
     delete_pods_rc=0
     delete_namespace_rc=0
 
+    echo "Current pod state:"
+    do_ssh ${user}@${host} kubectl -n ${project_name} get pods -o wide | grep ${pod_prefix}
+
     get_pod_logs $all_pods
     log_rc=${?}
 
