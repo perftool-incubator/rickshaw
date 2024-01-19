@@ -679,6 +679,38 @@ if (defined $result_ref) {
     exit 1;
 }
 
+# add persistent IDs to the result data if it doesn't already exist
+if (exists $result{'iterations'}) {
+    my $update_result_json = 0;
+
+    debug_log(sprintf "Making sure %s has persistent IDs\n", $result_file);
+    for my $iteration (@{ $result{'iterations'} }) {
+        if (! exists $$iteration{'id'}) {
+            $$iteration{'id'} = Data::UUID->new->create_str();
+            debug_log(sprintf "Adding persistent iteration ID %s\n", $$iteration{'id'});
+            $update_result_json++;
+        }
+
+        for my $parameter (@{ $$iteration{'params'} }) {
+            if (! exists $$parameter{'id'}) {
+                $$parameter{'id'} = Data::UUID->new->create_str();
+                debug_log(sprintf "Adding persistent parameter ID %s\n", $$parameter{'id'});
+                $update_result_json++;
+            }
+        }
+    }
+
+    if ($update_result_json > 0) {
+        debug_log(sprintf "Added %d persistent IDs to %s\n", $update_result_json, $result_file);
+        debug_log(sprintf "Overwriting %s after persistent ID update\n", $result_file);
+        my $update_rc = put_json_file($result_file, \%result, $result_schema_file);
+        if ($update_rc > 0) {
+            print "Could not add persistent IDs to rickshaw-run file\n";
+            exit 1;
+        }
+    }
+}
+
 # Find the newest CDM version and verify all the required indices are present
 my $idx_resp_ref = http_request("GET", "localhost:9200", "_cat/indices?format=json", '');
 my $latest_ver;
@@ -830,11 +862,9 @@ if (exists $result{'iterations'}) {
         printf "working on iter num %d\n", $iter_num;
         my $iter_idx = $iter_num - 1;
         $$iter{'samples'} = ();
-        $$iter{'id'} = Data::UUID->new->create_str();
         $$iter{'num'} = $iter_num;
         my $param_idx = 0;
         for my $param (@{ $$iter{'params'} }) {
-            $$param{'id'} = Data::UUID->new->create_str();
             index_es_doc("param", $iter_idx, $param_idx);
             $param_idx++;
         }

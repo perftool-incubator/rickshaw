@@ -123,11 +123,19 @@
       "items": {
         "type": "object",
         "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^.+$"
+          },
           "params": {
             "type": "array",
             "items": {
               "type": "object",
               "properties": {
+                "id": {
+                  "type": "string",
+                  "pattern": "^.+$"
+                },
                 "arg": {
                   "type": "string",
                   "pattern": "^.+$"
