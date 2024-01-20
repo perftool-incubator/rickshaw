@@ -452,12 +452,33 @@ sub index_metrics {
         print "Could not open the metric data  file\n";
         exit 1;
     }
+
+    # add persistent IDs to the metrics if they don't already exist
+    debug_log("Making sure %s has persistent IDs\n", $metr_json_file);
+    my $update_metric_file = 0;
+    for my $this_metr ( @$metr_ref ) {
+        if (! exists $$this_metr{'id'}) {
+            $$this_metr{'id'} = Data::UUID->new->create_str();
+            debug_log(sprintf "Adding persistent metric ID %s\n", $$this_metr{'id'});
+            $update_metric_file++;
+        }
+    }
+    if ($update_metric_file > 0) {
+        debug_log(sprintf "Added %d persistent IDs to %s\n", $update_metric_file, $metr_json_file);
+        debug_log(sprintf "Overwriting %s after persistent ID update\n", $metr_json_file);
+        my $update_rc = put_json_file($metr_json_file, $metr_ref);
+        if ($update_rc != 0) {
+            print "Could not add persistent IDs to %s\n", $metr_json_file;
+            exit 1;
+        }
+    }
+
     my %uuid;
     my %type;
     my %source;
     for my $this_metr ( @$metr_ref ) {
         my $idx = $$this_metr{'idx'};
-        $uuid{$idx} = Data::UUID->new->create_str();
+        $uuid{$idx} = $$this_metr{'id'};
         my %metr_desc_doc = %$base_doc_ref;
         if (defined $$this_metr{'desc'} and defined $$this_metr{'desc'}{'class'} and
             defined $$this_metr{'desc'}{'source'} and defined $$this_metr{'desc'}{'type'}) {
