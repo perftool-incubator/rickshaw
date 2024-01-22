@@ -454,7 +454,7 @@ sub index_metrics {
     }
 
     # add persistent IDs to the metrics if they don't already exist
-    debug_log("Making sure %s has persistent IDs\n", $metr_json_file);
+    debug_log(sprintf "Making sure %s has persistent IDs\n", $metr_json_file);
     my $update_metric_file = 0;
     for my $this_metr ( @$metr_ref ) {
         if (! exists $$this_metr{'id'}) {
