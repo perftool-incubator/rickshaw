@@ -56,6 +56,7 @@ my %cdm = ( 'ver' => '' );
 my $coder = JSON::XS->new->canonical;
 my $result_schema_file;
 my $bench_metric_schema_file;
+my $sample_persistent_ids_schema_file;
 my $file_rc;
 my @queued_docs;
 my @queued_ndjson;
@@ -676,6 +677,7 @@ my $iter_subdir = "iterations";
 my $tool_dir = $run_dir . "/tool-data";
 $result_schema_file = $rickshaw_project_dir . "/schema/run.json";
 $bench_metric_schema_file = $rickshaw_project_dir . "/schema/bench-metric.json";
+$sample_persistent_ids_schema_file = $rickshaw_project_dir . "/schema/sample-persistent-ids.json";
 
 # All ES document creation starts with the rickshaw-result.json which is a product of running
 # rickshaw-run, rickshaw-postprocess-bench, and rickshaw-postprocess-tools
@@ -915,6 +917,29 @@ if (exists $result{'iterations'}) {
                 my $primary_period;
                 my $sample_num;
                 for my $samp_dir (@samp_dirs) {
+                    my $samp_persist_ids_file = $run_dir . "/" . $this_iter_dir . "/" . $samp_dir . "/persistent-ids.json";
+                    my $create_samp_persist_ids_file = 0;
+                    my $update_samp_persist_ids_file = 0;
+                    my $samp_persist_ids_ref;
+                    if (-e $samp_persist_ids_file or -e $samp_persist_ids_file . ".xz") {
+                        debug_log(sprintf "Found existing sample persistent IDs file %s\n", $samp_persist_ids_file);
+                        ($file_rc, $samp_persist_ids_ref) = get_json_file($samp_persist_ids_file, $sample_persistent_ids_schema_file);
+                        if ($file_rc > 0 or ! defined $samp_persist_ids_ref) {
+                            print "Could not open sample persistent IDs file %s\n", $samp_persist_ids_file;
+                            exit 1
+                        }
+                    } else {
+                        debug_log(sprintf "No existing sample persistent IDs file %s found, a new one will be created\n", $samp_persist_ids_file);
+                        $create_samp_persist_ids_file = 1;
+
+                        my %samp_persist_ids;
+                        $samp_persist_ids{'sample-persistent-ids'}{'schema'}{'version'} = "2024.01.20";
+                        $samp_persist_ids{'samples'} = ();
+                        $samp_persist_ids{'periods'} = [];
+
+                        $samp_persist_ids_ref = \%samp_persist_ids;
+                    }
+
                     $samp_dir =~ /^sample-(\d+)$/;
                     $sample_num = $1;
                     my $sample_idx = $sample_num - 1;
@@ -931,7 +956,17 @@ if (exists $result{'iterations'}) {
                         my $this_samp_dir = $this_iter_dir . "/" .  $samp_dir;
                         $$this_sample{'num'} = $sample_num;
                         $$this_sample{'status'} = $samp_status;
-                        $$this_sample{'id'} = Data::UUID->new->create_str();
+
+                        if (exists $$samp_persist_ids_ref{'samples'}{'id'}) {
+                            $$this_sample{'id'} = $$samp_persist_ids_ref{'samples'}{'id'};
+                            debug_log(sprintf "Found existing persistent ID %s for sample %d\n", $$this_sample{'id'}, $$this_sample{'num'});
+                        } else {
+                            $$samp_persist_ids_ref{'samples'}{'id'} = Data::UUID->new->create_str();
+                            $$this_sample{'id'} = $$samp_persist_ids_ref{'samples'}{'id'};
+                            debug_log(sprintf "Creating new persistent ID %s for sample %d\n", $$this_sample{'id'}, $$this_sample{'num'});
+                            $update_samp_persist_ids_file++;
+                        }
+
                         if ($cdm{'ver'} eq "v6dev") {
                             $$this_sample{'path'} = $this_samp_dir;
                         }
@@ -991,7 +1026,23 @@ if (exists $result{'iterations'}) {
                                                     # If there is no match, this is the first time a period of this name
                                                     # has been processed, so add it to $$this_sample{'periods'}[]
                                                     if (! defined $period_idx) {
-                                                        my %period = ( 'name' => $data{'periods'}[$k]{'name'}, 'id' => Data::UUID->new->create_str() );
+                                                        my %period = ( 'name' => $data{'periods'}[$k]{'name'}, 'id' => undef );
+                                                        debug_log(sprintf "Searching for persistent ID for period %s\n", $period{'name'});
+                                                        foreach my $period_id (@{ $$samp_persist_ids_ref{'periods'} }) {
+                                                            if ($period{'name'} eq $$period_id{'name'}) {
+                                                                debug_log(sprintf "Found persistent ID %s for period name %s\n", $$period_id{'id'}, $period{'name'});
+                                                                $period{'id'} = $$period_id{'id'};
+                                                                last;
+                                                            }
+                                                        }
+                                                        if (! defined $period{'id'}) {
+                                                            my %period_id = ( 'name' => $period{'name'}, 'id' => Data::UUID->new->create_str() );
+                                                            debug_log(sprintf "Creating persistent ID %s for period %s\n", $period_id{'id'}, $period_id{'name'});
+                                                            push @{ $$samp_persist_ids_ref{'periods'} }, \%period_id;
+                                                            $period{'id'} = $period_id{'id'};
+                                                            $update_samp_persist_ids_file++;
+                                                        }
+
                                                         if (defined $data{'periods'}[$k]{'begin'}) {
                                                             $period{'begin'} = $data{'periods'}[$k]{'begin'};
                                                         }
@@ -1059,6 +1110,20 @@ if (exists $result{'iterations'}) {
                             queue_es_doc("sample", $run_dir . "/" . $this_samp_dir, $iter_idx, $sample_idx);
                         } #opendir samp
                     } #samp pass
+
+                    if ($create_samp_persist_ids_file == 1 or $update_samp_persist_ids_file > 0) {
+                        if ($create_samp_persist_ids_file == 1) {
+                            debug_log(sprintf "Creating sample persistent IDs file %s\n", $samp_persist_ids_file);
+                        }
+                        debug_log(sprintf "Added %d persistent IDs to %s\n", $update_samp_persist_ids_file, $samp_persist_ids_file);
+                        my $file_rc = put_json_file($samp_persist_ids_file, $samp_persist_ids_ref, $sample_persistent_ids_schema_file);
+                        if ($file_rc > 0) {
+                            printf "Could not save the sample persistent IDs file %s\n", $samp_persist_ids_file;
+                            exit 1;
+                        }
+                    } else {
+                        debug_log(sprintf "No need to save sample persistent IDs file %s\n", $samp_persist_ids_file);
+                    }
                 } #samp_dirs
                 if (scalar @primary_metrics == 0) {
                     printf "ERROR: No primary-metrics were found, exiting.\n";
