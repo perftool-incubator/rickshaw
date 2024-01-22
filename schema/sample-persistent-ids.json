@@ -1,0 +1,70 @@
+{
+  "type": "object",
+  "properties": {
+    "sample-persistent-ids": {
+      "type": "object",
+      "properties": {
+        "schema": {
+          "type": "object",
+          "properties": {
+            "version": {
+              "type": "string",
+              "enum": [
+                "2024.01.20"
+              ]
+            }
+          },
+          "required": [
+            "version"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "schema"
+      ],
+      "additionalProperties": false
+    },
+    "samples": {
+      "type": "object",
+      "properties": {
+        "id":  {
+          "type": "string",
+          "pattern": "^.+$"
+        }
+      },
+      "required": [
+        "id"
+      ],
+     "additionalProperties": false
+    },
+    "periods": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^.+$"
+          },
+          "name": {
+            "type": "string",
+            "pattern": "^.+$"
+          }
+        },
+        "required": [
+          "id",
+          "name"
+        ],
+        "additionalProperties": false
+      },
+      "additionalItems": false
+    },
+    "required": [
+      "sample-persistent-ids",
+      "samples",
+      "periods"
+    ],
+    "additionalProperties": false
+  }
+}
