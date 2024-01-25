@@ -296,5 +296,5 @@ if [ -e /usr/local/bin/engine.py ]; then
     #exec /usr/local/bin/engine-script
     exec /usr/local/bin/engine.py $clean_opts
 else
-    exit_error "Could not find engine-script or engine-script-library"
+    exit_error "Could not find engine.py"
 fi
