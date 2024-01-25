@@ -278,13 +278,18 @@ if [ ! -e ${json_settings_file} ]; then
     exit_error "Could not find rickshaw-settings.json.xz"
 fi
 
+# original code to copy engine scripts from controller to SUT
 #scp_from_controller "$ssh_id_file" "$engine_config_dir/engine-script" /usr/local/bin/
 #scp_from_controller "$ssh_id_file" "$engine_config_dir/engine-script-library" /usr/local/bin/
-scp_from_controller "$ssh_id_file" "$engine_config_dir/roadblocker.py" /usr/local/bin
-scp_from_controller "$ssh_id_file" "$engine_config_dir/roadblock.py" /usr/local/bin
+
+# copy Python engine version from controller to SUT
 scp_from_controller "$ssh_id_file" "$engine_config_dir/engine.py" /usr/local/bin
 
-clean_upts=$(echo "$opts" | sed 's/--$//')
+scp_from_controller "$ssh_id_file" "$engine_config_dir/roadblocker.py" /usr/local/bin
+scp_from_controller "$ssh_id_file" "$engine_config_dir/roadblock.py" /usr/local/bin
+
+# format engine parameters so Python argparse can read them correctly
+clean_opts=$(echo "$opts" | sed 's/--$//')
 
 if [ -e /usr/local/bin/engine.py ]; then
     echo "Execing engine-script:"
