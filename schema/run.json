@@ -152,7 +152,8 @@
                   "type": "string",
                   "enum": [
                     "client",
-                    "server"
+                    "server",
+                    "all"
                   ]
                 }
               },
