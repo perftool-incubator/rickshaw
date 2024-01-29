@@ -348,7 +348,7 @@ sub wait_for_metric_descs {
             exit 1;
         }
         sleep 2;
-        my $resp_ref= http_request("POST", "localhost:9200", "/cdm" . $cdm{'ver'} . "-metric_desc/_doc/_count/",
+        my $resp_ref= http_request("POST", "localhost:9200", "/cdm" . $cdm{'ver'} . "-metric_desc/_count/",
                                 '{"query":{"terms":{"metric_desc.id": ' . $coder->encode(\@terms) . '}}}');
         $found_metric_descs = $$resp_ref{'count'};
         if ($found_metric_descs > $submitted_metric_descs) {
@@ -536,7 +536,7 @@ sub index_metrics {
                 if ($index_or_queue eq "index") {
                     # ES docs type metric_data do not contain other sections run, iteration, sample, period, metric_desc,
                     # as this would take up sunstantially more space for potentially millions of documents.
-                    http_ndjson_request("POST", "localhost:9200", "/cdm" . $cdm{'ver'} . "-metric_data/_doc/_bulk", $ndjson);
+                    http_ndjson_request("POST", "localhost:9200", "/cdm" . $cdm{'ver'} . "-metric_data/_bulk", $ndjson);
                 } else {
                     push(@queued_ndjson, $ndjson);
                 }
@@ -557,7 +557,7 @@ sub index_metrics {
     }
     if ($count > 0) {
         if ($index_or_queue eq "index") {
-            http_ndjson_request("POST", "localhost:9200", "/cdm" . $cdm{'ver'} . "-metric_data/_doc/_bulk", $ndjson);
+            http_ndjson_request("POST", "localhost:9200", "/cdm" . $cdm{'ver'} . "-metric_data/_bulk", $ndjson);
         } else {
             push(@queued_ndjson, $ndjson);
         }
@@ -580,7 +580,7 @@ sub index_metrics {
 
 sub indexed_doc_count {
     my $doc_type = shift;
-    my $resp_ref= http_request("POST", "localhost:9200", "/cdm" . $cdm{'ver'} . "-" . $doc_type . "/_doc/_count/",
+    my $resp_ref= http_request("POST", "localhost:9200", "/cdm" . $cdm{'ver'} . "-" . $doc_type . "/_count/",
                                 '{"query":{"bool":{"filter":[{"term":{"run.id":"' . $result{'id'} . '"}}]}}}');
     debug_log(sprintf "response" . Dumper $resp_ref);
     return $$resp_ref{'count'};
@@ -1153,7 +1153,7 @@ if (scalar @queued_ndjson > 0) {
     } else {
         printf "Going to index %d ndjson metrics\n", scalar @queued_ndjson;
         while (scalar @queued_ndjson > 0) {
-            http_ndjson_request("POST", "localhost:9200", "/cdm" . $cdm{'ver'} . "-metric_data/_doc/_bulk", pop(@queued_ndjson));
+            http_ndjson_request("POST", "localhost:9200", "/cdm" . $cdm{'ver'} . "-metric_data/_bulk", pop(@queued_ndjson));
         }
         printf "Finished indexing ndjson metrics\n";
         print "Waiting for metric data docs be present in ES\n";
