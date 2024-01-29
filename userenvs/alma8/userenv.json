@@ -2,7 +2,7 @@
     "name": "alma8",
     "label": "AlmaLinux 8",
     "origin": {
-      "image": "quay.io/almalinux/almalinux",
+      "image": "quay.io/almalinuxorg/8-base",
       "tag": "8"
     },
     "properties": {
