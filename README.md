@@ -50,7 +50,7 @@ rickshaw --num-samples=2 --tags test,beta,fail --email name@my.domain --name "Jo
   
 Rickshaw will provide the following:
 - Human readable log of the rickshaw execution, including any warning and errors from other projects, tools, or benchmarks it used.
-- A JSON file or Elastic documents describing the benchmark run that was handled by rickshaw
+- A JSON file or OpenSearch documents describing the benchmark run that was handled by rickshaw
 - Raw output from tools and benchmarks used.
 - Post-processed data (optionally) from tools and benchmarks
   - Tools and benchmarks run by rickshaw should have post-processing programs to convert its native output to [CommonDataModel](https://github.com/perftool-incubator/CommonDataModel)
