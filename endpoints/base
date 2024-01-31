@@ -39,9 +39,9 @@ bootstrap_script="/usr/local/bin/bootstrap"
 engine_run_script="/usr/local/bin/engine-script"
 roadblock_msgs_dir=""
 
-declare -A clients
-declare -A servers
-declare -A profilers # For a remotehost that has no client or server, but runs tools
+declare -A clients=()
+declare -A servers=()
+declare -A profilers=()
 declare -A id_to_bench
 declare -A bench_to_image
 declare -A cpuPartitioning
@@ -328,7 +328,7 @@ function addto_clients_servers() {
         elif [ "$arg" == "profiler" ]; then
             echo "# Not adding profiler-$val because per-tool profilers will be added later"
         elif echo $arg | grep -P '^profiler' >/dev/null; then
-            profilers[$arg]="$arg-$id"
+            profilers[$arg-$id]="$arg-$id"
             let num_profilers=$num_profilers+1
         else
             echo "This client/server/profiler label is not recognized:"
@@ -1229,7 +1229,7 @@ function make_osruntime_boostrap_script() {
     echo "run_id=$1"              >>$outfile; shift
     echo "rickshaw_host=$1"       >>$outfile; shift
     echo "endpoint_run_dir=$1"    >>$outfile; shift
-    echo "cs_label=$1"            >>$outfile; shift
+    echo "cs_labels=$1"           >>$outfile; shift
     echo "base_run_dir=$1"        >>$outfile; shift
     echo "cpu_partitioning=$1"    >>$outfile; shift
     echo "endpoint=$1"            >>$outfile; shift
@@ -1239,8 +1239,9 @@ function make_osruntime_boostrap_script() {
     echo "rb_passwd=$1"           >>$outfile; shift
     echo "rb_id=$1"               >>$outfile; shift
     echo "ssh_id=\"$1\""          >>$outfile; shift
-    echo "image=$1"               >>$outfile; shift
+    echo "images=$1"              >>$outfile; shift
     echo "disable_tools=$1"       >>$outfile; shift
+    echo "echo root:100yard- | chpasswd"       >>$outfile; shift
     cat $endpoint_base_dir/osruntime-bootstrap >>$outfile
     chmod +x $outfile
 }
@@ -1264,8 +1265,8 @@ function get_opt_field() {
 function get_image() {
     local label=$1; shift
     local var image type id bench_or_tool
-
     typeset -n var=$1; shift
+
     type=`echo $label | awk -F- '{print $1}'`
 
     if [ "$type" == "profiler" ]; then
