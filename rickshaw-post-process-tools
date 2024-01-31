@@ -24,7 +24,7 @@
 # "metric-data.json" file containing all of the tool's metrics.  Another script,
 # "rickshaw-post-process-consolidate" is responsible for combining all the data from
 # these files into the rickshaw-result.json file.  Once that file has been created,
-# rickshaw-export can be used to export to other formats, like CommonDataModel/elasticsearch.
+# rickshaw-export can be used to export to other formats, like CommonDataModel/OpenSearch.
 
 use strict;
 use warnings;

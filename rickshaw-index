@@ -6,7 +6,7 @@
 #
 # Rickshaw will run a benhcmark for you.  Please see README.md for instructions.
 # rickshaw-index takes the rickshaw-run.json, plus metric data found from benchmark
-# and tools, and indexes that data into elasticsearch.
+# and tools, and indexes that data into OpenSearch.
 
 use strict;
 use warnings;
@@ -129,7 +129,7 @@ sub create_es_doc {
     }
     if ($doc_type eq "tag") {
         if (defined $iter_idx) {
-            # When creating a tag ES doc, the $iter_idx is repurposed for the tag_idx,
+            # When creating a tag OpenSearch doc, the $iter_idx is repurposed for the tag_idx,
             # because a tag is not specific to an iteration
             my $tag_idx = $iter_idx;
             if (exists $result{'tags'}) {
@@ -255,7 +255,7 @@ sub queue_es_doc {
     push(@queued_docs, \%doc_info);
 }
 
-# This is meant to index a specific ES document type with sourcing the info direclty
+# This is meant to index a specific OpenSearch document type with sourcing the info direclty
 # from %result hash (wich is the contents of rickshaw-run.json).  When a tag, param,
 # iteration, sample, or period document is desired, a corresponing index for the respective
 # array(s) in %result is necessary.
@@ -344,7 +344,7 @@ sub wait_for_metric_descs {
     my $found_metric_descs = 0;
     while ($found_metric_descs < $submitted_metric_descs) {
         if ($attempts > $max_attempts) {
-            print "ERROR: could not ensure all ES metric_desc docs are indexed, exiting\n";
+            print "ERROR: could not ensure all OpenSearch metric_desc docs are indexed, exiting\n";
             exit 1;
         }
         sleep 2;
@@ -352,7 +352,7 @@ sub wait_for_metric_descs {
                                 '{"query":{"terms":{"metric_desc.id": ' . $coder->encode(\@terms) . '}}}');
         $found_metric_descs = $$resp_ref{'count'};
         if ($found_metric_descs > $submitted_metric_descs) {
-            printf "Something went wrong, the number of metrics found (%d) in ES is greater than the number submitted (%d)\n", $found_metric_descs, $submitted_metric_descs;
+            printf "Something went wrong, the number of metrics found (%d) in OpenSearch is greater than the number submitted (%d)\n", $found_metric_descs, $submitted_metric_descs;
         }
         $attempts++;
     }
@@ -363,7 +363,7 @@ sub wait_for_metric_descs {
 # with create_es_doc().  Metrics can be indexed from either a benchmark sample directory or a tool
 # directory.
 sub index_metrics {
-    my $index_or_queue = shift; # what action to take, index = submit to ES, queue = enqueue to file for bulk index later
+    my $index_or_queue = shift; # what action to take, index = submit to OpenSearch, queue = enqueue to file for bulk index later
     my $metr_dir = shift; # directory where metric files exist
     my $metr_file = shift; # metric filename without .json or .csv
     my $cstype = shift;
@@ -534,7 +534,7 @@ sub index_metrics {
             $count++;
             if ($count >= 1000) {
                 if ($index_or_queue eq "index") {
-                    # ES docs type metric_data do not contain other sections run, iteration, sample, period, metric_desc,
+                    # OpenSearch docs type metric_data do not contain other sections run, iteration, sample, period, metric_desc,
                     # as this would take up sunstantially more space for potentially millions of documents.
                     http_ndjson_request("POST", "localhost:9200", "/cdm" . $cdm{'ver'} . "-metric_data/_bulk", $ndjson);
                 } else {
@@ -564,7 +564,7 @@ sub index_metrics {
     }
     close $metr_csv_fh;
 
-    # Verify these (and only these) specific metric docs are queryable in ES
+    # Verify these (and only these) specific metric docs are queryable in OpenSearch
     if ($index_or_queue eq "index") {
         wait_for_metric_descs(values %uuid);
     } else {
@@ -592,10 +592,10 @@ sub wait_for_docs {
     my $max_attempts = 20;
     while (scalar @doctypes > 0) {
         if ($attempts > $max_attempts) {
-            print "ERROR: could not ensure all ES docs are indexed, exiting\n";
+            print "ERROR: could not ensure all OpenSearch docs are indexed, exiting\n";
             exit 1;
         }
-        printf "wait_for_docs(): Confirming all non-metric documents are in elasticsearch (attempt #%d of %d)\n", $attempts, $max_attempts;
+        printf "wait_for_docs(): Confirming all non-metric documents are in OpenSearch (attempt #%d of %d)\n", $attempts, $max_attempts;
         my @these_doctypes = @doctypes;
         foreach my $doctype (@these_doctypes) {
             if ($num_docs_submitted{$doctype} == 0) {
@@ -679,7 +679,7 @@ $result_schema_file = $rickshaw_project_dir . "/schema/run.json";
 $bench_metric_schema_file = $rickshaw_project_dir . "/schema/bench-metric.json";
 $sample_persistent_ids_schema_file = $rickshaw_project_dir . "/schema/sample-persistent-ids.json";
 
-# All ES document creation starts with the rickshaw-result.json which is a product of running
+# All OpenSearch document creation starts with the rickshaw-result.json which is a product of running
 # rickshaw-run, rickshaw-postprocess-bench, and rickshaw-postprocess-tools
 my $result_file = $run_dir . "/rickshaw-run.json";
 
@@ -755,13 +755,13 @@ if (ref $idx_resp_ref eq ref [] ) {
     printf "sorted_vers: @sorted_vers \n";
     $latest_ver = $sorted_vers[0];
     if (defined $latest_ver) {
-        printf "Latest CDM version found in local ES instance is %s\n", $latest_ver;
+        printf "Latest CDM version found in local OpenSearch instance is %s\n", $latest_ver;
         foreach my $req_name ("run", "iteration", "tag", "param", "sample", "period", "metric_desc", "metric_data") {
             my $complete_index_name = "cdm" . $latest_ver . "-" . $req_name;
             if (grep(/^$complete_index_name$/, @fullnames)) {
                 printf "Found index %s\n", $req_name;
             } else {
-                printf "Could not find index [%s] in Elastic\n", $complete_index_name;
+                printf "Could not find index [%s] in OpenSearch\n", $complete_index_name;
                 printf "The following indices are present:\n";
                 foreach my $index (@all_indices) {
                     printf "    [%s]\n", $index;
@@ -771,29 +771,29 @@ if (ref $idx_resp_ref eq ref [] ) {
             }
         }
     } else {
-        print "Could not find any CDM versions in ES\n";
+        print "Could not find any CDM versions in OpenSearch\n";
         print "Query response:\n";
         print Dumper $idx_resp_ref;
         exit 1;
     }
 } else {
-    printf "Could not find any indices in ES\n";
+    printf "Could not find any indices in OpenSearch\n";
     print "Query response:\n";
     print Dumper $idx_resp_ref;
     exit 1;
 }
 
 $cdm{'ver'} = $latest_ver;
-printf "Latest CDM version found in local ES instance is %s\n", $latest_ver;
+printf "Latest CDM version found in local OpenSearch instance is %s\n", $latest_ver;
 if (not grep(/^$cdm{'ver'}$/, @suported_cdm_vers)) {
-    printf "The version of CDM used in ES [%s] is not one that is supported by rickshaw-index: [%s]\n",
+    printf "The version of CDM used in OpenSearch [%s] is not one that is supported by rickshaw-index: [%s]\n",
            $cdm{'ver'}, join(" ",  @suported_cdm_vers);
     printf "Either use an older version of CDM or (ideally) find a newer version of rickshaw which supports %s\n", $cdm{'ver'};
 }
-printf "Exporting from %s to elasticsearch documents and POSTing to localhost:9200\n", $result_file;
+printf "Exporting from %s to OpenSearch documents and POSTing to localhost:9200\n", $result_file;
 
 if (exists $result{'run-id'} and defined $result{'run-id'}) {
-    # Convert to 'id', which matches ES docs
+    # Convert to 'id', which matches OpenSearch docs
     $result{'id'} = $result{'run-id'};
     delete $result{'run-id'};
 }
@@ -807,8 +807,8 @@ $result{'source'} = $host . "/" . $base_run_dir;
 printf "Run ID: %s\n", $result{'id'};
 
 if (indexed_doc_count("run") > 0) {
-    printf "Run ID %s already exists, so will not POST to elasticsearch\n", $result{'id'};
-    print "Either delete existing run from ES or regenerate rickshaw-result.json\n";
+    printf "Run ID %s already exists, so will not POST to OpenSearch\n", $result{'id'};
+    print "Either delete existing run from OpenSearch or regenerate rickshaw-result.json\n";
     exit 1;
 }
 
@@ -1156,7 +1156,7 @@ if (scalar @queued_ndjson > 0) {
             http_ndjson_request("POST", "localhost:9200", "/cdm" . $cdm{'ver'} . "-metric_data/_bulk", pop(@queued_ndjson));
         }
         printf "Finished indexing ndjson metrics\n";
-        print "Waiting for metric data docs be present in ES\n";
+        print "Waiting for metric data docs to be present in OpenSearch\n";
         wait_for_metric_descs(@queued_terms);
         exit 0;
     }
@@ -1188,6 +1188,6 @@ print "Indexing queued docs\n";
 index_queued_es_docs();
 print "Writing queued docs\n";
 write_queued_es_docs();
-print "Waiting for docs be present in ES\n";
+print "Waiting for docs to be present in OpenSearch\n";
 wait_for_docs;
-print "Indexing to ES complete\n";
+print "Indexing to OpenSearch complete\n";
