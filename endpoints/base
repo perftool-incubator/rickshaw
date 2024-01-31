@@ -413,8 +413,6 @@ function init_common_dirs() {
     run_dir="${base_run_dir}/run"
     engine_logs_dir="${run_dir}/engine/logs"
     endpoint_run_dir="${run_dir}/endpoint/${endpoint_label}"
-    #bootstrap_script="/usr/local/bin/bootstrap"
-    #engine_run_script="/usr/local/bin/engine-script"
     roadblock_msgs_dir="${endpoint_run_dir}/roadblock-msgs"
 
     if [ "$do_validate" != 1 ]; then

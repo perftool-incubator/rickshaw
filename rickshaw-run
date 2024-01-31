@@ -156,10 +156,6 @@ sub find_index {
     my $arr_ref = shift;
     my $field = shift;
     my $value = shift;
-    #printf "looking for index for:\n";
-    #print Dumper $arr_ref;
-    #printf "field: [%s]\n", $field;
-    #printf "value: [%s]\n", $value;
     for (my $index = 0; $index < scalar @$arr_ref; $index++) {
         if (exists $$arr_ref[$index]{$field} and $$arr_ref[$index]{$field} eq $value) {
             #printf "found field: [%s] with value: [%s] at index [%d]\n", $field, $value, $index;
@@ -922,7 +918,7 @@ sub source_container_image {
             $skip_update = "true";
         } else {
             $req_arg = shift(@requirements);
-            $skip_update = "true";
+            $skip_update = "false";
         }
         my $tag = calc_image_md5($workshop_base_cmd, $userenv_arg, $req_arg, $container_arch);
         my %args = ( 'userenv' => $userenv_arg, 'reqs' => $req_arg, 'tag' => $tag, 'skip-update' => $skip_update );
