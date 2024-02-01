@@ -654,6 +654,7 @@ function build_pod_spec() {
     local json="$dir/$name.json"
     local label=`echo $name | awk -F- '{print $1}'`
     local id=`echo $name | awk -F- '{print $2}'`
+    local this_image=""
 
     if [ "$type" == "cs" ]; then
         set_osruntime_numanode_cpupart $name
@@ -715,12 +716,11 @@ function build_pod_spec() {
     echo "    \"containers\": [" >>$json
     echo "      {" >>$json
     echo "        \"name\": \"$name\"," >>$json
-    local image=""
-    get_image_name "$label-$id" image
-    if [ -z "$image" ]; then
+    get_image_name "$label-$id" this_image
+    if [ -z "$this_image" ]; then
         abort_error "Could not find image for $name" endpoint-deploy-begin
     fi
-    echo "        \"image\": \"$image\"," >>$json
+    echo "        \"image\": \"$this_image\"," >>$json
     echo "        \"imagePullPolicy\": \"Always\"," >>$json
     echo "        \"env\": [" >>$json
     if [ "$type" == "cs" ]; then
