@@ -915,10 +915,10 @@ sub source_container_image {
         if ($count == 0) {
             $userenv_arg = " --userenv " . $rickshaw_project_dir . "/userenvs/" . $userenv . ".json";
             $req_arg = "";
-            $skip_update = "true";
+            $skip_update = "false";
         } else {
             $req_arg = shift(@requirements);
-            $skip_update = "false";
+            $skip_update = "true";
         }
         my $tag = calc_image_md5($workshop_base_cmd, $userenv_arg, $req_arg, $container_arch);
         my %args = ( 'userenv' => $userenv_arg, 'reqs' => $req_arg, 'tag' => $tag, 'skip-update' => $skip_update );
