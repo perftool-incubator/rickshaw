@@ -1260,7 +1260,7 @@ function get_opt_field() {
     echo "${input}" | cut -d ':' -f ${field}
 }
 
-function get_image() {
+function get_image_name() {
     local label=$1; shift
     local var image type id bench_or_tool
     typeset -n var=$1; shift

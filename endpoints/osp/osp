@@ -333,7 +333,7 @@ function create_servers() {
         engine_list="$hypervisor_profilers"
         echo "engine_list: $engine_list"
         for this_engine in $engine_list; do
-            get_image $this_engine this_image
+            get_image_name $this_engine this_image
             if [ -z "$this_image" ]; then
                 abort_error "Could not find image for $this_engine" endpoint-deploy-begin
             fi
@@ -401,7 +401,7 @@ function create_server() {
         engine_list="$cs_label $these_profilers"
         echo "engine_list: $engine_list"
         for this_engine in $engine_list; do
-            get_image $this_engine this_image
+            get_image_name $this_engine this_image
             if [ -z "$this_image" ]; then
                 abort_error "Could not find image for $this_engine" endpoint-deploy-begin
             fi

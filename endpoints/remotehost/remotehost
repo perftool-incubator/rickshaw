@@ -442,8 +442,6 @@ function add_profiler_engines() {
             echo "tool: $tool"
             engine_type=profiler-$endpoint_label-$tool
             engine_label=$engine_type-1
-            #get_image $this_cs_type $this_cs_id this_image
-            #exec_pod $engine_label $tool
             new_remotehost_followers+=" $engine_label"
             addto_clients_servers "$engine_type" "1"
         done
@@ -577,7 +575,7 @@ function launch_osruntimes() {
 
     for engine_label in ${clients[@]} ${servers[@]} ${profilers[@]}; do
         container_name="${run_id}_${engine_label}"
-        get_image $engine_label this_image
+        get_image_name $engine_label this_image
         check_existing_container $container_name
         set_osruntime_numanode_cpupart $engine_label
         echo "About to exec $engine_label via $os_runtime"
