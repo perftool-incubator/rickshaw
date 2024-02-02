@@ -20,6 +20,7 @@ do_validate="0"
 num_clients=0
 num_servers=0
 num_profilers=0
+new_followers=""
 disable_tools=0
 abort=0
 userenv=""
@@ -49,6 +50,7 @@ declare -A osruntime
 cpuPartitioning[default]=0
 declare -A numaNode
 numaNode[default]=-1
+profiler_count=0
 
 
 function range_to_list() {
@@ -1281,4 +1283,32 @@ function get_image_name() {
     var=$image
 }
 
+function add_profiler_engines() {
+    local var new_profilers tool tools scope
+    scope=$1; shift # client-<n>, server-<n>, worker, master, compute
+    typeset -n var=$1; shift
+    new_profilers=""
 
+    # globals used:
+    # disable_tools config_dir endpoint_label new_followers
+
+    if [ "$disable_tools" != "1" ]; then
+        if echo $scope | grep -q -P '^(client|server)-\d+$'; then
+            # convert a client-1 to client/1 to match tool-cmds dir heirarchy
+            scope=`echo $scope | sed -e 'sX-X/X'`
+        fi
+        tools=`awk -F: '{print $1}' $config_dir/tool-cmds/$scope/start`
+        let profiler_count=$profiler_count+1
+        for tool in $tools; do
+            echo "tool: $tool"
+            engine_type=profiler-$endpoint_label-$tool
+            engine_label=$engine_type-$profiler_count
+            # new RB followers, cumultive, over multiple calls add_profiler_engines()
+            new_followers+=" $engine_label"
+            # new profiler engines, only for this call add_profiler_engines()
+            new_profilers+=" $engine_label"
+            addto_clients_servers "$engine_type" "$profiler_count"
+        done
+    fi
+    var="$new_profilers"
+}

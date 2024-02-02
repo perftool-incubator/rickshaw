@@ -365,7 +365,7 @@ function endpoint_k8s_test_start() {
             else
                 echo "Benchmark-server-provided IP $ip does not match pod IP $pod_ip, so not creating a k8s-service or k8s-endpoint"
                 svc_ip=$ip
-            fi 
+            fi
             # Now we can consruct a message to be sent to the client about the IP and ports for the server
             echo -n '{"recipient":{"type":"follower","id":"client-' >"$tx_msgs_dir/service-ip-$name.json"
             echo $name | awk -F- '{print $2}' | tr -d "\n" >>"$tx_msgs_dir/service-ip-$name.json"
@@ -677,7 +677,7 @@ function build_pod_spec() {
     fi
     echo "  }," >>$json
     echo "  \"spec\": {" >>$json
-    # Support override of runtimeCLassName
+    # Support override of runtimeClassName
     # This can be used for Perf Addon Profiles
     if [ "$type" == "cs" -a ! -z "$runtimeClassName" ]; then
         echo "    \"runtimeClassName\": \"$runtimeClassName\"," >>$json
@@ -714,191 +714,211 @@ function build_pod_spec() {
         echo "    \"hostIPC\": true," >>$json
     fi
     echo "    \"containers\": [" >>$json
-    echo "      {" >>$json
-    echo "        \"name\": \"$name\"," >>$json
-    get_image_name "$label-$id" this_image
-    if [ -z "$this_image" ]; then
-        abort_error "Could not find image for $name" endpoint-deploy-begin
+
+    new_profiler_engines=""
+    if [ "$cs_type" == "worker" -o "$cs_type" = "master" ]; then
+        containers=""
+    else
+        containers="$name"
     fi
-    echo "        \"image\": \"$this_image\"," >>$json
-    echo "        \"imagePullPolicy\": \"Always\"," >>$json
-    echo "        \"env\": [" >>$json
-    if [ "$type" == "cs" ]; then
-        echo "          {" >>$json
-        echo "            \"name\": \"cpu_partitioning\"," >>$json
-        set +u
-        if [ ! -z "${cpuPartitioning[$name]}" ]; then
-            echo -e "            \"value\": \"${cpuPartitioning[$name]}\"" >>$json
-        elif [ ! -z "${cpuPartitioning[default]}" ]; then
-            echo -e "            \"value\": \"${cpuPartitioning[default]}\"" >>$json
-        else
-            echo -e "            \"value\": \"0\"" >>$json
+    add_profiler_engines $name new_profiler_engines
+    containers+=" $new_profiler_engines"
+    container_count=1
+
+    for $this_container in $containers; do
+
+        if [ "$container_count" -gt 1 ]; then
+            echo "," >>$json
         fi
-        set -u
+        echo "      {" >>$json
+        echo "        \"name\": \"$this_container\"," >>$json
+
+        get_image_name "$this_container" this_image
+        if [ -z "$this_image" ]; then
+            abort_error "Could not find image for $name" endpoint-deploy-begin
+        fi
+
+        echo "        \"image\": \"$this_image\"," >>$json
+        echo "        \"imagePullPolicy\": \"Always\"," >>$json
+        echo "        \"env\": [" >>$json
+        if [ "$type" == "cs" ]; then
+            echo "          {" >>$json
+            echo "            \"name\": \"cpu_partitioning\"," >>$json
+            set +u
+            if [ ! -z "${cpuPartitioning[$name]}" ]; then
+                echo -e "            \"value\": \"${cpuPartitioning[$name]}\"" >>$json
+            elif [ ! -z "${cpuPartitioning[default]}" ]; then
+                echo -e "            \"value\": \"${cpuPartitioning[default]}\"" >>$json
+            else
+                echo -e "            \"value\": \"0\"" >>$json
+            fi
+            set -u
+            echo "          }," >>$json
+        fi
+        echo "          {" >>$json
+        echo "            \"name\": \"rickshaw_host\"," >>$json
+        echo "            \"value\": \"$controller_ipaddr\"" >>$json
         echo "          }," >>$json
-    fi
-    echo "          {" >>$json
-    echo "            \"name\": \"rickshaw_host\"," >>$json
-    echo "            \"value\": \"$controller_ipaddr\"" >>$json
-    echo "          }," >>$json
-    echo "          {" >>$json
-    echo "            \"name\": \"base_run_dir\"," >>$json
-    echo "            \"value\": \"$base_run_dir\"" >>$json
-    echo "          }," >>$json
-    echo "          {" >>$json
-    echo "            \"name\": \"cs_label\"," >>$json
-    echo "            \"value\": \"$name\"" >>$json
-    echo "          }," >>$json
-    echo "          {" >>$json
-    echo "            \"name\": \"endpoint_run_dir\"," >>$json
-    echo "            \"value\": \"/endpoint-run\"" >>$json
-    echo "          }," >>$json
-    echo "          {" >>$json
-    echo "            \"name\": \"endpoint\"," >>$json
-    echo "            \"value\": \"k8s\"" >>$json
-    echo "          }," >>$json
-    echo "          {" >>$json
-    echo "            \"name\": \"osruntime\"," >>$json
-    echo "            \"value\": \"$os_runtime\"" >>$json
-    echo "          }," >>$json
-    echo "          {" >>$json
-    echo "            \"name\": \"roadblock_passwd\"," >>$json
-    echo "            \"value\": \"flubber\"" >>$json
-    echo "          }," >>$json
-    echo "          {" >>$json
-    echo "            \"name\": \"roadblock_id\"," >>$json
-    echo "            \"value\": \"$rb_id\"" >>$json
-    echo "          }," >>$json
-    echo "          {" >>$json
-    echo "            \"name\": \"max_sample_failures\"," >>$json
-    echo "            \"value\": \"$max_sample_failures\"" >>$json
-    echo "          }," >>$json
-    echo "          {" >>$json
-    echo "            \"name\": \"max_rb_attempts\"," >>$json
-    echo "            \"value\": \"$max_rb_attempts\"" >>$json
-    echo "          }," >>$json
-    echo "          {" >>$json
-    echo "            \"name\": \"engine_script_start_timeout\"," >>$json
-    echo "            \"value\": \"$engine_script_start_timeout\"" >>$json
-    echo "          }," >>$json
-    echo "          {" >>$json
-    echo "            \"name\": \"ssh_id\"," >>$json
-    printf "            \"value\": \"" >>$json
-    sed -z 's/\n/\\n/g' $config_dir/rickshaw_id.rsa >>$json
-    echo "\"" >>$json
-    echo "      }" >>$json
-    let count=$count+1
-    echo "    ]" >>$json
-    if [ "$type" == "worker" -o "$type" == "master" ]; then
-        echo '       ,"volumeMounts": [' >>$json
-        echo '          { "mountPath": "/var/run",' >>$json
-        echo '            "name": "hostfs-run"' >>$json
-        echo '          },' >>$json
-        echo '          { "mountPath": "/lib/firmware",' >>$json
-        echo '            "name": "hostfs-firmware"' >>$json
-        echo '          },' >>$json
-        echo '          { "mountPath": "/lib/modules",' >>$json
-        echo '            "name": "hostfs-modules"' >>$json
-        echo '          }' >>$json
-        echo "        ]" >>$json
-    fi
-    # If user provided volumeMounts.json, use it. It not, and "hugepage", do implicitly
-    if [ "$type" == "cs" ]; then
-        set +u
-        if [ ! -z "${volumeMounts[$name]}" ]; then
-            echo -e ",${volumeMounts[$name]}" >>$json
-        else
+        echo "          {" >>$json
+        echo "            \"name\": \"base_run_dir\"," >>$json
+        echo "            \"value\": \"$base_run_dir\"" >>$json
+        echo "          }," >>$json
+        echo "          {" >>$json
+        echo "            \"name\": \"cs_label\"," >>$json
+        echo "            \"value\": \"$name\"" >>$json
+        echo "          }," >>$json
+        echo "          {" >>$json
+        echo "            \"name\": \"endpoint_run_dir\"," >>$json
+        echo "            \"value\": \"/endpoint-run\"" >>$json
+        echo "          }," >>$json
+        echo "          {" >>$json
+        echo "            \"name\": \"endpoint\"," >>$json
+        echo "            \"value\": \"k8s\"" >>$json
+        echo "          }," >>$json
+        echo "          {" >>$json
+        echo "            \"name\": \"osruntime\"," >>$json
+        echo "            \"value\": \"$os_runtime\"" >>$json
+        echo "          }," >>$json
+        echo "          {" >>$json
+        echo "            \"name\": \"roadblock_passwd\"," >>$json
+        echo "            \"value\": \"flubber\"" >>$json
+        echo "          }," >>$json
+        echo "          {" >>$json
+        echo "            \"name\": \"roadblock_id\"," >>$json
+        echo "            \"value\": \"$rb_id\"" >>$json
+        echo "          }," >>$json
+        echo "          {" >>$json
+        echo "            \"name\": \"max_sample_failures\"," >>$json
+        echo "            \"value\": \"$max_sample_failures\"" >>$json
+        echo "          }," >>$json
+        echo "          {" >>$json
+        echo "            \"name\": \"max_rb_attempts\"," >>$json
+        echo "            \"value\": \"$max_rb_attempts\"" >>$json
+        echo "          }," >>$json
+        echo "          {" >>$json
+        echo "            \"name\": \"engine_script_start_timeout\"," >>$json
+        echo "            \"value\": \"$engine_script_start_timeout\"" >>$json
+        echo "          }," >>$json
+        echo "          {" >>$json
+        echo "            \"name\": \"ssh_id\"," >>$json
+        printf "            \"value\": \"" >>$json
+        sed -z 's/\n/\\n/g' $config_dir/rickshaw_id.rsa >>$json
+        echo "\"" >>$json
+        echo "      }" >>$json
+        let count=$count+1
+        echo "    ]" >>$json
+        if [ "$type" == "worker" -o "$type" == "master" ]; then
             echo '       ,"volumeMounts": [' >>$json
+            echo '          { "mountPath": "/var/run",' >>$json
+            echo '            "name": "hostfs-run"' >>$json
+            echo '          },' >>$json
             echo '          { "mountPath": "/lib/firmware",' >>$json
             echo '            "name": "hostfs-firmware"' >>$json
+            echo '          },' >>$json
+            echo '          { "mountPath": "/lib/modules",' >>$json
+            echo '            "name": "hostfs-modules"' >>$json
             echo '          }' >>$json
-            if [ "$hugepage" == "1" ]; then
-                echo '          ,{ "mountPath": "/dev/hugepages",' >>$json
-                echo '            "name": "hugepage"' >>$json
-                echo '          }' >>$json
-            fi
             echo "        ]" >>$json
         fi
-        set -u
-    fi
-    if [ "$type" == "worker" -o "$type" == "master" ]; then
-        echo "        ,\"securityContext\": {" >>$json
-        echo "          \"privileged\": true" >>$json
-        echo "        }" >>$json 
-    else
-        set +u
-        if [ ! -z "${securityContext[$name]}" ]; then
-            echo -e ",${securityContext[$name]}" >>$json
-        elif [ ! -z "${securityContext[default]}" ]; then
-            echo -e ",${securityContext[default]}" >>$json
+        # If user provided volumeMounts.json, use it. It not, and "hugepage", do implicitly
+        if [ "$type" == "cs" ]; then
+            set +u
+            if [ ! -z "${volumeMounts[$name]}" ]; then
+                echo -e ",${volumeMounts[$name]}" >>$json
+            else
+                echo '       ,"volumeMounts": [' >>$json
+                echo '          { "mountPath": "/lib/firmware",' >>$json
+                echo '            "name": "hostfs-firmware"' >>$json
+                echo '          }' >>$json
+                if [ "$hugepage" == "1" ]; then
+                    echo '          ,{ "mountPath": "/dev/hugepages",' >>$json
+                    echo '            "name": "hugepage"' >>$json
+                    echo '          }' >>$json
+                fi
+                echo "        ]" >>$json
+            fi
+            set -u
         fi
-        if [ ! -z "${resources[$name]}" ]; then
-            echo -e ",${resources[$name]}" >>$json
-        elif [ ! -z "${resources[default]}" ]; then
-            echo -e ",${resources[default]}" >>$json
-        fi
-        set -u
-    fi
-    echo "      }" >>$json
-    echo "    ]" >>$json
-
-    if [ "$type" == "worker" -o "$type" == "master" ]; then
-        echo '       ,"volumes": [' >>$json
-        echo '          { "name": "hostfs-run",' >>$json
-        echo '            "hostPath": {' >>$json
-        echo '              "path": "/var/run",' >>$json
-        echo '              "type": "Directory"' >>$json
-        echo '            }' >>$json
-        echo '          },' >>$json
-        echo '          { "name": "hostfs-firmware",' >>$json
-        echo '            "hostPath": {' >>$json
-        echo '              "path": "/lib/firmware",' >>$json
-        echo '              "type": "Directory"' >>$json
-        echo '            }' >>$json
-        echo '          },' >>$json
-        echo '          { "name": "hostfs-modules",' >>$json
-        echo '            "hostPath": {' >>$json
-        echo '              "path": "/lib/modules",' >>$json
-        echo '              "type": "Directory"' >>$json
-        echo '            }' >>$json
-        echo '          }' >>$json
-        echo '        ]' >>$json
-    fi
-    # If user provided volumes.json, use it. It not, and "hugepage", do implicitly
-    if [ "$type" == "cs" ]; then
-        set +u
-        if [ ! -z "${volumes[$name]}" ]; then
-            echo -e ",${volumes[$name]}" >>$json
+        if [ "$type" == "worker" -o "$type" == "master" ]; then
+            echo "        ,\"securityContext\": {" >>$json
+            echo "          \"privileged\": true" >>$json
+            echo "        }" >>$json
         else
+            set +u
+            if [ ! -z "${securityContext[$name]}" ]; then
+                echo -e ",${securityContext[$name]}" >>$json
+            elif [ ! -z "${securityContext[default]}" ]; then
+                echo -e ",${securityContext[default]}" >>$json
+            fi
+            if [ ! -z "${resources[$name]}" ]; then
+                echo -e ",${resources[$name]}" >>$json
+            elif [ ! -z "${resources[default]}" ]; then
+                echo -e ",${resources[default]}" >>$json
+            fi
+            set -u
+        fi
+        echo "      }" >>$json
+        echo "    ]" >>$json
+
+        if [ "$type" == "worker" -o "$type" == "master" ]; then
             echo '       ,"volumes": [' >>$json
+            echo '          { "name": "hostfs-run",' >>$json
+            echo '            "hostPath": {' >>$json
+            echo '              "path": "/var/run",' >>$json
+            echo '              "type": "Directory"' >>$json
+            echo '            }' >>$json
+            echo '          },' >>$json
             echo '          { "name": "hostfs-firmware",' >>$json
             echo '            "hostPath": {' >>$json
             echo '              "path": "/lib/firmware",' >>$json
             echo '              "type": "Directory"' >>$json
             echo '            }' >>$json
+            echo '          },' >>$json
+            echo '          { "name": "hostfs-modules",' >>$json
+            echo '            "hostPath": {' >>$json
+            echo '              "path": "/lib/modules",' >>$json
+            echo '              "type": "Directory"' >>$json
+            echo '            }' >>$json
             echo '          }' >>$json
-            if [ "$hugepage" == "1" ]; then
-                echo '          ,{ "name": "hugepage",' >>$json
-                echo '            "emptyDir": {' >>$json
-                echo '              "medium": "HugePages"' >>$json
-                echo '            }' >>$json
-                echo '          }' >>$json
-            fi
             echo '        ]' >>$json
         fi
-        set -u
-    fi
-    # If user provides pod securityContext 
-    if [ "$type" == "cs" ]; then
-        set +u
-        if [ ! -z "${PsecurityContext[$name]}" ]; then
-            echo -e ",${PsecurityContext[$name]}" >>$json
-        elif [ ! -z "${PsecurityContext[default]}" ]; then
-            echo -e ",${PsecurityContext[default]}" >>$json
+        # If user provided volumes.json, use it. It not, and "hugepage", do implicitly
+        if [ "$type" == "cs" ]; then
+            set +u
+            if [ ! -z "${volumes[$name]}" ]; then
+                echo -e ",${volumes[$name]}" >>$json
+            else
+                echo '       ,"volumes": [' >>$json
+                echo '          { "name": "hostfs-firmware",' >>$json
+                echo '            "hostPath": {' >>$json
+                echo '              "path": "/lib/firmware",' >>$json
+                echo '              "type": "Directory"' >>$json
+                echo '            }' >>$json
+                echo '          }' >>$json
+                if [ "$hugepage" == "1" ]; then
+                    echo '          ,{ "name": "hugepage",' >>$json
+                    echo '            "emptyDir": {' >>$json
+                    echo '              "medium": "HugePages"' >>$json
+                    echo '            }' >>$json
+                    echo '          }' >>$json
+                fi
+                echo '        ]' >>$json
+            fi
+            set -u
         fi
-    fi
-    echo "  }" >>$json
-    echo "}" >>$json
+        # If user provides pod securityContext
+        if [ "$type" == "cs" ]; then
+            set +u
+            if [ ! -z "${PsecurityContext[$name]}" ]; then
+                echo -e ",${PsecurityContext[$name]}" >>$json
+            elif [ ! -z "${PsecurityContext[default]}" ]; then
+                echo -e ",${PsecurityContext[default]}" >>$json
+            fi
+        fi
+        echo "  }" >>$json
+        echo "}" >>$json
+        let container_count=$container_count+1
+    done
     cleanup_json "${json}"
 }
 
@@ -1203,7 +1223,7 @@ new_k8s_followers=""
 
 # Split up the cs pods into two groups, ones which
 # requested cpu-part, and the ones that did not.
-# This is necessary because cpu-part pods need to be 
+# This is necessary because cpu-part pods need to be
 # created first.
 for this_pod in ${clients[@]} ${servers[@]}; do
     if [ "${cpuPartitioning[$this_pod]}" == 1 ]; then
@@ -1267,4 +1287,4 @@ if [ "${masters_tool_collect}" == "1" ]; then
     all_pods+=" $master_tool_pods"
 fi
 
-process_roadblocks k8s ${new_k8s_followers}
+process_roadblocks k8s $new_followers

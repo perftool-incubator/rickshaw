@@ -48,13 +48,13 @@ declare -A osruntime
 osruntime[default]="chroot"
 host_mounts=""
 hypervisor_host="none"
-new_remotehost_followers=""
 remote_base_dir="/var/lib/crucible"
 remote_dir=""
 remote_cfg_dir=""
 remote_logs_dir=""
 remote_data_dir=""
 msg_file=""
+novar=""
 
 function endpoint_remotehost_engine_init() {
     local engine_label count
@@ -428,28 +428,6 @@ function pull_images() {
     #done
 }
 
-function add_profiler_engines() {
-    local tool tools
-
-    # globals used:
-    # disable_tools config_dir endpoint_label new_remotehost_followers
-
-    if [ "$disable_tools" != "1" ]; then
-        # TODO: should probably find a better way to detect what tools to run
-        tools=`awk -F: '{print $1}' $config_dir/tool-cmds/profiler/start`
-
-        for tool in $tools; do
-            echo "tool: $tool"
-            engine_type=profiler-$endpoint_label-$tool
-            engine_label=$engine_type-1
-            new_remotehost_followers+=" $engine_label"
-            addto_clients_servers "$engine_type" "1"
-        done
-    fi
-    echo "new_remotehost_followers: $new_remotehost_followers"
-    echo "profilers: ${profilers[@]}"
-}
-
 function check_existing_container() {
     local container_name=$1; shift
     local existing_container
@@ -700,6 +678,8 @@ load_settings
 remotehost_req_check
 set_ssh_id
 base_req_check
-add_profiler_engines
+# Remotehost tool collection only needs first engine to determine profiler engines
+first_engine=`echo ${clients[@]} ${servers[@]} ${profilers[@]} | awk '{print $1}'`
+add_profiler_engines $first_engine novar
 launch_osruntimes
-process_roadblocks remotehost $new_remotehost_followers
+process_roadblocks remotehost $new_followers

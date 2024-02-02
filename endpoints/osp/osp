@@ -28,7 +28,6 @@ clear_all_servers="1"
 endpoint_name="osp"
 instance_prefix="rickshaw"
 base_osruntime_bootstrap="$endpoint_base_dir/osruntime-bootstrap"
-new_osp_followers="" # engines which only run tools for openstack nodes
 vm_image="centos9"
 vm_user="root"
 #network="management"
@@ -328,7 +327,7 @@ function create_servers() {
     local engine_list=""
     local hypervisor_profilers=""
     for this_node in ${!active_compute_nodes[@]}; do
-        add_profiler_engines hypervisor_profilers
+        add_profiler_engines compute hypervisor_profilers
         echo "hypervisor_profilers: $hypervisor_profilers"
         engine_list="$hypervisor_profilers"
         echo "engine_list: $engine_list"
@@ -396,8 +395,7 @@ function create_server() {
 
     if [ "$disable_tools" != "1" ]; then
         # Get the profilers needed to run with this client or server
-        add_profiler_engines these_profilers
-        echo "$these_profilers"
+        add_profiler_engines $cs_label these_profilers
         engine_list="$cs_label $these_profilers"
         echo "engine_list: $engine_list"
         for this_engine in $engine_list; do
@@ -567,7 +565,8 @@ function move_osp_logs() {
     echo "moving engine logs"
     local this_cs_label remote_cs_log_file container_name delete_remote_dir
     mkdir -p $engine_logs_dir
-    for this_cs_label in ${clients[@]} ${servers[@]} $new_osp_followers; do
+    #for this_cs_label in ${clients[@]} ${servers[@]} $new_osp_followers; do
+    for this_cs_label in ${clients[@]} ${servers[@]} ${profilers[@]}; do
         echo "this_cs_label: [$this_cs_label]"
         if echo $this_cs_label | grep -q ^compute; then
             # This assumes user stack on undercloud can ssh passwordless to root@controllers
@@ -611,32 +610,6 @@ function endpoint_osp_cleanup() {
     cleanup_osruntime
 }
 
-function add_profiler_engines() {
-    local var new_profilers tool tools
-    typeset -n var=$1; shift
-    new_profilers=""
-
-    # globals used:
-    # disable_tools config_dir endpoint_label new_osp_followers
-
-    if [ "$disable_tools" != "1" ]; then
-        # TODO: should probably find a better way to detect what tools to run
-        tools=`awk -F: '{print $1}' $config_dir/tool-cmds/profiler/start`
-        let profiler_count=$profiler_count+1
-        for tool in $tools; do
-            echo "tool: $tool"
-            engine_type=profiler-$endpoint_label-$tool
-            engine_label=$engine_type-$profiler_count
-            new_osp_followers+=" $engine_label"
-            new_profilers+=" $engine_label"
-            addto_clients_servers "$engine_type" "$profiler_count"
-        done
-    fi
-    echo "new_profilers: $new_profilers"
-    echo "profilers: ${profilers[@]}"
-    var="$new_profilers"
-}
-
 process_opts "$@"
 process_common_endpoint_opts osp_opts $endpoint_opts
 process_osp_opts $osp_opts
@@ -667,5 +640,5 @@ echo "This endpoint to run these profilers: ${profilers[@]}"
 openstack_servers=""
 create_servers openstack_servers ${clients[@]} ${servers[@]} ${profilers[@]}
 echo "These openstack servers were created: $openstack_servers"
-process_roadblocks osp ${new_osp_followers}
+process_roadblocks osp $new_followers
 echo "endpoint finished"
