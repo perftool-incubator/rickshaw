@@ -1298,17 +1298,19 @@ function add_profiler_engines() {
             scope=`echo $scope | sed -e 'sX-X/X'`
         fi
         tools=`awk -F: '{print $1}' $config_dir/tool-cmds/$scope/start`
-        let profiler_count=$profiler_count+1
-        for tool in $tools; do
-            echo "tool: $tool"
-            engine_type=profiler-$endpoint_label-$tool
-            engine_label=$engine_type-$profiler_count
-            # new RB followers, cumultive, over multiple calls add_profiler_engines()
-            new_followers+=" $engine_label"
-            # new profiler engines, only for this call add_profiler_engines()
-            new_profilers+=" $engine_label"
-            addto_clients_servers "$engine_type" "$profiler_count"
-        done
+        if [ ! -z "$tools" ]; then
+            let profiler_count=$profiler_count+1
+            for tool in $tools; do
+                echo "tool: $tool"
+                engine_type=profiler-$endpoint_label-$tool
+                engine_label=$engine_type-$profiler_count
+                # new RB followers, cumultive, over multiple calls add_profiler_engines()
+                new_followers+=" $engine_label"
+                # new profiler engines, only for this call add_profiler_engines()
+                new_profilers+=" $engine_label"
+                addto_clients_servers "$engine_type" "$profiler_count"
+            done
+        fi
     fi
     var="$new_profilers"
 }

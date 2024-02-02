@@ -72,6 +72,7 @@ declare -A annotations
 declare -A volumes
 declare -A volumeMounts
 declare -A numaNode
+declare -A pod_containers
 
 function cleanup_json() {
     local json="$1"; shift
@@ -655,6 +656,7 @@ function build_pod_spec() {
     local label=`echo $name | awk -F- '{print $1}'`
     local id=`echo $name | awk -F- '{print $2}'`
     local this_image=""
+    local containers
 
     if [ "$type" == "cs" ]; then
         set_osruntime_numanode_cpupart $name
@@ -799,7 +801,10 @@ function build_pod_spec() {
     echo "containers to be created: $containers"
     for this_container in $containers; do
 
-        if [ "$container_count" -gt 1 ]; then
+        if [ "$container_count" -eq 1 ]; then
+            pod_containers[$name]=$this_container
+        else
+            pod_containers[$name]+=" $this_container"
             echo "," >>$json
         fi
         echo "      {" >>$json # Start of this container
@@ -1080,8 +1085,10 @@ function get_pod_logs() {
         local name="$1"; shift
         echo "Getting logs from pod ${name}"
         pod_name="rickshaw-${name}"
-        do_ssh ${user}@${host} kubectl -n ${project_name} logs ${pod_name} >"${engine_logs_dir}/${name}.txt"
-        (( total_rc += ${?} ))
+        for this_container in ${pod_containers[$name]}; do
+            do_ssh ${user}@${host} kubectl -n ${project_name} logs ${pod_name} >"${engine_logs_dir}/${name}-${this_container}.txt"
+            (( total_rc += ${?} ))
+        done
     done
 
     return ${total_rc}
@@ -1207,7 +1214,7 @@ function endpoint_k8s_cleanup() {
         echo "Error getting pod logs"
     fi
 
-    return $(( ${log_c} + ${delete_pods_rc} + ${delete_namespace_rc} ))
+    return $(( ${log_rc} + ${delete_pods_rc} + ${delete_namespace_rc} ))
 }
 
 process_opts "$@"

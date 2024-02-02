@@ -395,7 +395,7 @@ function create_server() {
 
     if [ "$disable_tools" != "1" ]; then
         # Get the profilers needed to run with this client or server
-        add_profiler_engines $cs_label these_profilers
+        add_profiler_engines "$cs_label" these_profilers
         engine_list="$cs_label $these_profilers"
         echo "engine_list: $engine_list"
         for this_engine in $engine_list; do
