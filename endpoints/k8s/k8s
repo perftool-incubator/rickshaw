@@ -725,7 +725,8 @@ function build_pod_spec() {
     containers+=" $new_profiler_engines"
     container_count=1
 
-    for $this_container in $containers; do
+    echo "containers to be created: $containers"
+    for this_container in $containers; do
 
         if [ "$container_count" -gt 1 ]; then
             echo "," >>$json
