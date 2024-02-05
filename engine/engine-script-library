@@ -1107,7 +1107,7 @@ function stop_tools() {
                 tool_name=`echo $line | awk -F: '{print $1}'`
                 tool_cmd=`echo $line | sed -e s/^$tool_name://`
                 if [ ! -z "$one_tool" -a "$one_tool" != "$tool_name" ]; then
-                    echo "Not starting $tool_name because this engine only runs one tool, $one_tool"
+                    echo "Not stopping $tool_name because this engine only runs one tool, $one_tool"
                     continue
                 fi
                 (( total_tools += 1 ))

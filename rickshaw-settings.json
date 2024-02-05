@@ -9,7 +9,7 @@
 	}
     },
     "userenvs": {
-	"default": "rhubi8"
+	"default": "fedora39"
     },
     "endpoints": {
 	"default": {

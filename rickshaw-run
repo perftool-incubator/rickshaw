@@ -96,7 +96,7 @@ my $workshop_roadblock_opt = "";
 my %utility_configs;
 my %tools_configs;
 my @tools_params;
-my $default_tool_userenv = 'fedora39';
+my $default_tool_userenv;
 {
     # Get the absolute path of the rickshaw project directory
     my $pushd_dir = pushd(dirname($0));
@@ -991,6 +991,10 @@ sub source_container_image {
         push(@local_images, $userenv_image);
     }
     my $x = 0;
+    while ($x < $i) {
+        printf "Processing stage %d (%s)...\n\tReady\n", $x + 1, $workshop_args[$x]{'tag'};
+        $x++;
+    }
     while ($i <= $num_images - 1) {
         printf "Processing stage %d (%s)...\n", $i + 1, $workshop_args[$i]{'tag'};
         my $begin = time();
@@ -1569,6 +1573,12 @@ sub load_settings_info() {
     }
 
     ($rc, $workshop_force_builds) = get_json_setting("workshop.force-builds", $jsonsettings);
+    if ($rc != 0) {
+        print "load_settings_info(): failed to load workshop force\n";
+        exit 1;
+    }
+
+    ($rc, $default_tool_userenv) = get_json_setting("userenvs.default", $jsonsettings);
     if ($rc != 0) {
         print "load_settings_info(): failed to load workshop force\n";
         exit 1;

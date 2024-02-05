@@ -399,7 +399,7 @@ function exec_pod() {
         oldIFS=$IFS
         IFS=" "
         for fs in $host_mounts; do
-        cmd+=" --mount=type=bind,source=$fs,destination=$fs"
+            cmd+=" --mount=type=bind,source=$fs,destination=$fs"
         done
         IFS=$oldIFS
     fi
@@ -417,15 +417,15 @@ function exec_pod() {
 function pull_images() {
     local this_image=""
 
-    #echo "ensuring container image is pulled to $host"
-    #for image in ${bench_to_image[@]}; do
-        #do_ssh $user@$host podman pull $image
-    #done
-    #echo "Recording container image usage"
-    #for image in ${bench_to_image[@]}; do
-        #do_ssh $user@$host "echo '$image $(date -u +%s)' >> ${remote_base_dir}/remotehost-container-image-census"
-        #echo "$image" >>$endpoint_run_dir/chroot-container-image.txt
-    #done
+    echo "ensuring container image is pulled to $host"
+    for image in ${bench_to_image[@]}; do
+        do_ssh $user@$host podman pull $image
+    done
+    echo "Recording container image usage"
+    for image in ${bench_to_image[@]}; do
+        do_ssh $user@$host "echo '$image $(date -u +%s)' >> ${remote_base_dir}/remotehost-container-image-census"
+        echo "$image" >>$endpoint_run_dir/chroot-container-image.txt
+    done
 }
 
 function check_existing_container() {
@@ -601,6 +601,9 @@ function move_remotehost_logs() {
         (( total_rc += $? ))
     fi
 
+    if [ $total_rc -gt 0 ]; then
+        echo "WARNING: some or all of move_remotehost_logs() failed"
+    fi
     return $total_rc
 }
 
@@ -652,7 +655,7 @@ function set_ssh_id() {
 
     if [ ! -f $config_dir/rickshaw_id.rsa ]; then
         echo "could not find $config_dir/rickshaw_id.rsa"
-        exit 1;
+        exit 1
     fi
     ssh_id=$(sed -z 's/\n/\\n/g' $config_dir/rickshaw_id.rsa)
 }
