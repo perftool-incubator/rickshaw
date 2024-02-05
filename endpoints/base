@@ -1169,7 +1169,7 @@ function load_settings() {
     fi
 
     if [ -z "${userenv}" -o "${userenv}" == "default" ]; then
-        load_json_setting "userenvs.default" userenv
+        load_json_setting "userenvs.default.benchmark" userenv
     fi
 
     if [ -z "${user}" ]; then

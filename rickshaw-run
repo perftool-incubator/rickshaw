@@ -1578,7 +1578,7 @@ sub load_settings_info() {
         exit 1;
     }
 
-    ($rc, $default_tool_userenv) = get_json_setting("userenvs.default", $jsonsettings);
+    ($rc, $default_tool_userenv) = get_json_setting("userenvs.default.tools", $jsonsettings);
     if ($rc != 0) {
         print "load_settings_info(): failed to load workshop force\n";
         exit 1;
