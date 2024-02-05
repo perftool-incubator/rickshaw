@@ -172,27 +172,6 @@ function endpoint_remotehost_test_start() {
     fi
 }
 
-function manage_image_cache() {
-    # globals used:
-    # endpoint_base_dir user host image_cache_size
-
-    echo "Performing container image cache management:"
-    ${endpoint_base_dir}/remotehost/container-image-manager --remote-host ${user}@${host} --cache-size ${image_cache_size} --debug 0
-    echo
-
-    echo "Remaining containers on this remote host:"
-    do_ssh $user@$host podman ps --all
-    echo
-
-    echo "Remaining container mounts on this remote host:"
-    do_ssh $user@$host podman mount
-    echo
-
-    echo "Remaining container images on this remote host:"
-    do_ssh $user@$host podman images --all
-    echo
-}
-
 function cleanup_osruntime() {
     local container_name container_image engine_label data_file tools os_runtime tmp_engine_label
 
@@ -247,7 +226,21 @@ function cleanup_osruntime() {
         fi
     done
 
-    manage_image_cache
+    echo "Performing container image cache management:"
+    ${endpoint_base_dir}/remotehost/container-image-manager --remote-host ${user}@${host} --cache-size ${image_cache_size} --debug 0
+    echo
+
+    echo "Remaining containers on this remote host:"
+    do_ssh $user@$host podman ps --all
+    echo
+
+    echo "Remaining container mounts on this remote host:"
+    do_ssh $user@$host podman mount
+    echo
+
+    echo "Remaining container images on this remote host:"
+    do_ssh $user@$host podman images --all
+    echo
 }
 
 function process_remotehost_opts() {
@@ -447,10 +440,6 @@ function check_existing_container() {
 function exec_chroot() {
     local engine_label=$1; shift
     local image=$1; shift
-
-    # TODO:
-    #local cpu_part_index=$1; shift
-
     local container_name=${run_id}_${engine_label}
     local container_id container_mount oldIFS base_cmd cs_cmd ssh_rc
 

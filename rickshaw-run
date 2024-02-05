@@ -78,6 +78,7 @@ my $engine_config_dir;
 my $engine_bench_cmds_dir;
 my $tool_cmds_dir;
 my $run_dir;
+my $workshop_build_dir;
 my $base_endpoint_run_dir;
 my $engine_run_dir;
 my $engine_logs_dir;
@@ -540,6 +541,8 @@ sub local_image_found {
 }
 
 sub workshop_build_image {
+    my $userenv = shift;
+    my $bench_or_tool = shift;
     my $workshop_base_cmd = shift;
     my $stage = shift;
     my $userenv_arg = shift;
@@ -584,7 +587,7 @@ sub workshop_build_image {
     debug_log(sprintf "Going to generate a new engine container image with this workshop cmd:\n\n %s\n", $workshop_build_cmd);
     ($workshop_build_cmd, my $workshop_output, my $workshop_rc) = run_cmd($workshop_build_cmd);
     my @workshop_output = split(/\n/, $workshop_output);
-    my $workshop_output_file = $run_dir . "/workshop.stage-" . $stage . "." . $tag . ".stdout.txt";
+    my $workshop_output_file = $workshop_build_dir . $userenv . "__" . $bench_or_tool . "__stage-" . $stage . "." . $tag . ".stdout.txt";
     my $fh = open_write_text_file($workshop_output_file) || die "Failed to open " . $workshop_output_file . " for writing\n";
     printf $fh "%s\n", join("\n", @workshop_output);
     close($fh);
@@ -998,7 +1001,7 @@ sub source_container_image {
     while ($i <= $num_images - 1) {
         printf "Processing stage %d (%s)...\n", $i + 1, $workshop_args[$i]{'tag'};
         my $begin = time();
-        workshop_build_image($workshop_base_cmd, $i + 1, $workshop_args[$i]{'userenv'}, $workshop_args[$i]{'reqs'}, $workshop_args[$i]{'tag'}, $workshop_args[$i]{'skip-update'});
+        workshop_build_image($userenv, $benchmark, $workshop_base_cmd, $i + 1, $workshop_args[$i]{'userenv'}, $workshop_args[$i]{'reqs'}, $workshop_args[$i]{'tag'}, $workshop_args[$i]{'skip-update'});
         my $end = time();
         printf "\tBuilding took %d seconds\n", $end - $begin;
         $begin = time();
@@ -1508,6 +1511,8 @@ sub make_run_dirs() {
     mkdir($tool_cmds_dir);
     $run_dir = $run{'base-run-dir'} . "/run";
     mkdir($run_dir);
+    $workshop_build_dir = $run_dir . "/workshop/";
+    mkdir($workshop_build_dir);
     $base_endpoint_run_dir = $run_dir . "/endpoint/";
     mkdir($base_endpoint_run_dir);
     $engine_run_dir = $run_dir . "/engine/";
