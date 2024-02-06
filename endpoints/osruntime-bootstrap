@@ -12,7 +12,7 @@ required_vars=""
 required_vars+=" run_id"
 required_vars+=" rickshaw_host"
 required_vars+=" endpoint_run_dir"
-required_vars+=" cs_label"
+required_vars+=" cs_labels"
 required_vars+=" base_run_dir"
 required_vars+=" cpu_partitioning"
 required_vars+=" endpoint"
@@ -22,7 +22,7 @@ required_vars+=" max_rb_attempts"
 required_vars+=" rb_passwd"
 required_vars+=" rb_id"
 required_vars+=" ssh_id"
-required_vars+=" image"
+required_vars+=" images"
 required_vars+=" disable_tools"
 
 base_dir="/var/lib/crucible"
@@ -32,12 +32,14 @@ logs_dir="${base_dir}/logs"
 mkdir -p $cfg_dir
 mkdir -p $data_dir
 mkdir -p $logs_dir
-log_file_name="osruntime-bootstrap-logfile_${run_id}_$cs_label.txt"
+#log_file_name="osruntime-bootstrap-logfile_${run_id}_$cs_label.txt"
+log_file_name="osruntime-bootstrap-logfile_${run_id}.txt"
 log_file="$logs_dir/$log_file_name"
 remote_log_file="$rickshaw_host:$endpoint_run_dir/$log_file_name"
 ssh_opts="-o StrictHostKeyChecking=no -o PasswordAuthentication=no"
 ssh_id_dir="/root/.ssh"
-ssh_id_file="/tmp/ssh-id_${run_id}_$cs_label.id"
+#ssh_id_file="/tmp/ssh-id_${run_id}_$cs_label.id"
+ssh_id_file="/tmp/ssh-id_${run_id}.id"
 ssh_pub_id_file="$ssh_id_dir/id_rsa.pub"
 if [ ! -z "$ssh_id" ]; then
     mkdir -p $ssh_id_dir
@@ -90,7 +92,7 @@ validate_vars
 image_cache_size=3
 chroot_rbind_mounts="proc dev sys lib/firmware lib/modules usr/src boot var/run"
 host_mounts="run/openvswitch"
-container_name="rickshaw_${run_id}_$cs_label"
+#container_name="rickshaw_${run_id}_$cs_label"
 cmd_stdout="$logs_dir/cmd-stdout_$log_file_name"
 cmd_stderr="$logs_dir/cmd-stderr_$log_file_name"
 env_file_name="env.sh"
@@ -135,9 +137,38 @@ function init_env() {
     log_output "init_env() end"
 }
 
+function launch_osruntimes() {
+    local label_arr=(`echo $cs_labels | sed -e 's/,/ /g'`)
+    local image_arr=(`echo $images | sed -s 's/,/ /g'`)
+    local disable_tools_arr=(`echo $disable_tools | sed -s 's/,/ /g'`)
+    local i length
+    length=${#label_arr[@]}
+    log_output "launch_osruntimes() begin"
+    log_output "cs_labels: $cs_labels"
+    log_output "images: $images"
+    log_output "disable_tools: $disable_tools"
+    log_output "label_array_length: ${#label_arr[@]}"
+
+    
+    for ((i=0; i<length; i++)); do
+        log_output "i: $i   engine: ${label_arr[$i]}   image: ${image_arr[$i]}   disable_tools: ${disable_tools_arr[$i]}"
+        launch_osruntime ${label_arr[$i]} ${image_arr[$i]} ${disable_tools_arr[$i]}
+    done
+    log_output "after foor loop, i: $i   engine: ${label_arr[$i]}   image: ${image_arr[$i]}   disable_tools: ${disable_tools_arr[$i]}"
+    log_output "launch_osruntimes() end"
+}
+
 function launch_osruntime() {
+    local cs_label=$1; shift
+    local image=$1; shift
+    local disable_tools=$1; shift
+    local container_name="rickshaw_${run_id}_$cs_label"
+
     log_output "launch_osruntime() begin"
     local novar # when using run_cmd and don't need to capture output to a var
+
+    run_cmd novar podman pull $image
+    echo $image $(date -u +%s) >> $remote_base_dir/$endpoint_label-container-image-census
 
     if [ "$osruntime" == "chroot" ]; then
         log_output "Using chroot"
@@ -263,6 +294,6 @@ function launch_osruntime() {
 }
 
 validate_reqs
-init_env
-launch_osruntime
-exit_success "Launch of osruntime complete"
+#init_env
+launch_osruntimes
+exit_success "Launch of osruntimes complete"

@@ -187,14 +187,15 @@ my $tool_dir = "tool-data";
 if (opendir(TOOLDIR, $run_dir . "/" . $tool_dir)) {
     my @collectors = grep(/\w+/, readdir(TOOLDIR));
     for my $collector (@collectors) {
-        my $collector_dir = $tool_dir . "/" . $collector;  # $run_dir/tool-data/[client|server|worker|master]
+        my $collector_dir = $tool_dir . "/" . $collector;  # $run_dir/tool-data/[client|server|worker|master|profiler]
         if (opendir(COLLECTORDIR, $run_dir . "/" . $collector_dir)) {
-            my @numbers = grep (/\d+/, readdir(COLLECTORDIR));
-            for my $num (@numbers) {
-                my $num_dir = $collector_dir . "/" . $num; # $run_dir/tool-data/[client|server|worker|master]/[0-N]
-                if (opendir(NUMDIR, $run_dir . "/" . $num_dir)) {
-                    my @tools = grep(/\w+/, readdir(NUMDIR));
-                    printf "Working on tool dir %s\n", $num_dir;
+        # sample directory entry: remotehost-1-kernel-1
+            my @engines = grep (/\w+-\d+-\w+-\d+/, readdir(COLLECTORDIR));
+            for my $engine (@engines) {
+                my $engine_dir = $collector_dir . "/" . $engine; # $run_dir/tool-data/[client|server|worker|master]/[0-N]
+                if (opendir(ENGDIR, $run_dir . "/" . $engine_dir)) {
+                    my @tools = grep(/\w+/, readdir(ENGDIR));
+                    printf "Working on tool dir %s\n", $engine_dir;
                     for my $tool (@tools) {
                         if (! exists($tools_config{$tool})) {
                             # Load a tool configuration for every tool the user is asking for
@@ -217,7 +218,7 @@ if (opendir(TOOLDIR, $run_dir . "/" . $tool_dir)) {
                         if (my $pid = fork) {
                             push(@pids, $pid);
                         } else {
-                            my $pushd_dir = pushd($run_dir . "/" . $num_dir . "/" . $tool);
+                            my $pushd_dir = pushd($run_dir . "/" . $engine_dir . "/" . $tool);
                             my $pp_cmd = $tools_config{$tool}{'controller'}{'post-script'};
                             $pp_cmd =~ s/\%tool-dir\%/$run{'tools-dir'}\/$tool\//g;
                             $pp_cmd =~ s/\%run-dir\%/$run_dir\//g;

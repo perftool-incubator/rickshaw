@@ -262,11 +262,6 @@ for (my $i = 1; $i <= scalar @{ $run{'iterations'} }; $i++) {
     }
     if (opendir($iter_dh, $run_dir . "/" . $this_iter_dir)) {
         my @samp_dirs = grep(/^sample-\d+$/, readdir($iter_dh));
-        if (scalar @samp_dirs < $run{'num-samples'}) {
-            printf "Iteration %d, [%s] is considered failed because there were not enough passing samples (%d)\n",
-                   $i, $this_iter_dir, $run{'num-samples'};
-            system("/bin/mv " . $run_dir . "/" . $this_iter_dir . " " . $run_dir . "/" . $this_iter_dir . "-fail");
-        }
         my $iter_array_idx = $i -1;
         my @samples;
         my $primary_metric;
@@ -329,6 +324,11 @@ for (my $i = 1; $i <= scalar @{ $run{'iterations'} }; $i++) {
                 while (wait() > -1) {}
             }
             print "Post-processing complete\n";
+        }
+        if (scalar @samp_dirs < $run{'num-samples'}) {
+            printf "Iteration %d, [%s] is considered failed because there were not enough passing samples (%d)\n",
+                   $i, $this_iter_dir, $run{'num-samples'};
+            system("/bin/mv " . $run_dir . "/" . $this_iter_dir . " " . $run_dir . "/" . $this_iter_dir . "-fail");
         }
     }
 }

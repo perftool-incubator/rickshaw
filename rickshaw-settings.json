@@ -9,7 +9,10 @@
 	}
     },
     "userenvs": {
-	"default": "rhubi8"
+	"default": {
+        "benchmarks": "rhubi9",
+	    "tools": "fedora39"
+        }
     },
     "endpoints": {
 	"default": {
