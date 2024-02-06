@@ -302,10 +302,17 @@ function validate_core_env() {
     if [ -z "$cs_label" ]; then
         exit_error "The client/server label (--cs-label) was not defined"
     fi
-    if echo $cs_label | grep -q -P '^(\w+)-\d+$'; then
+    # profiler-remotehost-1-sysstat-1
+    regex1='^profiler-\w+-\d+-\w+-\d+$'
+    # client-1
+    regex2='^\w+-\d+$'
+    if echo $cs_label | grep -q -P $regex1; then
+        export tool_name=`echo $cs_label | awk -F- '{print $4}'`
+        echo "engine-label \"$cs_label\" is valid and runs this tool:  $tool_name"
+    elif echo $cs_label | grep -q -P $regex2; then
         echo "engine-label \"$cs_label\" is valid"
     else
-        exit_error 'cs_label "'$cs_label'" does not adhere to regex /^(\w+)-\d+$/'
+        exit_error 'cs_label "'$cs_label'" is not valid'
     fi
 
     if [ -z "${max_rb_attempts}" ]; then
@@ -357,7 +364,7 @@ function setup_core_env() {
 
 function get_data() {
     # Get files required to run benchmark and tools
-    if [ $cs_type == "client" -o $cs_type == "server" -o $cs_type == "profiler" ]; then
+    if [ $cs_type == "client" -o $cs_type == "server" ]; then
         cs_files_list="$cs_type-$cs_id-files-list"
     else # worker and master do not get id-specific files-list, at least not yet
         cs_files_list="$cs_type-files-list"
@@ -443,6 +450,7 @@ function collect_sysinfo() {
 }
 
 function start_tools() {
+    local one_tool=$1; shift
     local tool_name tool_cmd tool_cmd_rc total_tools
 
     echo "running start_tools()"
@@ -462,6 +470,10 @@ function start_tools() {
             while read -u 9 line; do
                 tool_name=`echo $line | awk -F: '{print $1}'`
                 tool_cmd=`echo $line | sed -e s/^$tool_name://`
+                if [ ! -z "$one_tool" -a "$one_tool" != "$tool_name" ]; then
+                    echo "Not starting $tool_name because this engine only runs one tool, $one_tool"
+                    continue
+                fi
                 (( total_tools += 1 ))
                 /bin/mkdir -p $tool_name
                 if pushd $tool_name >/dev/null; then
@@ -1080,6 +1092,7 @@ function stop_tools() {
     working_directory=${1}; shift
     tool_stop_cmds_file=${1}; shift
     tools_disabled=${1}; shift
+    local one_tool=$1; shift
 
     echo "running stop_tools()"
     echo "pwd: `/bin/pwd`"
@@ -1093,6 +1106,10 @@ function stop_tools() {
             while read -u 9 line; do
                 tool_name=`echo $line | awk -F: '{print $1}'`
                 tool_cmd=`echo $line | sed -e s/^$tool_name://`
+                if [ ! -z "$one_tool" -a "$one_tool" != "$tool_name" ]; then
+                    echo "Not stopping $tool_name because this engine only runs one tool, $one_tool"
+                    continue
+                fi
                 (( total_tools += 1 ))
                 if pushd $tool_name >/dev/null; then
                     echo "Stopping tool '${tool_name}' with command '${tool_cmd}'"

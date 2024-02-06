@@ -411,7 +411,7 @@ sub index_metrics {
             my $eng_env_fh = new IO::Uncompress::UnXz $eng_env_file, Transparent => 1 || die "[ERROR]could not open file " . $eng_env_file;
             # Cull out env vars which we want as metadata
             #printf "Looking for engine env vars\n";
-            my @varnames = ('HOSTNAME', 'engine_type', 'engine_role', 'benchmark_group', 'benchmark_role', 'hosted_by', 'hypervisor_host', 'osruntime', 'endpoint_label', 'userenv');
+            my @varnames = ('HOSTNAME', 'tool_name', 'engine_type', 'engine_role', 'benchmark_group', 'benchmark_role', 'hosted_by', 'hypervisor_host', 'osruntime', 'endpoint_label', 'userenv');
             while (<$eng_env_fh>) {
                 chomp;
                 foreach my $varname (@varnames) {

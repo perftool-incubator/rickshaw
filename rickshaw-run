@@ -51,7 +51,7 @@ my %benchmark_to_ids;
 my %ids_to_benchmark;
 my @endpoints;
 #my %userenvs;
-my %image_ids; # {$benchmark-type}{$userenv}
+my %image_ids; # {$benchmark-or-tool}{$userenv}
 my %run; # A multi-dimensional, nested hash, schema TBD
          # This hash documents what was run.
 my $redis_passwd = "flubber"; # TODO: make this cmdline setting
@@ -78,6 +78,7 @@ my $engine_config_dir;
 my $engine_bench_cmds_dir;
 my $tool_cmds_dir;
 my $run_dir;
+my $workshop_build_dir;
 my $base_endpoint_run_dir;
 my $engine_run_dir;
 my $engine_logs_dir;
@@ -96,6 +97,7 @@ my $workshop_roadblock_opt = "";
 my %utility_configs;
 my %tools_configs;
 my @tools_params;
+my $default_tool_userenv;
 {
     # Get the absolute path of the rickshaw project directory
     my $pushd_dir = pushd(dirname($0));
@@ -149,6 +151,20 @@ sub usage {
     print "                        'i' = run all iterations of a sample first\n";
     print "                        'r' = run a sample from a random iteration one at a time (ie. chaos mode)\n\n";
     print "--max-rb-attempts       The number of times to try a given roadblock\n";
+}
+
+sub find_index {
+    my $arr_ref = shift;
+    my $field = shift;
+    my $value = shift;
+    for (my $index = 0; $index < scalar @$arr_ref; $index++) {
+        if (exists $$arr_ref[$index]{$field} and $$arr_ref[$index]{$field} eq $value) {
+            #printf "found field: [%s] with value: [%s] at index [%d]\n", $field, $value, $index;
+            return $index;
+        }
+    }
+    # index not found
+    return -1;
 }
 
 sub find_files {
@@ -525,6 +541,8 @@ sub local_image_found {
 }
 
 sub workshop_build_image {
+    my $userenv = shift;
+    my $bench_or_tool = shift;
     my $workshop_base_cmd = shift;
     my $stage = shift;
     my $userenv_arg = shift;
@@ -569,7 +587,7 @@ sub workshop_build_image {
     debug_log(sprintf "Going to generate a new engine container image with this workshop cmd:\n\n %s\n", $workshop_build_cmd);
     ($workshop_build_cmd, my $workshop_output, my $workshop_rc) = run_cmd($workshop_build_cmd);
     my @workshop_output = split(/\n/, $workshop_output);
-    my $workshop_output_file = $run_dir . "/workshop.stage-" . $stage . "." . $tag . ".stdout.txt";
+    my $workshop_output_file = $workshop_build_dir . $userenv . "__" . $bench_or_tool . "__stage-" . $stage . "." . $tag . ".stdout.txt";
     my $fh = open_write_text_file($workshop_output_file) || die "Failed to open " . $workshop_output_file . " for writing\n";
     printf $fh "%s\n", join("\n", @workshop_output);
     close($fh);
@@ -796,9 +814,6 @@ sub build_reqs {
             }
         }
     }
-    foreach my $tool_entry (@tools_params) {
-        push(@$req_ref, "--requirement " . $run{'tools-dir'} . "/" .  $$tool_entry{'tool'} . "/workshop.json ");
-    }
     push (@$req_ref, "--requirement " . $bench_dirs{$benchmark} . "/workshop.json");
 }
 
@@ -881,7 +896,7 @@ sub source_container_image {
     " 2>&1";
 
     get_image_urls;
-    printf "Sourcing container image for userenv '%s' and benchmark '%s'; this may take a few minutes\n", $userenv, $benchmark;
+    printf "Sourcing container image for userenv '%s' and benchmark/tool '%s'; this may take a few minutes\n", $userenv, $benchmark;
 
     my @requirements;
     build_reqs(\@requirements, $userenv, $benchmark);
@@ -986,7 +1001,7 @@ sub source_container_image {
     while ($i <= $num_images - 1) {
         printf "Processing stage %d (%s)...\n", $i + 1, $workshop_args[$i]{'tag'};
         my $begin = time();
-        workshop_build_image($workshop_base_cmd, $i + 1, $workshop_args[$i]{'userenv'}, $workshop_args[$i]{'reqs'}, $workshop_args[$i]{'tag'}, $workshop_args[$i]{'skip-update'});
+        workshop_build_image($userenv, $benchmark, $workshop_base_cmd, $i + 1, $workshop_args[$i]{'userenv'}, $workshop_args[$i]{'reqs'}, $workshop_args[$i]{'tag'}, $workshop_args[$i]{'skip-update'});
         my $end = time();
         printf "\tBuilding took %d seconds\n", $end - $begin;
         $begin = time();
@@ -1278,6 +1293,9 @@ sub validate_controller_env() {
         copy($run{'roadblock-dir'} . "/roadblocker.py", $rb_bin);
         chmod 0755, "$rb_bin";
         copy($run{'roadblock-dir'} . "/roadblock.py", $rb_module);
+    } else {
+        printf "ERROR, roadblock project directory not defined or roadblocker.py not found";
+        exit 1;
     }
     if (defined $run{'workshop-dir'} and -e $run{'workshop-dir'} . "/workshop.pl") {
         $use_workshop = 1;
@@ -1414,7 +1432,12 @@ sub load_tool_params() {
     # Load a tool configuration for every tool the user is asking for
     foreach my $tool_entry (@tools_params) {
         my $tool_name = $$tool_entry{'tool'};
-        my $this_tool_config = $run{'tools-dir'} . "/" . $tool_name . "/rickshaw.json";
+        if (not exists($$tool_entry{'userenv'})) {
+            $$tool_entry{'userenv'} = $default_tool_userenv;
+        }
+
+        my $this_tool_dir = $run{'tools-dir'} . "/" . $tool_name;
+        my $this_tool_config = $this_tool_dir . "/rickshaw.json";
         my ($rc, $json_ref) = get_json_file($this_tool_config, $tool_schema_file);
         if ($rc > 0 or ! defined $json_ref) {
             printf "Could not open the tool config file: %s\n", $this_tool_config;
@@ -1429,6 +1452,11 @@ sub load_tool_params() {
             exit 1;
         }
         $tools_configs{$$json_ref{'tool'}} = $json_ref;
+        $bench_dirs{$tool_name} = $this_tool_dir;
+
+        # Populate the image_ids with tools
+        my %userenv_info = ( 'image' => '' );
+        $image_ids{$tool_name}{$$tool_entry{'userenv'}} = \%userenv_info;
     }
 }
 
@@ -1483,6 +1511,8 @@ sub make_run_dirs() {
     mkdir($tool_cmds_dir);
     $run_dir = $run{'base-run-dir'} . "/run";
     mkdir($run_dir);
+    $workshop_build_dir = $run_dir . "/workshop/";
+    mkdir($workshop_build_dir);
     $base_endpoint_run_dir = $run_dir . "/endpoint/";
     mkdir($base_endpoint_run_dir);
     $engine_run_dir = $run_dir . "/engine/";
@@ -1552,6 +1582,12 @@ sub load_settings_info() {
         print "load_settings_info(): failed to load workshop force\n";
         exit 1;
     }
+
+    ($rc, $default_tool_userenv) = get_json_setting("userenvs.default.tools", $jsonsettings);
+    if ($rc != 0) {
+        print "load_settings_info(): failed to load workshop force\n";
+        exit 1;
+    }
     printf "Finished loading json settings\n";
 }
 
@@ -1610,6 +1646,9 @@ sub validate_endpoints() {
             if ($line =~ /(client|server|profiler)\s+(.+)$/) {
                 my $engine = $1;
                 my $ids = $2;
+                # An endpoint with a profiler adds its engines' roadblock followers
+                # at endpoint-deployment phase
+                next if ($engine eq "profiler");
                 foreach my $id (split(/\s+/, $ids)) {
                     die "[ERROR]client/server ID cannot be below 1\n" if ($id < 1);
                     my %info = ( 'endpoint-type' => $$endpoint{'type'}, 'id' => $id );
@@ -2075,7 +2114,7 @@ sub prepare_bench_tool_engines() {
     # The "engine-script" will first scp the list (client-files-list or server-files-list).
     # then it will read this list to know what other files to copy over)
     foreach my $cs_type (keys %clients_servers, @all_collector_types) {
-        if ($cs_type =~ /^client|server|profiler?/) {
+        if ($cs_type =~ /^client|server?/) {
             foreach my $cs_ref (@{ $clients_servers{$cs_type} }) {
 	        if (! defined $$cs_ref{'id'}) {
 		    printf "cs_type: [%s] cs_ref{'id'} not defined, skipping\n", $cs_type;
@@ -2108,6 +2147,7 @@ sub remove_ssh_keys() {
 sub deploy_endpoints() {
     # Deploy ths endpoints so they are ready to run benchmark and tools.
     # Each endpoint is responible for launching a osruntime for each client and server.
+    my %remote_hosts;
     print "\nDeploying endpoints\n";
     $endpoint_deploy_timeout += scalar @endpoints * 120;
     foreach my $engine (keys %clients_servers) {
@@ -2121,18 +2161,48 @@ sub deploy_endpoints() {
         my $type = $endpoints[$i]{'type'};
         my $opts = $endpoints[$i]{'opts'};
         my $label = $endpoints[$i]{'label'};
-        my $userenv = $endpoints[$i]{'userenv'};
+        my $userenv;
         my $endpoint_image_opt = "";
         my $bench_ids_opt = "";
         if (defined $endpoints[$i]{'userenv'}) {
-            foreach my $bench (keys %bench_configs) {
-                $endpoint_image_opt .= "," . $bench . "::" . $image_ids{$bench}{$endpoints[$i]{'userenv'}}{'image'};
+            foreach my $bench_or_tool (keys %image_ids) {
+                # Is this a tool?  Then get the userenv from tools_params
+                my $index = find_index(\@tools_params, "tool", $bench_or_tool);
+                if ($index > -1) {
+                    $userenv = $tools_params[$index]{'userenv'};
+                    #print Dumper \$tools_params[$index];
+                    #printf "userenv: [%s]\n", $userenv;
+                } else {
+                    $userenv = $endpoints[$i]{'userenv'};
+                }
+                #printf "userenv: [%s]\n", $userenv;
+                if (! exists($image_ids{$bench_or_tool}{$userenv}{'image'})) {
+                    printf "ERROR: image for bench or tool: [%s] for userenv: [%s] could not be found in image_ids:\n", $bench_or_tool, $endpoints[$i]{'userenv'};
+                    print Dumper \%image_ids;
+                    exit 1;
+                }
+                $endpoint_image_opt .= "," . $bench_or_tool . "::" . $image_ids{$bench_or_tool}{$userenv}{'image'}
             }
             $endpoint_image_opt =~ s/^,/ --image=/;
         }
         if (defined $run{'bench-ids'}) {
             $bench_ids_opt = " --bench-ids=$run{'bench-ids'}";
         }
+        if ($type eq "remotehost") {
+            # Get the host so we can detect multiple endpoints with the same host and enable tools on only the first one
+            # example opts: host:remote_host1,user:root,client:1,osruntime:podman,userenv:userenv1
+            foreach my $opt (split(",", $opts)) {
+                if ($opt =~ /^host:(.*)$/) {
+                    if (exists $remote_hosts{$1}) {
+                        # This host has already been used, disable tools for the next remotehost command
+                        $opts .= ",disable-tools:1"
+                    } else {
+                        $remote_hosts{$1} = 1;
+                    }
+                }
+            }
+        }
+
         my $this_endpoint_run_dir = $base_endpoint_run_dir . "/" . $label;
         mkdir($this_endpoint_run_dir);
         die "Could not create $this_endpoint_run_dir" if ! -e $this_endpoint_run_dir;
@@ -2161,6 +2231,7 @@ sub deploy_endpoints() {
             # - the ID of the client/server
             # - the roadblock client ID
             debug_log(sprintf "Going to run endpoint command:\n%s\n\n", $cmd);
+            printf "Going to run endpoint command:\n%s\n\n", $cmd;
             if ($endpoint_roadblock_opt eq "") {
                 # There is only one client and no synchronization, so we wait for the endpoint to finish
                 debug_log(sprintf "going to run and wait for: %s\n", $cmd);
@@ -2190,12 +2261,12 @@ sub process_roadblocks() {
     if (defined $messages_ref) {
         foreach my $msg (@{ $$messages_ref{'received'} })  {
             if (exists $$msg{'payload'}{'message'}{'user-object'}{'new-followers'}) {
-                @new_followers = @{ $$msg{'payload'}{'message'}{'user-object'}{'new-followers'} };
-                printf "Endpoint created followers: %s\n", join(" ", sort(@new_followers));
-                last;
+                debug_log(sprintf "found these new followers: %s\n", join(" ", @{ $$msg{'payload'}{'message'}{'user-object'}{'new-followers'} }));
+                @new_followers = (@new_followers, @{ $$msg{'payload'}{'message'}{'user-object'}{'new-followers'} });
             }
         }
     }
+    debug_log(sprintf "All new followers: %s\n", join(" ", @new_followers));
 
     $roadblock_rc = do_roadblock("endpoint-deploy-end", $endpoint_deploy_timeout, $messages_ref, @active_followers);
     roadblock_exit_on_error($roadblock_rc);
@@ -2266,11 +2337,17 @@ sub organize_run_data() {
         mkdir($tmp_data_dir);
         my $pushd_dir = pushd($tmp_data_dir);
         foreach my $archive (dir_entries($engine_archives_dir,
-                                        qr/^(\w+)-(\d+)-data\.tgz$/)) {
-            $archive =~ /^(\w+)-(\d+)-data\.tgz$/ or next;
+                                        qr/^(\w+)-(.+)-data\.tgz$/)) {
+            if ($archive =~ /^(\w+)-(.+)-data\.tgz$/) {
+                debug_log("found archive $archive");
+            } else {
+                printf "archive %s is not recognized\n";
+                next;
+            }
             my $archive_full_path = $engine_archives_dir . "/" . $archive;
             my $cs_type = $1;
             my $cs_id = $2;
+            printf "cs_type: %s, cs_id: %s\n", $cs_type, $cs_id;
             my $tar_cmd = "tar zmxf " . $archive_full_path;
             ($tar_cmd, my $tar_output, my $tar_cmd_rc) = run_cmd($tar_cmd);
             if ($1 =~ /^(client|server)$/) {
@@ -2293,12 +2370,16 @@ sub organize_run_data() {
                     }
                 }
             }
-            if (-e "tool-data" and scalar dir_entries("tool-data", qr/\w+/) > 0) {
-                my $tool_dir = pushd("tool-data");
-                my $cs_tool_dest_path = $run_dir . "/tool-data/" . $cs_type . "/" . $cs_id;
-                make_path($cs_tool_dest_path);
-                my $mv_cmd = "/bin/mv * " . $cs_tool_dest_path;
-                ($mv_cmd, my $mv_output, my $mv_cmd_rc) = run_cmd($mv_cmd);
+            if (-e "tool-data") {
+                if (scalar dir_entries("tool-data", qr/\w+/) > 0) {
+                    my $tool_dir = pushd("tool-data");
+                    my $cs_tool_dest_path = $run_dir . "/tool-data/" . $cs_type . "/" . $cs_id;
+                    make_path($cs_tool_dest_path);
+                    my $mv_cmd = "/bin/mv * " . $cs_tool_dest_path;
+                    ($mv_cmd, my $mv_output, my $mv_cmd_rc) = run_cmd($mv_cmd);
+                } else {
+                    printf "WARNING: did not find expected sub-directories in %s\n", $pushd_dir . "/" . "tool-data";
+                }
             }
             if (scalar dir_entries("sysinfo", qr/\w+/) > 0) {
                 my $sysinfo_dir = pushd("sysinfo");
@@ -2445,16 +2526,16 @@ build_test_order();
 prepare_bench_tool_engines();
 print "Preparing userenvs:\n";
 debug_log (sprintf "image_ids (before):\n" . Dumper \%image_ids);
-foreach my $bench (keys %bench_configs) {
-    printf "Working on %s benchmark\n", $bench;
-    foreach my $userenv (keys %{ $image_ids{$bench} }) {
+foreach my $bench_or_tool (keys %image_ids) {
+    printf "Working on %s benchmark or tool\n", $bench_or_tool;
+    foreach my $userenv (keys %{ $image_ids{$bench_or_tool} }) {
         printf "Working on %s userenv\n", $userenv;
-        my $image = source_container_image($userenv, $bench, $arch);
+        my $image = source_container_image($userenv, $bench_or_tool, $arch);
         if (!defined $image) {
-            die "Could not get valid image [" . $image_ids{$bench}{$userenv}{'image'} . "] for container image build for userenv [" . $userenv . "] and benchmark [" . $bench . "]\n";
+            die "Could not get valid image [" . $image_ids{$bench_or_tool}{$userenv}{'image'} . "] for container image build for userenv [" . $userenv . "] and benchmark [" . $bench_or_tool . "]\n";
         }
         printf "Image is: %s\n", $image;
-        $image_ids{$bench}{$userenv}{'image'} = $image;
+        $image_ids{$bench_or_tool}{$userenv}{'image'} = $image;
     }
 }
 debug_log(sprintf "image_ids(after):\n" . Dumper \%image_ids);
