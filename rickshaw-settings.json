@@ -11,7 +11,7 @@
     "userenvs": {
 	"default": {
         "benchmarks": "rhubi9",
-	    "tools": "fedora39"
+	    "tools": "fedora-latest"
         }
     },
     "endpoints": {
