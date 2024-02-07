@@ -1019,7 +1019,7 @@ sub source_container_image {
             delete_local_image(pop(@local_images));
         }
     }
-    printf "Finished sourcing container image for userenv '%s'\n", $userenv;
+    printf "Finished sourcing container image for userenv '%s' and benchmark/tool '%s'\n", $userenv, $benchmark;
     return $image;
 }
 
@@ -2526,9 +2526,9 @@ build_test_order();
 prepare_bench_tool_engines();
 print "Preparing userenvs:\n";
 debug_log (sprintf "image_ids (before):\n" . Dumper \%image_ids);
-foreach my $bench_or_tool (keys %image_ids) {
+foreach my $bench_or_tool (sort (keys %image_ids)) {
     printf "Working on %s benchmark or tool\n", $bench_or_tool;
-    foreach my $userenv (keys %{ $image_ids{$bench_or_tool} }) {
+    foreach my $userenv (sort (keys %{ $image_ids{$bench_or_tool} })) {
         printf "Working on %s userenv\n", $userenv;
         my $image = source_container_image($userenv, $bench_or_tool, $arch);
         if (!defined $image) {
