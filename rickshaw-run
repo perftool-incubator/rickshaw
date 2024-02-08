@@ -20,6 +20,11 @@ use JSON::XS;
 use JSON::Validator;
 use Data::Dumper;
 
+$Data::Dumper::Sortkeys = 1;
+$Data::Dumper::Pair = ' : ';
+$Data::Dumper::Useqq = 1;
+$Data::Dumper::Indent = 3;
+
 BEGIN {
     if (!(exists $ENV{'TOOLBOX_HOME'} && -d "$ENV{'TOOLBOX_HOME'}/perl")) {
         print "This script requires libraries that are provided by the toolbox project.\n";
