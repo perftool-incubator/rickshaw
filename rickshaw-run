@@ -495,7 +495,7 @@ sub remote_image_found {
     } else {
         $full_url = $run{'dest-image-url'} . ":" . $image;
     }
-    debug_log(sprintf "Checking for remote workshop image: %s... ", $full_url);
+    debug_log(sprintf "Checking for remote workshop image: %s...\n", $full_url);
     my $skopeo_url;
     if (($full_url =~ /^dir:/) || ($full_url =~ /^docker:\/\//)) {
         $skopeo_url = $full_url;
@@ -522,7 +522,7 @@ sub local_image_found {
     } else {
         $full_url = $run{'source-image-url'} . ":" . $image;
     }
-    debug_log(sprintf "Checking for local workshop image: %s... ", $full_url);
+    debug_log(sprintf "Checking for local workshop image: %s...\n", $full_url);
     my $cmd = "buildah images " . $full_url;
     debug_log(sprintf "cmd:\n%s\n\n", $cmd);
     ($cmd, my $output, my $cmd_rc) = run_cmd($cmd);
@@ -1870,10 +1870,10 @@ sub build_files_list {
             $src_file =~ s/\%config-dir\%/$config_dir\//g;
             my $dest_file = $$file_spec{'dest'};
             if (-e $src_file) {
-                debug_log(sprintf("adding  %s for engine type '%s'", $src_file, $cs_type));
+                debug_log(sprintf("adding %s for engine type '%s'\n", $src_file, $cs_type));
                 printf FH "src=%s\ndest=%s\n", $src_file, $dest_file;
             } elsif (! $$file_spec{'required'}) {
-                debug_log(sprintf("skipping %s because it does not exist and is not required for engine type '%s'", $src_file, $cs_type));
+                debug_log(sprintf("skipping %s because it does not exist and is not required for engine type '%s'\n", $src_file, $cs_type));
             } else {
                 die "[ERROR]Could not find required file " . $src_file . " for engine type '" . $cs_type. "'\n";
             }
@@ -1889,10 +1889,10 @@ sub build_files_list {
                 $src_file =~ s/\%config-dir\%/$config_dir\//g;
                 my $dest_file = $$file_spec{'dest'};
                 if (-e $src_file) {
-                    debug_log(sprintf("adding %s for tool '%s'", $src_file, $tool_name));
+                    debug_log(sprintf("adding %s for tool '%s'\n", $src_file, $tool_name));
                     printf FH "src=%s\ndest=%s\n", $src_file, $dest_file;
                 } elsif (! $$file_spec{'required'}) {
-                    debug_log(sprintf("skipping %s because it does not exist and is not required for tool '%s'", $src_file, $tool_name));
+                    debug_log(sprintf("skipping %s because it does not exist and is not required for tool '%s'\n", $src_file, $tool_name));
                 } else {
                     die "[ERROR]Could not find required file " . $src_file . " for tool '" . $tool_name . "'\n";
                 }
@@ -1907,10 +1907,10 @@ sub build_files_list {
                 $src_file =~ s/\%utility-dir\%/$utility_dir/g;
                 my $dest_file = $$file_spec{'dest'};
                 if (-e $src_file) {
-                    debug_log(sprintf("adding %s for utility '%s'", $src_file, $utility));
+                    debug_log(sprintf("adding %s for utility '%s'\n", $src_file, $utility));
                     printf FH "src=%s\ndest=%s\n", $src_file, $dest_file;
                 } elsif (! $$file_spec{'required'}) {
-                    debug_log(sprintf("skipping %s because it does not exist and is not required for utility '%s'", $src_file, $utility));
+                    debug_log(sprintf("skipping %s because it does not exist and is not required for utility '%s'\n", $src_file, $utility));
                 } else {
                     die "[ERROR]Could not find required file " . $src_file . " for utility '" . $utility . "'\n";
                 }
@@ -2339,7 +2339,7 @@ sub organize_run_data() {
         foreach my $archive (dir_entries($engine_archives_dir,
                                         qr/^(\w+)-(.+)-data\.tgz$/)) {
             if ($archive =~ /^(\w+)-(.+)-data\.tgz$/) {
-                debug_log("found archive $archive");
+                debug_log("found archive $archive\n");
             } else {
                 printf "archive %s is not recognized\n";
                 next;
