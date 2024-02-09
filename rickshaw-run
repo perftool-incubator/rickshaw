@@ -479,7 +479,6 @@ sub calc_image_md5 {
     # compute an md5 hash of relevant information to identify the
     # userenv
     my $md5 = Digest::MD5->new;
-    my $coder = JSON::XS->new->canonical;
 
     # First is the Initial hash calc on workshop reqs
     $md5->add(join("", @config_analysis_output));
