@@ -344,7 +344,7 @@ function create_servers() {
         engine_list=`echo $engine_list | sed -e 's/ /,/g'`
 
         this_node_scp="scp $ssh_opts root@$this_node"
-        this_osruntime_bootstrap="$this_node-osruntime-bootstrap"
+        this_osruntime_bootstrap="rickshaw-$run_id-$this_node-osruntime-bootstrap"
         echo "cpu_partitioning: [$cpu_partitioning]"
         echo "numa_node: [$numa_node]"
         echo "os_runtime: [$os_runtime]"
@@ -368,9 +368,13 @@ function create_servers() {
             "$disable_tools_list"
         do_scp "" "$this_osruntime_bootstrap" "${user}@${host}" "~"
         if [ "$host" != "$this_node" ]; then
-            do_ssh ${user}@${host} scp $ssh_opts $this_osruntime_bootstrap root@$this_node:~/$this_osruntime_bootstrap
-            do_ssh ${user}@${host} ssh $ssh_opts root@$this_node ./$this_osruntime_bootstrap
+            echo "Copying bootstrap script from undercloud [$host] to compute node [$this_node]"
+            echo "ssh_opts: $ssh_opts"
+            do_ssh ${user}@${host} /bin/scp ./$this_osruntime_bootstrap root@$this_node:~/$this_osruntime_bootstrap
+            echo "Starting bootstrap script on compute node [$this_node]"
+            do_ssh ${user}@${host} /bin/ssh root@$this_node ./$this_osruntime_bootstrap
         else
+            echo "Starting bootstrap script on all-in-one openstack node [$this_node]"
             do_ssh ${user}@${host} sudo ./$this_osruntime_bootstrap
         fi
         for this_engine in `echo $engine_list | sed -e 's/,/ /g'`; do
@@ -396,19 +400,20 @@ function create_server() {
     if [ "$disable_tools" != "1" ]; then
         # Get the profilers needed to run with this client or server
         add_profiler_engines "$cs_label" these_profilers
-        engine_list="$cs_label $these_profilers"
-        echo "engine_list: $engine_list"
-        for this_engine in $engine_list; do
-            get_image_name $this_engine this_image
-            if [ -z "$this_image" ]; then
-                abort_error "Could not find image for $this_engine" endpoint-deploy-begin
-            fi
-            image_list+=",$this_image"
-            disable_tools_list+=",0" # any osruntime for a tool must have tools enabled
-        done
-        image_list=`echo $image_list | sed -e 's/^,//'`
-        engine_list=`echo $engine_list | sed -e 's/ /,/g'`
     fi
+
+    engine_list="$cs_label $these_profilers"
+    echo "engine_list: $engine_list"
+    for this_engine in $engine_list; do
+        get_image_name $this_engine this_image
+        if [ -z "$this_image" ]; then
+            abort_error "Could not find image for $this_engine" endpoint-deploy-begin
+        fi
+        image_list+=",$this_image"
+        disable_tools_list+=",0" # any osruntime for a tool must have tools enabled
+    done
+    image_list=`echo $image_list | sed -e 's/^,//'`
+    engine_list=`echo $engine_list | sed -e 's/ /,/g'`
 
     echo "engines: $engine_list"
     echo "images: $image_list"
@@ -515,7 +520,7 @@ function create_server() {
     # a) tool-collection osruntimes can be launched on them later
     # b) hypervisor_host env var can be sent to the engines at engine-init roadblock
     this_compute_node=`do_ssh ${user}@${host} $osp_pre_cmd openstack server show $vm_name -f json | jq -r '."OS-EXT-SRV-ATTR:hypervisor_hostname"'`
-    if [ "$this_compute_node" == "null" ]; then 
+    if [ "$this_compute_node" == "null" ]; then
         # Assume this is a all-in-one openstack and use the endpoint $host as the hypervisor
         this_compute_node=$host
     fi
@@ -534,6 +539,7 @@ function cleanup_osruntime() {
     local this_cs_label
     local vm_names=""
     local mgmt_port_names=""
+    local this_osruntime_bootstrap
     echo "Going to delete VMs for these clients and servers: ${clients[@]} ${servers[@]}"
     for this_cs_label in ${clients[@]} ${servers[@]}; do
         vm_names+=" rickshaw-$run_id-$this_cs_label"
@@ -547,7 +553,12 @@ function cleanup_osruntime() {
     do_ssh ${user}@${host} "$osp_pre_cmd openstack keypair delete $vm_ssh_key_name" >${endpoint_run_dir}/openstack-keypair-delete-$vm_ssh_key_name.txt
     echo "deletintg keyfile [$vm_ssh_key_name]"
     do_ssh ${user}@${host} "rm -f $vm_ssh_key_file"
+    echo "deleting osruntime-bootstrap scripts"
     do_ssh ${user}@${host} "rm -f *osruntime-bootstrap"
+    for this_node in ${!active_compute_nodes[@]}; do
+        this_osruntime_bootstrap="rickshaw-$run_id-$this_node-osruntime-bootstrap"
+        do_ssh ${user}@${host} /bin/ssh root@$this_node /bin/rm ./$this_osruntime_bootstrap
+    done
 
     do_ssh ${user}@${host} "$osp_pre_cmd openstack server list" >${endpoint_run_dir}/openstack-server-remaining.txt
     echo "remaining rickshaw openstack servers:"
