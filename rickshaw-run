@@ -20,6 +20,11 @@ use JSON::XS;
 use JSON::Validator;
 use Data::Dumper;
 
+$Data::Dumper::Sortkeys = 1;
+$Data::Dumper::Pair = ' : ';
+$Data::Dumper::Useqq = 1;
+$Data::Dumper::Indent = 3;
+
 BEGIN {
     if (!(exists $ENV{'TOOLBOX_HOME'} && -d "$ENV{'TOOLBOX_HOME'}/perl")) {
         print "This script requires libraries that are provided by the toolbox project.\n";
@@ -63,12 +68,6 @@ my $collect_sysinfo_timeout;
 my $endpoint_deploy_timeout;
 my $engine_script_start_timeout;
 my $endpoint_move_data_rb_timeout;
-(my $hostname_cmd, my $hostname, my $hostname_rc) = run_cmd('hostname');
-chomp ($hostname);
-my $hostname_md5 = Digest::MD5->new;
-$hostname_md5->add($hostname);
-my $hostname_hash = $hostname_md5->hexdigest;
-printf "Controller hostname is '%s' and it's hash identifier is '%s'\n", $hostname, $hostname_hash;
 my $base_rb_leader_cmd = $rb_bin . " --role=leader --redis-server=localhost" .
                          " --redis-password=" . $redis_passwd;
 my $base_rb_follower_cmd = $rb_bin . " --role=follower --redis-server=localhost" .
@@ -407,6 +406,7 @@ sub calc_image_md5 {
     }
     my $workshop_config_cmd = $workshop_sub_cmd . " --label config-analysis --dump-config true";
     my $workshop_files_cmd = $workshop_sub_cmd . " --label files-listing --dump-files true";
+    debug_log(sprintf "calc_image_md5(): workshop dump-config cmd: %s\n", $workshop_config_cmd);
     (my $cmd, my $cmd_output, my $cmd_rc) = run_cmd($workshop_config_cmd);
     my @config_analysis_output = split(/\n/, $cmd_output);
     if ($cmd_rc > 0) {
@@ -421,6 +421,7 @@ sub calc_image_md5 {
         }
     }
     splice(@config_analysis_output, 0, $break_line+1);
+    debug_log("calc_image_md5(): workshop dump-config output:\n" . Dumper \@config_analysis_output);
 
     # The second part of the hash input is the *content* of certain files
     # Start with workshop code and schema, which when changed will
@@ -429,6 +430,7 @@ sub calc_image_md5 {
 
     # Add to the file list all the files that workshop identifies
     # as being copied into the userenv
+    debug_log(sprintf "calc_image_md5(): workshop dump-files cmd: %s\n", $workshop_files_cmd);
     ($cmd, $cmd_output, $cmd_rc) = run_cmd($workshop_files_cmd);
     my @files_dump_output = split(/\n/, $cmd_output);
     if ($cmd_rc > 0) {
@@ -443,23 +445,25 @@ sub calc_image_md5 {
         }
     }
     splice(@files_dump_output, 0, $break_line+1);
+    debug_log("calc_image_md5(): workshop dump-files output:\n" . Dumper \@files_dump_output);
+
     foreach my $dumped_file (@files_dump_output) {
         if ($dumped_file !~ /^\[VERBOSE\]|^replacing/) {
-            debug_log(sprintf "found file from workshop [%s]\n", $dumped_file);
+            debug_log(sprintf "calc_image_md5(): found file from workshop [%s]\n", $dumped_file);
 
             my $real_path = Cwd::realpath($dumped_file);
             if ($real_path ne $dumped_file) {
-                debug_log(sprintf "file from workshop [%s] is a link to [%s]\n", $dumped_file, $real_path);
+                debug_log(sprintf "calc_image_md5(): file from workshop [%s] is a link to [%s]\n", $dumped_file, $real_path);
                 $dumped_file = $real_path;
             }
 
             if (-f $dumped_file) {
                 push(@files, $dumped_file);
             } elsif (-d $dumped_file) {
-                debug_log(sprintf "file from workshop [%s] is actually a directory...\n", $dumped_file);
+                debug_log(sprintf "calc_image_md5(): file from workshop [%s] is actually a directory...\n", $dumped_file);
                 my @found_files = @{find_files($dumped_file)};
                 foreach my $found_file (@found_files) {
-                    debug_log(sprintf "found file [%s]\n", $found_file);
+                    debug_log(sprintf "calc_image_md5(): found file [%s]\n", $found_file);
                     push(@files, $found_file);
                 }
             }
@@ -469,13 +473,13 @@ sub calc_image_md5 {
     # compute an md5 hash of relevant information to identify the
     # userenv
     my $md5 = Digest::MD5->new;
-    my $coder = JSON::XS->new->canonical;
 
     # First is the Initial hash calc on workshop reqs
     $md5->add(join("", @config_analysis_output));
 
     # Second is the hashing contents of files
     for my $file (@files) {
+        debug_log(sprintf "calc_image_md5(): adding '%s' to hash\n", $file);
         open(my $fh, $file);
         binmode($fh);
         $md5->add($file);
@@ -484,6 +488,8 @@ sub calc_image_md5 {
     }
     my $base_hash = $md5->hexdigest;
     my $full_hash = $base_hash . "_" . $arch_suffix;
+    debug_log(sprintf "calc_image_md5(): returning '%s'\n", $full_hash);
+
     return $full_hash;
 }
 
@@ -495,7 +501,7 @@ sub remote_image_found {
     } else {
         $full_url = $run{'dest-image-url'} . ":" . $image;
     }
-    debug_log(sprintf "Checking for remote workshop image: %s... ", $full_url);
+    debug_log(sprintf "Checking for remote workshop image: %s...\n", $full_url);
     my $skopeo_url;
     if (($full_url =~ /^dir:/) || ($full_url =~ /^docker:\/\//)) {
         $skopeo_url = $full_url;
@@ -522,7 +528,7 @@ sub local_image_found {
     } else {
         $full_url = $run{'source-image-url'} . ":" . $image;
     }
-    debug_log(sprintf "Checking for local workshop image: %s... ", $full_url);
+    debug_log(sprintf "Checking for local workshop image: %s...\n", $full_url);
     my $cmd = "buildah images " . $full_url;
     debug_log(sprintf "cmd:\n%s\n\n", $cmd);
     ($cmd, my $output, my $cmd_rc) = run_cmd($cmd);
@@ -554,19 +560,6 @@ sub workshop_build_image {
         printf "skip_update was not defined, so setting to false\n";
         $skip_update = "false";
     }
-    for (my $i=0; $i<@{$cs_conf{'config'}{'labels'}}; $i++) {
-        if ($cs_conf{'config'}{'labels'}[$i] =~ /hostname-hash/) {
-            splice(@{$cs_conf{'config'}{'labels'}}, $i, 1);
-            if (put_json_file($cs_conf_file, \%cs_conf) > 0) {
-                printf "workshop_build_image(): put_json_file(): %s: remove failed\n", $cs_conf_file;
-                exit 1;
-            }
-            last;
-        }
-    }
-    # insert the hostname-hash after all tag checking has been done to
-    # avoid creating unique tags per controller
-    push(@{$cs_conf{'config'}{'labels'}}, 'hostname-hash=' . $hostname_hash);
     if (put_json_file($cs_conf_file, \%cs_conf) > 0) {
         printf "workshop_build_image(): put_json_file(): %s: add failed\n", $cs_conf_file;
         exit 1;
@@ -741,7 +734,7 @@ sub build_reqs {
                             'name' => 'bash_src',
                             'type' => 'source',
                             'source_info' => {
-                                'url' => 'https://mirrors.ocf.berkeley.edu/gnu/bash/bash-5.1.tar.gz',
+                                'url' => 'https://mirrors.ibiblio.org/gnu/bash/bash-5.2.21.tar.gz',
                                 'filename' => 'bash.tar.gz',
                                 'commands' => {
                                     'unpack' => 'tar -xzf bash.tar.gz',
@@ -1870,10 +1863,10 @@ sub build_files_list {
             $src_file =~ s/\%config-dir\%/$config_dir\//g;
             my $dest_file = $$file_spec{'dest'};
             if (-e $src_file) {
-                debug_log(sprintf("adding  %s for engine type '%s'", $src_file, $cs_type));
+                debug_log(sprintf("adding %s for engine type '%s'\n", $src_file, $cs_type));
                 printf FH "src=%s\ndest=%s\n", $src_file, $dest_file;
             } elsif (! $$file_spec{'required'}) {
-                debug_log(sprintf("skipping %s because it does not exist and is not required for engine type '%s'", $src_file, $cs_type));
+                debug_log(sprintf("skipping %s because it does not exist and is not required for engine type '%s'\n", $src_file, $cs_type));
             } else {
                 die "[ERROR]Could not find required file " . $src_file . " for engine type '" . $cs_type. "'\n";
             }
@@ -1889,10 +1882,10 @@ sub build_files_list {
                 $src_file =~ s/\%config-dir\%/$config_dir\//g;
                 my $dest_file = $$file_spec{'dest'};
                 if (-e $src_file) {
-                    debug_log(sprintf("adding %s for tool '%s'", $src_file, $tool_name));
+                    debug_log(sprintf("adding %s for tool '%s'\n", $src_file, $tool_name));
                     printf FH "src=%s\ndest=%s\n", $src_file, $dest_file;
                 } elsif (! $$file_spec{'required'}) {
-                    debug_log(sprintf("skipping %s because it does not exist and is not required for tool '%s'", $src_file, $tool_name));
+                    debug_log(sprintf("skipping %s because it does not exist and is not required for tool '%s'\n", $src_file, $tool_name));
                 } else {
                     die "[ERROR]Could not find required file " . $src_file . " for tool '" . $tool_name . "'\n";
                 }
@@ -1907,10 +1900,10 @@ sub build_files_list {
                 $src_file =~ s/\%utility-dir\%/$utility_dir/g;
                 my $dest_file = $$file_spec{'dest'};
                 if (-e $src_file) {
-                    debug_log(sprintf("adding %s for utility '%s'", $src_file, $utility));
+                    debug_log(sprintf("adding %s for utility '%s'\n", $src_file, $utility));
                     printf FH "src=%s\ndest=%s\n", $src_file, $dest_file;
                 } elsif (! $$file_spec{'required'}) {
-                    debug_log(sprintf("skipping %s because it does not exist and is not required for utility '%s'", $src_file, $utility));
+                    debug_log(sprintf("skipping %s because it does not exist and is not required for utility '%s'\n", $src_file, $utility));
                 } else {
                     die "[ERROR]Could not find required file " . $src_file . " for utility '" . $utility . "'\n";
                 }
@@ -2230,7 +2223,6 @@ sub deploy_endpoints() {
             # Endpoints should return for each client and server started:
             # - the ID of the client/server
             # - the roadblock client ID
-            debug_log(sprintf "Going to run endpoint command:\n%s\n\n", $cmd);
             printf "Going to run endpoint command:\n%s\n\n", $cmd;
             if ($endpoint_roadblock_opt eq "") {
                 # There is only one client and no synchronization, so we wait for the endpoint to finish
@@ -2339,7 +2331,7 @@ sub organize_run_data() {
         foreach my $archive (dir_entries($engine_archives_dir,
                                         qr/^(\w+)-(.+)-data\.tgz$/)) {
             if ($archive =~ /^(\w+)-(.+)-data\.tgz$/) {
-                debug_log("found archive $archive");
+                debug_log("found archive $archive\n");
             } else {
                 printf "archive %s is not recognized\n";
                 next;
