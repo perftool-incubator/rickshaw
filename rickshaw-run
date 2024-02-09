@@ -753,7 +753,7 @@ sub build_reqs {
                             'name' => 'bash_src',
                             'type' => 'source',
                             'source_info' => {
-                                'url' => 'https://mirrors.ocf.berkeley.edu/gnu/bash/bash-5.1.tar.gz',
+                                'url' => 'https://mirrors.ibiblio.org/gnu/bash/bash-5.2.21.tar.gz',
                                 'filename' => 'bash.tar.gz',
                                 'commands' => {
                                     'unpack' => 'tar -xzf bash.tar.gz',
