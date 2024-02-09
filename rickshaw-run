@@ -68,12 +68,6 @@ my $collect_sysinfo_timeout;
 my $endpoint_deploy_timeout;
 my $engine_script_start_timeout;
 my $endpoint_move_data_rb_timeout;
-(my $hostname_cmd, my $hostname, my $hostname_rc) = run_cmd('hostname');
-chomp ($hostname);
-my $hostname_md5 = Digest::MD5->new;
-$hostname_md5->add($hostname);
-my $hostname_hash = $hostname_md5->hexdigest;
-printf "Controller hostname is '%s' and it's hash identifier is '%s'\n", $hostname, $hostname_hash;
 my $base_rb_leader_cmd = $rb_bin . " --role=leader --redis-server=localhost" .
                          " --redis-password=" . $redis_passwd;
 my $base_rb_follower_cmd = $rb_bin . " --role=follower --redis-server=localhost" .
@@ -566,19 +560,6 @@ sub workshop_build_image {
         printf "skip_update was not defined, so setting to false\n";
         $skip_update = "false";
     }
-    for (my $i=0; $i<@{$cs_conf{'config'}{'labels'}}; $i++) {
-        if ($cs_conf{'config'}{'labels'}[$i] =~ /hostname-hash/) {
-            splice(@{$cs_conf{'config'}{'labels'}}, $i, 1);
-            if (put_json_file($cs_conf_file, \%cs_conf) > 0) {
-                printf "workshop_build_image(): put_json_file(): %s: remove failed\n", $cs_conf_file;
-                exit 1;
-            }
-            last;
-        }
-    }
-    # insert the hostname-hash after all tag checking has been done to
-    # avoid creating unique tags per controller
-    push(@{$cs_conf{'config'}{'labels'}}, 'hostname-hash=' . $hostname_hash);
     if (put_json_file($cs_conf_file, \%cs_conf) > 0) {
         printf "workshop_build_image(): put_json_file(): %s: add failed\n", $cs_conf_file;
         exit 1;
