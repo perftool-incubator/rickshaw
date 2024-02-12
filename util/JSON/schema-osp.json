@@ -76,7 +76,6 @@
     "additionalProperties": true,
     "required": [
         "type",
-        "controller-ip",
         "host",
         "user"
     ],
