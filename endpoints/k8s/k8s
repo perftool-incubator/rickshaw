@@ -465,23 +465,25 @@ function process_k8s_opts() {
             # <engine-specifer> can be 'default' to apply to any engine that is not explicitly specified
             # <engine-specifier> can be an engine type (client, server) and a '-', followed by range(s) of numbers:
             #   client-1-3+5-7+9-11   <-ranges must be separated with '+' and not ','
+            # <val> must be a file
+            #
             # examples:
             # nodeSelector:default:this-node.json
             # resources:client-1-6+10-16:this-resource.json
             nodeSelector)
-                store_vars $val nodeSelector
+                store_vars_from_file $val nodeSelector
                 ;;
             securityContext)
-                store_vars $val securityContext
+                store_vars_from_file $val securityContext
                 ;;
             PsecurityContext)
-                store_vars $val PsecurityContext
+                store_vars_from_file $val PsecurityContext
                 ;;
             resources)
-                store_vars $val resources
+                store_vars_from_file $val resources
                 ;;
             annotations)
-                store_vars $val annotations
+                store_vars_from_file $val annotations
                 ;;
 
 

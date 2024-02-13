@@ -6,7 +6,7 @@ set -u
 # This script implements the 'remotehost' endpoint for rickshaw.  It runs 1 or more
 # clients and servers for as many benchmark interations/samples as required
 # for a single invocation of rickshaw.
-# 
+#
 #
 # Usage: (as called by rickshaw-run)
 #

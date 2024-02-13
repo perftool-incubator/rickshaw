@@ -52,6 +52,21 @@ declare -A numaNode
 numaNode[default]=-1
 profiler_count=0
 
+function store_vars_from_file() {
+    local val=$1; shift
+    local pass_thru_ref=$1; shift # caller-provided variable name (call-by-reference)
+    local key=$(get_opt_field "${val}" "key")
+    local value=$(get_opt_field "${val}" "value")
+    local file_contents
+
+    if [ ! -e $value ]; then
+        exit_error "store_vars_from_file(): file [$value] does not exist"
+    fi
+
+    file_contents=`cat $value`
+    store_vars "$key:$file_contents" $pass_thru_ref
+}
+
 function store_vars() {
     local val=$1; shift
     typeset -n ref1=$1; shift # caller-provided variable name (call-by-reference)
@@ -59,7 +74,6 @@ function store_vars() {
     local value=$(get_opt_field "${val}" "value")
     local label=`echo $key | awk -F- '{print $1}'`
     local range=`echo $key | sed -e s/$label-//`
-    echo "#val: [$val]" "key: [$key]" "value: [$value]" "label: [$label]" "range: [$range]"
     local id
 
     # If $key == $val, that means the string for val is something like:
