@@ -149,6 +149,24 @@ function process_osp_opts() {
         # The $val may have : in it, so don't use awk to get only the second field
         val=`echo $opt | sed -e s/^$arg://`
         case "$arg" in
+
+
+            # for arg = [flavor, availability-zone]:
+            # option format:  arg:<engine-specifer>:<val>
+            # <engine-specifer> can be 'default' to apply to any engine that is not explicitly specified
+            # <engine-specifier> can be an engine type (client, server) and a '-', followed by range(s) of numbers:
+            #   client-1-3+5-7+9-11   <-ranges must be separated with '+' and not ','
+            # examples:
+            # flavor:default:ospdev
+            # availability-zone:client-1-6+10-16:nova
+            flavor)
+                store_vars $val flavor
+                ;;
+            availability-zone)
+                store_vars $val availability_zone
+                ;;
+
+
             disable-tools)
                 disable_tools="$val"
                 ;;
@@ -157,6 +175,10 @@ function process_osp_opts() {
                 ;;
             network)
                 network=$val
+                this_key=$(get_opt_field "${val}" "key")
+                this_value=$(get_opt_field "${val}" "value")
+                label=`echo $this_key | awk -F- '{print $1}'`
+                range=`echo $this_key | sed -e s/$label-//`
                 ;;
             client|server|clients|servers)
                 addto_clients_servers "$arg" "$val"
@@ -181,66 +203,6 @@ function process_osp_opts() {
                 ;;
             userenv)
                 userenv=$val
-                ;;
-            flavor)
-                flavor="$val"
-                # flavor is per engine:
-                # option format::  flavor:<engine-label>:<flavor>
-                # <engine-label> can be 'default' to apply to any engine that is not explicitly specified
-                # <engine-label> can be an engine type (client, server) and a '-', followed by range(s) of numbers:
-                #   client-1-3+5-7+9-11   <-ranges must be separated with '+'
-                this_key=$(get_opt_field "${val}" "key")
-                this_value=$(get_opt_field "${val}" "value")
-                label=`echo $this_key | awk -F- '{print $1}'`
-                range=`echo $this_key | sed -e s/$label-//`
-                if [ "$label" == "default" ]; then
-                    flavor["default"]=$this_value
-                else
-                    for this_range in `echo $range | sed -e 's/+/ /g'`; do
-                        if echo $this_range | grep -q "-"; then
-                            begin=`echo $this_range | awk -F- '{print $1}'`
-                            end=`echo $this_range | awk -F- '{print $2}'`
-                        else
-                            begin=$this_range
-                            end=$this_range
-                        fi
-                        for this_id in `seq $begin $end`; do
-                            flavor[$label-$this_id]=$this_value
-                        done
-                    done
-                fi
-                ;;
-            availability-zone)
-                # node (compute node hostname) is per engine:
-                # option format::  node:<engine-label>:<node>
-                # <engine-label> can be 'default' to apply to any engine that is not explicitly specified
-                this_key=$(get_opt_field "${val}" "key")
-                this_value=$(get_opt_field "${val}" "value")
-                #this_key=client-1-5+11-15+21+23+25+27+28
-                #this_value=nova:compute-r650-0.localdomain
-                echo "#this_key: [$this_key]"
-                echo "#this_value: [$this_value]"
-                label=`echo $this_key | awk -F- '{print $1}'`
-                range=`echo $this_key | sed -e s/$label-//`
-                echo "#zone: [$this_value]"
-                echo "#label: [$label]"
-                echo "#range: [$range]"
-                if [ "$label" == "default" ]; then
-                    availability_zone["default"]=$this_value
-                else
-                    for this_range in `echo $range | sed -e 's/+/ /g'`; do
-                        if echo $this_range | grep -q "-"; then
-                            begin=`echo $this_range | awk -F- '{print $1}'`
-                            end=`echo $this_range | awk -F- '{print $2}'`
-                        else
-                            begin=$this_range
-                            end=$this_range
-                        fi
-                        for this_id in `seq $begin $end`; do
-                            availability_zone[$label-$this_id]=$this_value
-                        done
-                    done
-                fi
                 ;;
             *)
                 if echo $arg | grep -q -- "="; then

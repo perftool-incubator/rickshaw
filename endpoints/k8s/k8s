@@ -459,161 +459,32 @@ function process_k8s_opts() {
             runtimeClassName)
                 runtimeClassName="$val"
                 ;;
+
+            # for arg = [nodeSelector, securityContext, PsecurityContext, resources, annotations]:
+            # option format:  arg:<engine-specifer>:<val>
+            # <engine-specifer> can be 'default' to apply to any engine that is not explicitly specified
+            # <engine-specifier> can be an engine type (client, server) and a '-', followed by range(s) of numbers:
+            #   client-1-3+5-7+9-11   <-ranges must be separated with '+' and not ','
+            # examples:
+            # nodeSelector:default:this-node.json
+            # resources:client-1-6+10-16:this-resource.json
             nodeSelector)
-                # nodeSelector is per engine:
-                # option format::  nodeSelector:<engine-label>:<full-path-to-json-with-nodeSelector>
-                # <engine-label> can be 'default' to apply to any engine that is not explicitly specified
-                # <engine-label> can be an engine type (client, server) and a '-', followed by range(s) of numbers:
-                #   client-1-3+5-7+9-11   <-ranges must be separated with '+'
-                # json file example (note no outer {}'s)
-                # "nodeSelector": {
-                #    "kubernetes.io/hostname": "worker000"
-                # }
-                #TODO: validate correct format of <engine-label>:<path-to-file>
-                name=$(get_opt_field "${val}" "key")
-                file=$(get_opt_field "${val}" "value")
-                label=`echo $name | awk -F- '{print $1}'`
-                range=`echo $name | sed -e s/$label-//`
-                if [ ! -z "$file" -o -e $file ]; then
-                    if [ "$label" == "default" ]; then
-                        nodeSelector["default"]=`cat $file`
-                    else
-                        local list=`range_to_list $range`
-                        for this_id in $list; do
-                            nodeSelector[$label-$this_id]=`cat $file`
-                        done
-                    fi
-                else
-                    exit_error "Could not find nodeSelector file $file for $name"
-                fi
+                store_vars $val nodeSelector
                 ;;
             securityContext)
-                # securityContext is per engine:
-                # option format::  securityContext:<engine-label>:<full-path-to-json-with-securityContext>
-                # <engine-label> can be 'default' to apply to any engine that is not explicitly specified
-                # <engine-label> can be an engine type (client, server) and a '-', followed by range(s) of numbers:
-                #   client-1-3+5-7+9-11   <-ranges must be separated with '+'
-                # json file example (note no outer {}'s)
-                # "securityContext": {
-                #   "privileged": false,
-                #   "capabilities": {
-                #     "add": [ "IPC_LOCK", "SYS_ADMIN", "SYS_RAWIO", "SYS_NICE" ]
-                #   }
-                # }
-                #TODO: validate correct format of <engine-label>:<path-to-file>
-                name=$(get_opt_field "${val}" "key")
-                file=$(get_opt_field "${val}" "value")
-                label=`echo $name | awk -F- '{print $1}'`
-                range=`echo $name | sed -e s/$label-//`
-                if [ ! -z "$file" -o -e $file ]; then
-                    if [ "$label" == "default" ]; then
-                        securityContext["default"]=`cat $file`
-                    else
-                        local list=`range_to_list $range`
-                        for this_id in $list; do
-                            securityContext[$label-$this_id]=`cat $file`
-                        done
-                    fi
-                else
-                    exit_error "Could not find securityContext file $file for $name"
-                fi
+                store_vars $val securityContext
                 ;;
             PsecurityContext)
-                # PsecurityContext is per engine:
-                # option format::  PsecurityContext:<engine-label>:<full-path-to-json-with-securityContext>
-                # <engine-label> can be 'default' to apply to any engine that is not explicitly specified
-                # <engine-label> can be an engine type (client, server) and a '-', followed by range(s) of numbers:
-                #   client-1-3+5-7+9-11   <-ranges must be separated with '+'
-                # json file example (note no outer {}'s)
-                # "securityContext": {
-                #       "sysctls": [
-                #          {
-                #             "name": "net.ipv4.tcp_tw_reuse",
-                #             "value": "1"
-                #          }
-                #       ]
-                # }
-                #TODO: validate correct format of <engine-label>:<path-to-file>
-                name=$(get_opt_field "${val}" "key")
-                file=$(get_opt_field "${val}" "value")
-                label=`echo $name | awk -F- '{print $1}'`
-                range=`echo $name | sed -e s/$label-//`
-                if [ ! -z "$file" -o -e $file ]; then
-                    if [ "$label" == "default" ]; then
-                        PsecurityContext["default"]=`cat $file`
-                    else
-                        local list=`range_to_list $range`
-                        for this_id in $list; do
-                            PsecurityContext[$label-$this_id]=`cat $file`
-                        done
-                    fi
-                else
-                    exit_error "Could not find PsecurityContext file $file for $name"
-                fi
+                store_vars $val PsecurityContext
                 ;;
             resources)
-                # resources is per engine:
-                # option format::  resources:<engine-label>:<full-path-to-json-with-resources>
-                # <engine-label> can be 'default' to apply to any engine that is not explicitly specified
-                # <engine-label> can be an engine type (client, server) and a '-', followed by range(s) of numbers:
-                #   client-1-3+5-7+9-11   <-ranges must be separated with '+'
-                # json file example (note no outer {}'s)
-                # "resources": {
-                #   "requests": {
-                #     "cpu": "33",
-                #     "memory": "2048Mi"
-                #   },
-                #   "limits": {
-                #     "cpu": "33",
-                #     "memory": "2048Mi"
-                #   }
-                # }
-                #TODO: validate correct format of <engine-label>:<path-to-file>
-                name=$(get_opt_field "${val}" "key")
-                file=$(get_opt_field "${val}" "value")
-                label=`echo $name | awk -F- '{print $1}'`
-                range=`echo $name | sed -e s/$label-//`
-                if [ ! -z "$file" -o -e $file ]; then
-                    if [ "$label" == "default" ]; then
-                        resources["default"]=`cat $file`
-                    else
-                        local list=`range_to_list $range`
-                        for this_id in $list; do
-                            resources[$label-$this_id]=`cat $file`
-                        done
-                    fi
-                else
-                    exit_error "Could not find resources file $file for $name"
-                fi
+                store_vars $val resources
                 ;;
             annotations)
-                # resources is per engine:
-                # option format::  annotations:<engine-label>:<full-path-to-json-with-annotations>
-                # <engine-label> can be 'default' to apply to any engine that is not explicitly specified
-                # <engine-label> can be an engine type (client, server) and a '-', followed by range(s) of numbers:
-                #   client-1-3+5-7+9-11   <-ranges must be separated with '+'
-                # json file example (note no outer {}'s)
-                # "annotations": {
-                #   "k8s.v1.cni.cncf.io/networks": "sriov-mellanox-b-pod, sriov-mellanox-a-pod"
-                # }
-                #TODO: validate correct format of <engine-label>:<path-to-file>
-                name=$(get_opt_field "${val}" "key")
-                file=$(get_opt_field "${val}" "value")
-                label=`echo $name | awk -F- '{print $1}'`
-                range=`echo $name | sed -e s/$label-//`
-                if [ ! -z "$file" -o -e $file ]; then
-                    if [ "$label" == "default" ]; then
-                        annotations["default"]=`cat $file`
-                    else
-                        local list=`range_to_list $range`
-                        for this_id in $list; do
-                            annotations[$label-$this_id]=`cat $file`
-                        done
-                    fi
-                else
-                    exit_error "Could not find annotations file $file for $name"
-                fi
+                store_vars $val annotations
                 ;;
+
+
             volumeMounts)
                 name=$(get_opt_field "${val}" "key")
                 file=$(get_opt_field "${val}" "value")
