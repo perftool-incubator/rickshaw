@@ -668,6 +668,15 @@ function build_pod_spec() {
     echo "  ,\"metadata\": {" >>$json
     echo "    \"name\": \"$pod_prefix-$name\"," >>$json
     echo "    \"namespace\": \"$project_name\"" >>$json
+    if [ "$type" == "cs" ]; then
+    set +u
+    if [ ! -z "${annotations[$name]}" ]; then
+        echo -e "    ,${annotations[$name]}" >>$json
+    elif [ ! -z "${annotations[default]}" ]; then
+        echo -e "    ,${annotations[default]}" >>$json
+    fi
+    set -u
+    fi
     echo "  }" >>$json
     echo "  ,\"spec\": {" >>$json
     echo "    \"restartPolicy\": \"Never\"" >>$json
