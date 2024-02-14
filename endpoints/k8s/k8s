@@ -733,14 +733,15 @@ function build_pod_spec() {
 
     if [ "$type" == "cs" ]; then
 
-        # Client/server user-provided resources
-        set +u
-        if [ ! -z "${resources[$name]}" ]; then
-            echo -e ",${resources[$name]}" >>$json
-        elif [ ! -z "${resources[default]}" ]; then
-            echo -e ",${resources[default]}" >>$json
+        # If user provides pod securityContext
+        if [ "$type" == "cs" ]; then
+            set +u
+            if [ ! -z "${PsecurityContext[$name]}" ]; then
+                echo -e ",${PsecurityContext[$name]}" >>$json
+            elif [ ! -z "${PsecurityContext[default]}" ]; then
+                echo -e ",${PsecurityContext[default]}" >>$json
+            fi
         fi
-        set -u
 
         # Support override of runtimeClassName
         # This can be used for Perf Addon Profiles
@@ -918,6 +919,15 @@ function build_pod_spec() {
 
         # If user provided volumeMounts.json, use it. It not, and "hugepage", do implicitly
         if [ "$type" == "cs" ]; then
+
+            # Client/server user-provided resources
+            set +u
+            if [ ! -z "${resources[$name]}" ]; then
+                echo -e ",${resources[$name]}" >>$json
+            elif [ ! -z "${resources[default]}" ]; then
+                echo -e ",${resources[default]}" >>$json
+            fi
+            set -u
 
             # Client/server user-provided security context
             set +u
