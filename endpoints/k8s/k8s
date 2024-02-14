@@ -733,15 +733,13 @@ function build_pod_spec() {
 
     if [ "$type" == "cs" ]; then
 
-        # If user provides pod securityContext
-        if [ "$type" == "cs" ]; then
-            set +u
-            if [ ! -z "${PsecurityContext[$name]}" ]; then
-                echo -e ",${PsecurityContext[$name]}" >>$json
-            elif [ ! -z "${PsecurityContext[default]}" ]; then
-                echo -e ",${PsecurityContext[default]}" >>$json
-            fi
+        set +u
+        if [ ! -z "${PsecurityContext[$name]}" ]; then
+            echo -e ",${PsecurityContext[$name]}" >>$json
+        elif [ ! -z "${PsecurityContext[default]}" ]; then
+            echo -e ",${PsecurityContext[default]}" >>$json
         fi
+        set -u
 
         # Support override of runtimeClassName
         # This can be used for Perf Addon Profiles
