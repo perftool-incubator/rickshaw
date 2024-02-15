@@ -8,7 +8,7 @@
 # with other endpoints for creating multi-cloud tests.
 #
 # Usage:
-# local [--validate] --endpoint-opts=host=<host>,user=<user>,client:n-m,o-p,server:n-m,o-p 
+# local [--validate] --endpoint-opts=host=<host>,user=<user>,client:n-m,o-p,server:n-m,o-p
 #                    --run-id <id> --base-run-dir --image <location>
 #                    --roadblock-server <host> --roadblock-id <id> --roadblock-passwd=<passwd>
 #
@@ -471,19 +471,19 @@ function process_k8s_opts() {
             # nodeSelector:default:this-node.json
             # resources:client-1-6+10-16:this-resource.json
             nodeSelector)
-                store_vars_from_file $val nodeSelector
+                store_var $val nodeSelector 1
                 ;;
             securityContext)
-                store_vars_from_file $val securityContext
+                store_var $val securityContext 1
                 ;;
             PsecurityContext)
-                store_vars_from_file $val PsecurityContext
+                store_var $val PsecurityContext 1
                 ;;
             resources)
-                store_vars_from_file $val resources
+                store_var $val resources 1
                 ;;
             annotations)
-                store_vars_from_file $val annotations
+                store_var $val annotations 1
                 ;;
 
 
