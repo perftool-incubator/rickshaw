@@ -59,7 +59,10 @@ function store_var() {
                         # val: securityContext:client-1-2+5-6:/path/to/securityContext.json
     local ref1;
     typeset -n ref1=$1; shift # caller-provided variable name (call-by-reference)
-    local from_file=$1; shift # set to 1 to load from file
+    local from_file
+    if [ $# -gt 0 ]; then
+        from_file=$1; shift # set to 1 to load from file
+    fi
 
     local key=$(get_opt_field "${val}" "key") # securityContext
     local value=$(get_opt_field "${val}" "value") # client-1-2+5-6:/path/to/securityContext.json
