@@ -3,7 +3,26 @@
       "type": "distro",
       "distro_info": {
         "packages": [
-          "diffutils", "gcc", "libtool", "autoconf", "automake", "make"
+          "diffutils",
+          "gcc",
+          "libtool",
+          "autoconf",
+          "automake",
+          "make",
+          "clang",
+          "slang-devel",
+          "libbabeltrace",
+          "elfutils-libelf-devel",
+          "elfutils-debuginfod",
+          "elfutils-debuginfod-client-devel",
+          "openssl-devel",
+          "xz-devel",
+          "libzstd-devel",
+          "libcap-devel",
+          "libnl3-devel",
+          "numactl-devel",
+          "java-1.8.0-openjdk",
+          "libpfm"
         ]
       }
     }
