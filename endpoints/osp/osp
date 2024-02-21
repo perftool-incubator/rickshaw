@@ -30,17 +30,17 @@ instance_prefix="rickshaw"
 base_osruntime_bootstrap="$endpoint_base_dir/osruntime-bootstrap"
 vm_image="centos9"
 vm_user="root"
-#network="management"
-network="public"
 profiler_count=0
 declare -A flavor
 declare -A availability_zone
 declare -A ips
 declare -A active_compute_nodes
 declare -A engine_hypervisor
+declare -A networks
 osruntime[default]="podman"
 availability_zone[default]="nova"
 flavor[default]="m1.small"
+networks[default]="management"
 
 
 function endpoint_osp_engine_init() {
@@ -160,10 +160,10 @@ function process_osp_opts() {
             # flavor:default:ospdev
             # availability-zone:client-1-6+10-16:nova
             flavor)
-                store_vars $val flavor
+                store_var $val flavor
                 ;;
             availability-zone)
-                store_vars $val availability_zone
+                store_var $val availability_zone
                 ;;
 
 
@@ -173,12 +173,16 @@ function process_osp_opts() {
             ospconfig)
                 ospconfig=$val
                 ;;
-            network)
-                network=$val
-                this_key=$(get_opt_field "${val}" "key")
-                this_value=$(get_opt_field "${val}" "value")
-                label=`echo $this_key | awk -F- '{print $1}'`
-                range=`echo $this_key | sed -e s/$label-//`
+            network|networks)
+                # networks:<scope>:<network-names>
+                # scope= default
+                #        client|server-a-b+c-d, where a/b/c/d = numbers
+                #   ex:  client-1-4+10-24
+                #        server-20-24+30-36+39-41
+                # network-names= network1,network2[,networkN]
+                #   ex:  management,provider1,provider2
+                #        management,provider3,provider4,provider5
+                store_var $val networks
                 ;;
             client|server|clients|servers)
                 addto_clients_servers "$arg" "$val"
@@ -198,7 +202,7 @@ function process_osp_opts() {
             vm-user)
                 vm_user=$val
                 ;;
-            vm-image)
+            vm-image|vm-images)
                 vm_image=$val
                 ;;
             userenv)
@@ -235,10 +239,10 @@ function create_servers() {
     do_ssh ${user}@${host} "mkdir -p $vm_ssh_key_dir"
     echo "checking for existence of ssh key"
     do_ssh ${user}@${host} "$osp_pre_cmd openstack keypair list --quote minimal -f csv | grep -v Name,Fingerprint" >${endpoint_run_dir}/openstack-keys.txt
-    existing_key=`cat ${endpoint_run_dir}/openstack-keys.txt | awk -F, '{print $1}' | grep -v \"Name\" | grep $vm_ssh_key_name` 
+    existing_key=`cat ${endpoint_run_dir}/openstack-keys.txt | awk -F, '{print $1}' | grep -v \"Name\" | grep $vm_ssh_key_name`
     if [ "[$existing_key]" == "[$vm_ssh_key_name]" ]; then
         echo "deleting existing ssh key [$vm_ssh_key_name]"
-        do_ssh ${user}@${host} "$osp_pre_cmd openstack keypair delete $vm_ssh_key_name" 
+        do_ssh ${user}@${host} "$osp_pre_cmd openstack keypair delete $vm_ssh_key_name"
         echo "remaining keypairs"
         do_ssh ${user}@${host} "$osp_pre_cmd openstack keypair list --quote minimal -f csv"
     fi
@@ -251,24 +255,18 @@ function create_servers() {
     do_ssh ${user}@${host} "$osp_pre_cmd openstack image list -f value -c Name" >${endpoint_run_dir}/openstack-images.txt
     do_ssh ${user}@${host} "$osp_pre_cmd openstack network list -f value -c Name" >${endpoint_run_dir}/openstack-networks.txt
 
-    if grep -q $network ${endpoint_run_dir}/openstack-networks.txt; then
-        echo "Confirmed network [$network] is available"
-    else
-        abort_error "Network [$network] does not exist" endpoint-deploy-begin
-    fi
-
     if [ "$clear_all_servers" == "1" ]; then # Clear all rickshaw servers, even from other run ids
         do_ssh ${user}@${host} "$osp_pre_cmd openstack server list -f value -c Name" >${endpoint_run_dir}/openstack-existing-servers.txt
         existing_servers=`cat ${endpoint_run_dir}/openstack-existing-servers.txt | grep rickshaw`
         if [ ! -z "$existing_servers" ]; then
             echo "deleting existing servers [$existing_servers]"
-            do_ssh ${user}@${host} "$osp_pre_cmd openstack server delete $existing_servers" 
+            do_ssh ${user}@${host} "$osp_pre_cmd openstack server delete $existing_servers"
         fi
         do_ssh ${user}@${host} "$osp_pre_cmd openstack port list -f value -c Name" >${endpoint_run_dir}/openstack-existing-ports.txt
         existing_ports=`cat ${endpoint_run_dir}/openstack-existing-ports.txt | grep rickshaw`
         if [ ! -z "$existing_ports" ]; then
             echo "deleting existing ports [$existing_ports]"
-            do_ssh ${user}@${host} "$osp_pre_cmd openstack port delete $existing_ports" 
+            do_ssh ${user}@${host} "$osp_pre_cmd openstack port delete $existing_ports"
         fi
     fi
 
@@ -381,9 +379,15 @@ function create_server() {
     echo "images: $image_list"
 
     local vm_name="rickshaw-$run_id-$cs_label"
-    local mgmt_port_name="mgmt-$vm_name"
     local this_osruntime_bootstrap="$vm_name-osruntime-bootstrap"
     local this_availability_zone=""
+    get_var networks $cs_label these_networks
+
+    if grep -q $network ${endpoint_run_dir}/openstack-networks.txt; then
+        echo "Confirmed network [$network] is available"
+    else
+        abort_error "Network [$network] does not exist" endpoint-deploy-begin
+    fi
 
     set +u
     if [ ! -z "${availability_zone[$cs_label]}" ]; then
@@ -416,17 +420,22 @@ function create_server() {
         existing_servers=`cat ${endpoint_run_dir}/openstack-existing-servers.txt | grep $vm_name`
         if [ ! -z "$existing_servers" ]; then
             echo "deleting existing server [$existing_servers]"
-            do_ssh ${user}@${host} "$osp_pre_cmd openstack server delete $existing_servers" 
+            do_ssh ${user}@${host} "$osp_pre_cmd openstack server delete $existing_servers"
         fi
         existing_ports=`cat ${endpoint_run_dir}/openstack-existing-ports.txt | grep $vm_name`
         if [ ! -z "$existing_ports" ]; then
             echo "deleting existing ports [$existing_ports]"
-            do_ssh ${user}@${host} "$osp_pre_cmd openstack port delete $existing_ports" 
+            do_ssh ${user}@${host} "$osp_pre_cmd openstack port delete $existing_ports"
         fi
     fi
 
-    echo "creating openstack mgmt port for server $vm_name"
-    do_ssh ${user}@${host} "$osp_pre_cmd openstack port create --network $network --no-security-group --disable-port-security $mgmt_port_name"
+    echo "creating openstack network port(s) for server $vm_name"
+    these_network_port_options=" --nic port-id=$this_network_port"
+    for this_network in `echo $these_networks | sed -e 's/,/ /g'`; do
+        this_network_port=$vm_name-$this_network
+        these_network_port_options+=" --nic port-id=$this_network_port"
+        do_ssh ${user}@${host} "$osp_pre_cmd openstack port create --network $this_network --no-security-group --disable-port-security $this_network_port"
+    done
 
     set_osruntime_numanode_cpupart $cs_label
     echo "cpu_partitioning: [$cpu_partitioning]"
