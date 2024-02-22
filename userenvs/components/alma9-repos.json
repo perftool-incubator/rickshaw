@@ -1,0 +1,12 @@
+    {
+      "name": "alma9-repos",
+      "type": "files",
+      "files_info": {
+        "files": [
+	    {
+		"src": "%rickshaw-dir%/userenvs/requirement-sources/alma9.repo",
+		"dst": "/etc/yum.repos.d"
+	    }
+        ]
+      }
+    }
