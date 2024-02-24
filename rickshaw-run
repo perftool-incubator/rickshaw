@@ -2370,7 +2370,9 @@ sub organize_run_data() {
                     my $mv_cmd = "/bin/mv * " . $cs_tool_dest_path;
                     ($mv_cmd, my $mv_output, my $mv_cmd_rc) = run_cmd($mv_cmd);
                 } else {
-                    printf "WARNING: did not find expected sub-directories in %s\n", $pushd_dir . "/" . "tool-data";
+                    if (! $cs_type eq "profiler") {
+                        printf "WARNING: did not find expected sub-directories in %s\n", $pushd_dir . "/" . "tool-data";
+                    }
                 }
             }
             if (scalar dir_entries("sysinfo", qr/\w+/) > 0) {
