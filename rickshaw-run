@@ -2223,7 +2223,7 @@ sub deploy_endpoints() {
             # Endpoints should return for each client and server started:
             # - the ID of the client/server
             # - the roadblock client ID
-            printf "Going to run endpoint command:\n%s\n\n", $cmd;
+            printf "Going to run endpoint command for %s:\n%s\n\n", $label, $cmd;
             if ($endpoint_roadblock_opt eq "") {
                 # There is only one client and no synchronization, so we wait for the endpoint to finish
                 debug_log(sprintf "going to run and wait for: %s\n", $cmd);
