@@ -39,7 +39,8 @@
       "distro_info": {
         "packages": [
           "rh-python38",
-          "rh-python38-python-pip"
+          "rh-python38-python-pip",
+          "rh-python38-python-devel"
         ]
       }
     },
@@ -76,7 +77,8 @@
           "libcap",
           "libzstd",
           "libzstd-devel",
-          "libcap-devel"
+          "libcap-devel",
+          "which"
         ]
       }
     },
@@ -93,13 +95,10 @@
           "make",
           "clang",
           "slang-devel",
-          "libbabeltrace",
           "elfutils-libelf-devel",
-          "elfutils-debuginfod",
-          "elfutils-debuginfod-client-devel",
           "openssl-devel",
           "xz-devel",
-          "libzstd-devel",
+          "zlib-devel",
           "libcap-devel",
           "libnl3-devel",
           "numactl-devel",
@@ -143,6 +142,7 @@
       "manual_info": {
         "commands": [
           "alternatives --install /usr/bin/python3 python3 /opt/rh/rh-python38/root/usr/bin/python3 1",
+          "alternatives --install /usr/bin/python3-config python3-config /opt/rh/rh-python38/root/usr/bin/python3-config 1",
           "alternatives --install /usr/bin/pip3 pip3 /opt/rh/rh-python38/root/usr/bin/pip3 1"
         ]
       }

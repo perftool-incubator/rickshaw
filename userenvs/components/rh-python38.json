@@ -4,7 +4,8 @@
       "distro_info": {
         "packages": [
           "rh-python38",
-          "rh-python38-python-pip"
+          "rh-python38-python-pip",
+          "rh-python38-python-devel"
         ]
       }
     }
