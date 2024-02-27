@@ -1,0 +1,25 @@
+    {
+      "name": "core-compiling",
+      "type": "distro",
+      "distro_info": {
+        "packages": [
+          "diffutils",
+          "gcc",
+          "libtool",
+          "autoconf",
+          "automake",
+          "make",
+          "clang",
+          "slang-devel",
+          "elfutils-libelf-devel",
+          "openssl-devel",
+          "xz-devel",
+          "zlib-devel",
+          "libcap-devel",
+          "libnl3-devel",
+          "numactl-devel",
+          "java-1.8.0-openjdk",
+          "libpfm"
+        ]
+      }
+    }
