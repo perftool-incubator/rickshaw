@@ -557,7 +557,7 @@ function launch_osruntimes() {
 }
 
 function move_remotehost_logs() {
-    local engine_label remote_cs_log_file container_name delete_remote_dir log_file
+    local engine_label remote_cs_log_file container_name delete_remote_dir log_file cmd_rc cmd_retries cmd_attempt
     local total_rc=0
     local delete_remote_dir=0
 
@@ -574,11 +574,28 @@ function move_remotehost_logs() {
             delete_remote_dir=1
             remote_cs_log_file="$remote_logs_dir/$log_file"
             do_scp "$user@$host" "$remote_cs_log_file" "" $engine_logs_dir
-            (( total_rc += $? ))
+            cmd_rc=$?
+            if [ $cmd_rc != 0 ]; then
+                echo "Capturing chroot log for ${engine_label} failed with RC=${cmd_rc}"
+            fi
+            (( total_rc += $cmd_rc ))
         elif [ "$os_runtime" == "podman" ]; then
             container_name="${run_id}_${engine_label}"
-            do_ssh $user@$host podman logs $container_name > "$engine_logs_dir/$log_file"
-            (( total_rc += $? ))
+            # implementing retry logic here because it is possible for
+            # 'podman logs' to fail due to lock contention when podman
+            # is under heavy load
+            cmd_retries=5
+            cmd_attempt=1
+            cmd_rc=1
+            while [ $cmd_rc != 0 -a $cmd_attempt -le $cmd_retries ]; do
+                do_ssh $user@$host podman logs --timestamps $container_name > "$engine_logs_dir/$log_file" 2>&1
+                cmd_rc=$?
+                if [ $cmd_rc != 0 ]; then
+                    echo "Capturing podman log for ${engine_label} failed with RC=${cmd_rc} on attempt ${cmd_attempt} of ${cmd_retries}"
+                    (( cmd_attempt += 1 ))
+                fi
+            done
+            (( total_rc += $cmd_rc ))
         else
             echo "WARNING: os_runtime $os_runtime not supported"
         fi
@@ -587,7 +604,11 @@ function move_remotehost_logs() {
     if [ "$delete_remote_dir" == "1" -a $total_rc == 0 ]; then
         echo "Deleting remote directory:"
         do_ssh $user@$host /bin/rm -rv $remote_dir
-        (( total_rc += $? ))
+        cmd_rc=$?
+        if [ $cmd_rc != 0 ]; then
+            echo "Deleting remote directory failed with RC=${cmd_rc}"
+        fi
+        (( total_rc += $cmd_rc ))
     fi
 
     if [ $total_rc -gt 0 ]; then
