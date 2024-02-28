@@ -295,7 +295,12 @@ def main():
     match args.config:
         case "benchmarks":
             output = get_bench_ids(input_json, args.config)
-        case "endpoints" | "endpoint" | "tags" | "run-params":
+        case "endpoints":
+            # output is a stream of all endpoints
+            output=""
+            for idx in range(0, len(input_json["endpoints"])):
+                output += json_to_stream(input_json, "endpoints", idx) + " "
+        case "endpoint" | "tags" | "run-params":
             # output is a stream of the endpoint or tags or run-params
             output = json_to_stream(input_json, args.config, args.index)
         case default:
