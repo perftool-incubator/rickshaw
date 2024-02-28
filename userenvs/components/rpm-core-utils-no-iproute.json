@@ -10,7 +10,8 @@
           "openssl", "openssl-devel",
           "xz", "xz-devel",
           "libcap", "libzstd",
-          "libzstd-devel", "libcap-devel"
+          "libzstd-devel", "libcap-devel",
+          "which"
         ]
       }
     }
