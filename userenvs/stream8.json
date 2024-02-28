@@ -33,7 +33,8 @@
       "distro_info": {
         "packages": [
           "python39",
-          "python39-pip"
+          "python39-pip",
+          "python39-devel"
         ]
       }
     },
@@ -54,15 +55,11 @@
           "iputils",
           "iproute",
           "elfutils-libelf",
-          "elfutils-libelf-devel",
           "openssl",
-          "openssl-devel",
           "xz",
-          "xz-devel",
           "libcap",
           "libzstd",
-          "libzstd-devel",
-          "libcap-devel"
+          "numactl"
         ]
       }
     },
@@ -76,7 +73,21 @@
           "libtool",
           "autoconf",
           "automake",
-          "make"
+          "make",
+          "clang",
+          "slang-devel",
+          "libbabeltrace",
+          "elfutils-libelf-devel",
+          "elfutils-debuginfod",
+          "elfutils-debuginfod-client-devel",
+          "openssl-devel",
+          "xz-devel",
+          "libzstd-devel",
+          "libcap-devel",
+          "libnl3-devel",
+          "numactl-devel",
+          "java-1.8.0-openjdk",
+          "libpfm"
         ]
       }
     },
