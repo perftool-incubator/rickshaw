@@ -179,9 +179,9 @@ function process_osp_opts() {
                 #        client|server-a-b+c-d, where a/b/c/d = numbers
                 #   ex:  client-1-4+10-24
                 #        server-20-24+30-36+39-41
-                # network-names= network1,network2[,networkN]
-                #   ex:  management,provider1,provider2
-                #        management,provider3,provider4,provider5
+                # network-names= network1+network2[+networkN]
+                #   ex:  management+provider1+provider2
+                #        management+provider3+provider4+provider5
                 store_var $val networks
                 ;;
             client|server|clients|servers)
@@ -383,11 +383,13 @@ function create_server() {
     local this_availability_zone=""
     get_var networks $cs_label these_networks
 
-    if grep -q $network ${endpoint_run_dir}/openstack-networks.txt; then
-        echo "Confirmed network [$network] is available"
-    else
-        abort_error "Network [$network] does not exist" endpoint-deploy-begin
-    fi
+    for this_network in `echo $these_networks | sed -e 's/+/ /g'`; do
+        if grep -q $this_network ${endpoint_run_dir}/openstack-networks.txt; then
+            echo "Confirmed network [$this_network] is available"
+        else
+            abort_error "Network [$this_network] does not exist" endpoint-deploy-begin
+        fi
+    done
 
     set +u
     if [ ! -z "${availability_zone[$cs_label]}" ]; then
@@ -430,8 +432,8 @@ function create_server() {
     fi
 
     echo "creating openstack network port(s) for server $vm_name"
-    these_network_port_options=" --nic port-id=$this_network_port"
-    for this_network in `echo $these_networks | sed -e 's/,/ /g'`; do
+    these_network_port_options=""
+    for this_network in `echo $these_networks | sed -e 's/+/ /g'`; do
         this_network_port=$vm_name-$this_network
         these_network_port_options+=" --nic port-id=$this_network_port"
         do_ssh ${user}@${host} "$osp_pre_cmd openstack port create --network $this_network --no-security-group --disable-port-security $this_network_port"
@@ -465,7 +467,7 @@ function create_server() {
 
     # Server is created with --user-data <osruntime-bootstrap-script>, and the server will run this script right after boot.
     echo "creating openstack server $vm_name"
-    server_create_cmd="$osp_pre_cmd openstack server create --flavor $this_flavor --nic port-id=$mgmt_port_name --image $vm_image --availability-zone $this_availability_zone --key-name $vm_ssh_key_name --user-data $this_osruntime_bootstrap --key-name $vm_ssh_key_name $vm_name"
+    server_create_cmd="$osp_pre_cmd openstack server create --flavor $this_flavor $these_network_port_options --image $vm_image --availability-zone $this_availability_zone --key-name $vm_ssh_key_name --user-data $this_osruntime_bootstrap $vm_name"
     echo "Going to run via ssh: $server_create_cmd"
     do_ssh ${user}@${host} $server_create_cmd >${endpoint_run_dir}/openstack-create-$vm_name.txt 2>&1
     rc=$?
@@ -477,9 +479,10 @@ function create_server() {
 
     # The following is necessary to get engine logs
     echo "getting openstack port information for $vm_name"
-    do_ssh ${user}@${host} "$osp_pre_cmd openstack port show $mgmt_port_name -f json" >${endpoint_run_dir}/openstack-port-$mgmt_port_name.json
+    first_network=`echo $these_networks | awk -F+ '{print $1}'`
+    do_ssh ${user}@${host} "$osp_pre_cmd openstack port show $first_network -f json" >${endpoint_run_dir}/openstack-port-$first_network.json
     echo "finding server IP"
-    this_server_ip=`jq -r .fixed_ips[0].ip_address ${endpoint_run_dir}/openstack-port-$mgmt_port_name.json`
+    this_server_ip=`jq -r .fixed_ips[0].ip_address ${endpoint_run_dir}/openstack-port-$first_network.json`
     echo "this_server_ip: [$this_server_ip]"
     do_ssh ${user}@${host} "$osp_pre_cmd ssh-keygen -R $this_server_ip"
     osp_servers+=" $cs_label"
@@ -509,17 +512,22 @@ function create_server() {
 function cleanup_osruntime() {
     local this_cs_label
     local vm_names=""
-    local mgmt_port_names=""
     local this_osruntime_bootstrap
+    local these_networks
+    local this_network_port
     echo "Going to delete VMs for these clients and servers: ${clients[@]} ${servers[@]}"
     for this_cs_label in ${clients[@]} ${servers[@]}; do
         vm_names+=" rickshaw-$run_id-$this_cs_label"
-        mgmt_port_names+=" mgmt-rickshaw-$run_id-$this_cs_label"
     done
     echo "deletintg VM [$vm_names]"
     do_ssh ${user}@${host} "$osp_pre_cmd openstack server delete $vm_names" >${endpoint_run_dir}/openstack-server-delete-vms.txt
-    echo "deletintg network port [$mgmt_port_names]"
-    do_ssh ${user}@${host} "$osp_pre_cmd openstack port delete $mgmt_port_names" >${endpoint_run_dir}/openstack-port-delete-mgmt-ports.txt
+    echo "deleting openstack network port(s) for server $vm_name"
+    get_var networks $cs_label these_networks
+    for this_network in `echo $these_networks | sed -e 's/+/ /g'`; do
+        this_network_port=$vm_name-$this_network
+        echo "deletintg network port [$this_network]"
+        do_ssh ${user}@${host} "$osp_pre_cmd openstack port delete $this_network"
+    done
     echo "deletintg keypair [$vm_ssh_key_name]"
     do_ssh ${user}@${host} "$osp_pre_cmd openstack keypair delete $vm_ssh_key_name" >${endpoint_run_dir}/openstack-keypair-delete-$vm_ssh_key_name.txt
     echo "deletintg keyfile [$vm_ssh_key_name]"
