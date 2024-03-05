@@ -52,6 +52,20 @@ declare -A numaNode
 numaNode[default]=-1
 profiler_count=0
 
+function get_var() {
+    local ref1; typeset -n ref1=$1; shift # The associative array that you need a var from
+    local engine_label=$1; shift          # ex: client-1, server-2
+    local ref2; typeset -n ref2=$1; shift # What var to store the val in
+
+    set +u
+    if [ ! -z "${ref1[$engine_label]}" ]; then
+        ref2=${ref1[$engine_label]}
+    elif [ ! -z "${ref1[default]}" ]; then
+        ref2=${ref1[default]}
+    fi
+    set -u
+}
+
 function store_var() {
 # stores a value (or content of file named in $value) into 1 or more elements in an array
 # array name = second arg
