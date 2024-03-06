@@ -693,6 +693,11 @@ set_ssh_id
 base_req_check
 # Remotehost tool collection only needs first engine to determine profiler engines
 first_engine=`echo ${clients[@]} ${servers[@]} ${profilers[@]} | awk '{print $1}'`
+if [ -z "$first_engine" ]; then
+    # If  empty, that can mean only one thing: this remotehost
+    # has no clients and servers and used profiler:n
+    first_engine="profiler"
+fi
 add_profiler_engines "$first_engine" novar
 launch_osruntimes
 process_roadblocks remotehost $new_followers
