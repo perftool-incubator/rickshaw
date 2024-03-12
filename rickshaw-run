@@ -1223,18 +1223,6 @@ sub process_bench_roadblocks {
     }
 }
 
-# Apply envinronment variables
-foreach my $e (qw(RS_NAME RS_EMAIL RS_TAGS RS_DESC RS_REG_AUTH RS_REG_REPO RS_REG_TLS_VERIFY)) {
-    if (exists $ENV{$e}) {
-        my $var = $e;
-        $var =~ s/^RS_//;
-        $var =~ tr/[A-Z]/[a-z]/;
-        $var =~ s/_/\-/g;
-        debug_log(sprintf("Found envornment variable: %s, assigning \"%s\" to %s\n", $e, $ENV{$e}, $var));
-        $run{$var} = $ENV{$e};
-    }
-}
-
 sub process_cmdline() {
     while (scalar @ARGV > 0) {
         my $p = shift @ARGV;
@@ -2601,6 +2589,20 @@ sub remove_followers {
     }
 
     return 0;
+}
+
+################################################################################
+
+# Apply envinronment variables
+foreach my $e (qw(RS_NAME RS_EMAIL RS_TAGS RS_DESC RS_REG_AUTH RS_REG_REPO RS_REG_TLS_VERIFY)) {
+    if (exists $ENV{$e}) {
+        my $var = $e;
+        $var =~ s/^RS_//;
+        $var =~ tr/[A-Z]/[a-z]/;
+        $var =~ s/_/\-/g;
+        debug_log(sprintf("Found envornment variable: %s, assigning \"%s\" to %s\n", $e, $ENV{$e}, $var));
+        $run{$var} = $ENV{$e};
+    }
 }
 
 process_cmdline();
