@@ -48,7 +48,8 @@ $toolbox::logging::debug = 0;
 my $ug = Data::UUID->new;
 my %defaults = ( "num-samples" => 1, "tool-group" => "default", "test-order" => "s",
                  "base-run-dir" => tempdir(), "id" => $ug->create_str(),
-                 "max-sample-failures" => 1, "max-rb-attempts" => 1);
+                 "max-sample-failures" => 1, "max-rb-attempts" => 1,
+                 "run-file" => "");
 
 my @utilities = ( "packrat" );
 
@@ -1223,18 +1224,6 @@ sub process_bench_roadblocks {
     }
 }
 
-# Apply envinronment variables
-foreach my $e (qw(RS_NAME RS_EMAIL RS_TAGS RS_DESC RS_REG_AUTH RS_REG_REPO RS_REG_TLS_VERIFY)) {
-    if (exists $ENV{$e}) {
-        my $var = $e;
-        $var =~ s/^RS_//;
-        $var =~ tr/[A-Z]/[a-z]/;
-        $var =~ s/_/\-/g;
-        debug_log(sprintf("Found envornment variable: %s, assigning \"%s\" to %s\n", $e, $ENV{$e}, $var));
-        $run{$var} = $ENV{$e};
-    }
-}
-
 sub process_cmdline() {
     while (scalar @ARGV > 0) {
         my $p = shift @ARGV;
@@ -1255,7 +1244,145 @@ sub process_cmdline() {
             exit 1;
         }
         debug_log(sprintf "processing \@ARGV, arg is: [%s], val is: [%s]\n", $arg, $val);
-        if ($arg eq "endpoint") {
+        if ($arg eq "from-file") {
+            $run{'run-file'} = $val;
+
+            ### benchnmarks
+            # generate a list of the form <benchmark>:<ids>[,<benchmark>:<ids>]
+            my $blockbreaker_cmd = "python3 " . $rickshaw_project_dir . "/util/blockbreaker.py --json " . $run{'run-file'} . " --config benchmarks";
+            debug_log(sprintf "about to run: %s\n", $blockbreaker_cmd);
+            (my $cmd, my $cmd_output, my $cmd_rc) = run_cmd($blockbreaker_cmd);
+            if ($cmd_rc != 0) {
+                printf "[ERROR] blockbreaker failed to run with rc=%d for command=[%s]:\n%s\n", $cmd_rc, $cmd, $cmd_output;
+                exit 1;
+            }
+            chomp($cmd_output);
+            debug_log(sprintf "appending arg [%s] with value [%s] extracted from from-file to \@ARGV\n", "--bench-ids", $cmd_output);
+            push @ARGV, "--bench-ids", $cmd_output;
+
+            # extract just the benchmarks from the list
+            my @benchmarks;
+            for my $bench_id (split(/,/, $cmd_output)) {
+                my @array = split(/:/, $bench_id);
+                push @benchmarks, $array[0];
+            }
+
+            ### mv-params
+            # extract the mv-params and dump them to a file for each benchmark,
+            # then use multiplex to generate the bench-params
+            my $bench_params = "";;
+            foreach my $benchmark (@benchmarks) {
+                my $benchmark_dir = $ENV{'CRUCIBLE_HOME'} . "/subprojects/benchmarks/" . $benchmark;
+
+                if (! -d $benchmark_dir) {
+                    printf "[ERROR] invalid benchmark %s, benchmark directory %s does not exist\n", $benchmark, $benchmark_dir;
+                    exit 1;
+                }
+
+                my $blockbreaker_cmd = "python3 " . $rickshaw_project_dir . "/util/blockbreaker.py --json " . $run{'run-file'} . " --config mv-params --benchmark " . $benchmark;
+                debug_log(sprintf "about to run: %s\n", $blockbreaker_cmd);
+                (my $cmd, my $cmd_output, my $cmd_rc) = run_cmd($blockbreaker_cmd);
+                if ($cmd_rc != 0) {
+                    printf "[ERROR] blockbreaker failed with rc=%d for command=[%s]:\n%s\n", $cmd_rc, $cmd, $cmd_output;
+                    exit 1;
+                }
+                my $bench_mv_params = $run{'base-run-dir'} . "/config/" . $benchmark . "-mv-params.json";
+                if (open(BMP, ">", $bench_mv_params)) {
+                    print BMP $cmd_output;
+                    close BMP;
+                } else {
+                    printf "[ERROR] failed to write %s:\n%s\n", $bench_mv_params, $cmd_output;
+                    exit 1;
+                }
+
+                my $bench_params_run_file = $run{'base-run-dir'} . "/config/" . $benchmark . "-bench-params.json";
+                my $bench_params_run_output = $run{'base-run-dir'} . "/config/" . $benchmark . "-bench-params.txt";
+                my $multiplex_cmd = $ENV{'MULTIPLEX_HOME'} . "/multiplex.py --input " . $bench_mv_params . " --output " . $bench_params_run_file;
+                if (-e $benchmark_dir . "/multiplex.json") {
+                    $multiplex_cmd .= " --requirements " . $benchmark_dir . "/multiplex.json";
+                }
+                debug_log(sprintf "about to run: %s\n", $multiplex_cmd);
+                ($cmd, $cmd_output, $cmd_rc) = run_cmd($multiplex_cmd);
+                if (open(MO, ">", $bench_params_run_output)) {
+                    print MO $cmd_output;
+                    close MO;
+                } else {
+                    print "[ERROR] failed to write %s:\n%s\n", $bench_params_run_output, $cmd_output;
+                    exit 1;
+                }
+                if ($cmd_rc != 0) {
+                    printf "[ERROR] multiplex failed with an error and returned rc=%d\n", $cmd_rc;
+                    printf "multiplex output is:\n%s\n", $cmd_output;
+                    exit 1;
+                }
+                $bench_params .= ',' . $bench_params_run_file;
+            }
+            $bench_params =~ s/^,//;
+            debug_log(sprintf "appending arg [%s] with value [%s] extracted from from-file to \@ARGV\n", "--bench-params", $bench_params);
+            push @ARGV, "--bench-params", $bench_params;
+
+            ### tool-params
+            # dump the output to a file and then create a parameter that references it
+            $blockbreaker_cmd = "python3 " . $rickshaw_project_dir . "/util/blockbreaker.py --json " . $run{'run-file'} . " --config tool-params";
+            debug_log(sprintf "about to run: %s\n", $blockbreaker_cmd);
+            ($cmd, $cmd_output, $cmd_rc) = run_cmd($blockbreaker_cmd);
+            if ($cmd_rc != 0) {
+                printf "[ERROR] blockbreaker failed to run with rc=%d for command=[%s]:\n%s\n", $cmd_rc, $cmd, $cmd_output;
+                exit 1;
+            }
+            my $tool_params = $run{'base-run-dir'} . "/config/tool-params.json";
+            if (open(TP, ">", $tool_params)) {
+                print TP $cmd_output;
+                close TP;
+            } else {
+                printf "[ERROR] failed to write %s:\n%s\n", $tool_params, $cmd_output;
+                exit 1;
+            }
+            debug_log(sprintf "appending arg [%s] with value [%s] extracted from from-file to \@ARGV\n", "--tool-params", $tool_params);
+            push @ARGV, "--tool-params", $tool_params;
+
+            ### tags
+            $blockbreaker_cmd = "python3 " . $rickshaw_project_dir . "/util/blockbreaker.py --json " . $run{'run-file'} . " --config tags";
+            debug_log(sprintf "about to run: %s\n", $blockbreaker_cmd);
+            ($cmd, $cmd_output, $cmd_rc) = run_cmd($blockbreaker_cmd);
+            if ($cmd_rc != 0) {
+                printf "[ERROR] blockbreaker failed to run with rc=%d for command=[%s]:\n%s\n", $cmd_rc, $cmd, $cmd_output;
+                exit 1;
+            }
+            chomp($cmd_output);
+            debug_log(sprintf "appending arg [%s] with value [%s] extracted from from-file to \@ARGV\n", "--tags", $cmd_output);
+            push @ARGV, "--tags", $cmd_output;
+
+            ### endpoints
+            $blockbreaker_cmd = "python3 " . $rickshaw_project_dir . "/util/blockbreaker.py --json " . $run{'run-file'} . " --config endpoints";
+            debug_log(sprintf "about to run: %s\n", $blockbreaker_cmd);
+            ($cmd, $cmd_output, $cmd_rc) = run_cmd($blockbreaker_cmd);
+            if ($cmd_rc != 0) {
+                printf "[ERROR] blockbreaker failed to run with rc=%d for command=[%s]:\n%s\n", $cmd_rc, $cmd, $cmd_output;
+                exit 1;
+            }
+            chomp($cmd_output);
+            foreach my $endpoint (split(/ /, $cmd_output)) {
+                debug_log(sprintf "appending arg [%s] with value [%s] extracted from from-file to \@ARGV\n", "--endpoint", $endpoint);
+                push @ARGV, "--endpoint", $endpoint;
+            }
+
+            ### run-params
+            $blockbreaker_cmd = "python3 " . $rickshaw_project_dir . "/util/blockbreaker.py --json " . $run{'run-file'} . " --config run-params";
+            debug_log(sprintf "about to run: %s\n", $blockbreaker_cmd);
+            ($cmd, $cmd_output, $cmd_rc) = run_cmd($blockbreaker_cmd);
+            if ($cmd_rc != 0) {
+                printf "[ERROR blockbreaker failed to run with rc=%d for command=[%s]:\n%s\n", $cmd_rc, $cmd, $cmd_output;
+                exit 1;
+            }
+            chomp($cmd_output);
+            $cmd_output =~ s/^\s+//;
+            $cmd_output =~ s/\s+$//;
+            foreach my $arg (split(/ /, $cmd_output)) {
+                debug_log(sprintf "appending arg [%s] extracted from from-file to \@ARGV\n", $arg);
+                push @ARGV, $arg;
+            }
+        } elsif ($arg eq "endpoint") {
             $val =~ /^(\w+),(.*)$/;
             add_endpoint(\@endpoints, $1, $2);
         } elsif ($arg =~ /^debug$/) {
@@ -2601,6 +2728,20 @@ sub remove_followers {
     }
 
     return 0;
+}
+
+################################################################################
+
+# Apply envinronment variables
+foreach my $e (qw(RS_NAME RS_EMAIL RS_TAGS RS_DESC RS_REG_AUTH RS_REG_REPO RS_REG_TLS_VERIFY)) {
+    if (exists $ENV{$e}) {
+        my $var = $e;
+        $var =~ s/^RS_//;
+        $var =~ tr/[A-Z]/[a-z]/;
+        $var =~ s/_/\-/g;
+        debug_log(sprintf("Found envornment variable: %s, assigning \"%s\" to %s\n", $e, $ENV{$e}, $var));
+        $run{$var} = $ENV{$e};
+    }
 }
 
 process_cmdline();
