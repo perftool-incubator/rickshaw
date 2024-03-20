@@ -1855,6 +1855,21 @@ sub validate_endpoints() {
     }
     debug_log("Endpoint Validation Job processing complete\n");
 
+    # archive the endpoint validation output in the result directory
+    -e $run{'base-run-dir'} || mkdir($run{'base-run-dir'});
+    my $validations_dir = $run{'base-run-dir'} . "/validations";
+    mkdir($validations_dir);
+    foreach my $endpoint (@endpoints) {
+        my $validation_file = $validations_dir . "/" . $$endpoint{'label'} . ".txt";
+        if (open(EPV, ">", $validation_file)) {
+            print EPV $endpoint_outputs{$$endpoint{'label'}};
+            close EPV;
+        } else {
+            printf "ERROR: Could not open %s for writing!\n", $validation_file;
+            exit 1;
+        }
+    }
+
     # wait and die here on validation error(s) so that we generate all
     # the errors rather than just a subset
     if ($job_errors > 0) {
