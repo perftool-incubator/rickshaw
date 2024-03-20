@@ -1809,8 +1809,15 @@ sub validate_endpoints() {
                                      "/" . $$endpoint{'type'} .
                                      " --endpoint-label=" . $$endpoint{'label'} .
                                      " --base-run-dir=" . $run{'base-run-dir'} .
-                                     " --endpoint-opts=" . $$endpoint{'opts'} .
+                                     " --rickshaw-dir=" . $rickshaw_project_dir .
                                      " --validate" );
+        if ($$endpoint{'type'} eq "remotehosts") {
+            foreach my $arg (split(/,/, $$endpoint{'opts'})) {
+                $job{'command'} .= " --" . $arg;
+            }
+        } else {
+            $job{'command'} .= " --endpoint-opts=" . $$endpoint{'opts'};
+        }
         $job_queue->enqueue(\%job);
     }
 
@@ -2463,8 +2470,8 @@ sub deploy_endpoints() {
         if (-e $endpoint_project_dir) {
             my $pushd_dir = pushd($endpoint_project_dir);
             my $cmd = "./" . $type .
+                    " --rickshaw-dir=" . $rickshaw_project_dir .
                     " --packrat-dir=" . $run{'packrat-dir'} .
-                    " --endpoint-opts=" . $opts .
                     " --endpoint-label=" . $label .
                     " --run-id=" . $run{'id'} .
                     " --base-run-dir=" . $run{'base-run-dir'} .
@@ -2473,9 +2480,16 @@ sub deploy_endpoints() {
                     " --endpoint-deploy-timeout=" . $endpoint_deploy_timeout .
                     " --engine-script-start-timeout=" . $engine_script_start_timeout .
                     $endpoint_image_opt .
-                    $bench_ids_opt .
                     $endpoint_roadblock_opt .
                     " >" . $this_endpoint_run_dir . "/endpoint-stderrout.txt 2>&1";
+            if ($type eq "remotehosts") {
+                foreach my $arg (split(/,/, $opts)) {
+                    $cmd .= " --" . $arg;
+                }
+            } else {
+                $cmd .= " --endpoint-opts=" . $opts .
+                        $bench_ids_opt;
+            }
             # The below 'system' needs to be forked, then wait for all to finish.
             # The endpoint program should get all clients/servers "ready", that is,
             # waiting for instructions from roadblock.  The above command needs
