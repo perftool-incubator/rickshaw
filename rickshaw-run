@@ -1763,6 +1763,7 @@ sub endpoint_validation_worker_thread() {
         if (defined $job) {
             debug_log(sprintf "Endpoint Validation Thread-%d got a job for %s, cmd is '%s'\n", $thread_idx, $job->{'endpoint'}, $job->{'command'});
             (my $cmd, my $output, my $cmd_rc) = run_cmd($job->{'command'});
+            $endpoint_outputs->{$job->{'endpoint'}} = $output;
             if ($cmd_rc > 0) {
                 printf "[ERROR] Endpoint " . $job->{'endpoint'} .
                        " validation returned non-zero exit code " . $cmd_rc . "\n" .
@@ -1772,7 +1773,6 @@ sub endpoint_validation_worker_thread() {
                 $job_errors_lock->up();
             } else {
                 debug_log(sprintf "Endpoint %s validated\n", $job->{'endpoint'});
-                $endpoint_outputs->{$job->{'endpoint'}} = $output;
             }
         }
     }
@@ -1855,6 +1855,21 @@ sub validate_endpoints() {
         sleep 1;
     }
     debug_log("Endpoint Validation Job processing complete\n");
+
+    # archive the endpoint validation output in the result directory
+    -e $run{'base-run-dir'} || mkdir($run{'base-run-dir'});
+    my $validations_dir = $run{'base-run-dir'} . "/validations";
+    mkdir($validations_dir);
+    foreach my $endpoint (@endpoints) {
+        my $validation_file = $validations_dir . "/" . $$endpoint{'label'} . ".txt";
+        if (open(EPV, ">", $validation_file)) {
+            print EPV $endpoint_outputs{$$endpoint{'label'}};
+            close EPV;
+        } else {
+            printf "ERROR: Could not open %s for writing!\n", $validation_file;
+            exit 1;
+        }
+    }
 
     # wait and die here on validation error(s) so that we generate all
     # the errors rather than just a subset
