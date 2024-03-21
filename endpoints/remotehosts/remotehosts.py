@@ -36,6 +36,12 @@ def process_options():
                         required = True,
                         type = str)
 
+    parser.add_argument("--bench-ids",
+                        dest = "bench_ids",
+                        help = "Comma separated list of the benchmarks to run on this endpoint and on which engine IDs",
+                        required = False,
+                        type = str)
+
     parser.add_argument("--endpoint-deploy-timeout",
                         dest = "endpoint_deploy_timeout",
                         help = "How long should the timeout be for the endpoint deployment phase.",
@@ -62,6 +68,12 @@ def process_options():
                         type = int,
                         default = 300)
 
+    parser.add_argument("--image",
+                        dest = "images",
+                        help = "Comma separated list of images to use for particular tools/workloads.",
+                        required = False,
+                        type = str)
+
     parser.add_argument("--max-rb-attempts",
                         dest = "max_rb_attempts",
                         help = "The maximum number of times a roadblock should be attempted if it fails.",
@@ -86,6 +98,18 @@ def process_options():
                         dest = "rickshaw_dir",
                         help = "Path to the root of the rickshaw project directory.",
                         required = True,
+                        type = str)
+
+    parser.add_argument("--roadblock-id",
+                        dest = "roadblock_id",
+                        help = "The roadblock ID to use to build roadblock names.",
+                        required = False,
+                        type = str)
+
+    parser.add_argument("--roadblock-passwd",
+                        dest = "roadblock_passwd",
+                        help = "The password to pass to roadblock to make redis connections.",
+                        required = False,
                         type = str)
 
     parser.add_argument("--run-id",
