@@ -313,6 +313,14 @@ function remotehost_req_check() {
     fi
 }
 
+function remotehost_build() {
+    # Use workshop in the controller image to build images used for this endpoint
+    if [ "$do_build" == 1 ]; then
+        echo "userenv $userenv"
+        exit
+    fi
+}
+
 function stop_pod() {
     local engine_label=$1; shift
 
@@ -689,6 +697,7 @@ init_common_dirs
 init_remotehost_dirs
 load_settings
 remotehost_req_check
+remotehost_build
 set_ssh_id
 base_req_check
 # Remotehost tool collection only needs first engine to determine profiler engines

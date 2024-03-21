@@ -149,7 +149,7 @@ function process_opts() {
     local longopts+=",packrat-dir:,bench-ids:"
     local opts=$(getopt -q -o "" --longoptions "$longopts" -n "getopt.sh" -- "$@");
     if [ $? -ne 0 ]; then
-        exit_error "Unrecognized option specified" endpoint-deploy  
+        exit_error "Unrecognized option specified" endpoint-deploy
     fi
     eval set -- "$opts";
     while true; do
@@ -161,6 +161,10 @@ function process_opts() {
                 ;;
             --validate)
                 do_validate="1"
+                shift;
+                ;;
+            --build)
+                do_build="1"
                 shift;
                 ;;
             --endpoint-opts)
