@@ -237,6 +237,73 @@ def validate():
 
     return 0
 
+def init_settings():
+    log.debug("Initializing settings based on CLI parameters")
+
+    settings["dirs"] = dict()
+
+    settings["dirs"]["local"] = {
+        "base": args.base_run_dir,
+        "conf": args.base_run_dir + "/config",
+        "run": args.base_run_dir + "/run",
+        "engine": args.base_run_dir + "/engine",
+        "endpoint": args.base_run_dir + "/endpoint/" + args.endpoint_label
+    }
+    settings["dirs"]["local"]["engine-logs"] = settings["dirs"]["local"]["engine"] + "/logs"
+    settings["dirs"]["local"]["roadblock-msgs"] = settings["dirs"]["local"]["endpoint"] + "/roadblock-msgs"
+
+    remote_base = "/var/lib/crucible"
+    settings["dirs"]["remote"] = {
+        "base": remote_base,
+        "run": remote_base + "/" + args.endpoint_label + "_" + args.run_id
+    }
+    settings["dirs"]["remote"]["cfg"] = settings["dirs"]["remote"]["run"] + "/cfg"
+    settings["dirs"]["remote"]["logs"] = settings["dirs"]["remote"]["run"] + "/logs"
+    settings["dirs"]["remote"]["data"] = settings["dirs"]["remote"]["run"] + "/data"
+    settings["dirs"]["remote"]["tmp"] = settings["dirs"]["remote"]["data"] + "/tmp"
+
+    log_settings()
+
+    return 0
+
+def log_settings():
+    return log.debug("settings:\n%s" % (dump_json(settings)))
+
+def dump_json(obj):
+    return json.dumps(obj, indent = 4, separators=(',', ': '), sort_keys = True)
+
+def my_make_dirs(mydir):
+    log.debug("Creating directory %s (recurisvely if necessary)" % (mydir))
+    return os.makedirs(mydir, exist_ok = True)
+
+def create_local_dirs():
+    my_make_dirs(settings["dirs"]["local"]["run"])
+    my_make_dirs(settings["dirs"]["local"]["engine-logs"])
+    my_make_dirs(settings["dirs"]["local"]["roadblock-msgs"])
+    return 0
+
+def load_settings():
+    log.debug("Loading settings from config files")
+
+    rickshaw_settings_file = settings["dirs"]["local"]["conf"] + "/rickshaw-settings.json.xz"
+    settings["rickshaw"],err = load_json_file(rickshaw_settings_file, uselzma = True)
+    if settings["rickshaw"] is None:
+        log.error("Failed to load rickshaw-settings from %s with error '%s'" % (rickshaw_settings_file, err))
+        return 1
+    else:
+        log.debug("Loaded rickshaw-settings from %s" % (rickshaw_settings_file))
+
+    settings["run-file"],err = load_json_file(args.run_file)
+    if settings["run-file"] is None:
+        log.error("Failed to load run-file from %s with error '%s'" % (args.run_file, err))
+        return 1
+    else:
+        log.debug("Loaded run-file from %s" % (args.run_file))
+
+    log_settings()
+
+    return 0
+
 def setup_logger():
     if args.validate:
         logging.basicConfig(level = logging.DEBUG, format = '%(message)s', stream = sys.stdout)
@@ -250,13 +317,20 @@ def main():
 
     global args
     global log
+    global settings
 
     if args.validate:
         return(validate())
 
-    return 0
+    init_settings()
+    if load_settings() != 0:
+        return 1
+    create_local_dirs()
+
+    return 1
 
 if __name__ == "__main__":
     args = process_options()
     log = setup_logger()
+    settings = dict()
     exit(main())
