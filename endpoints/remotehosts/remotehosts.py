@@ -3,12 +3,14 @@
 '''Endpoint to run 1 or more engines on 1 or more remotehost systems'''
 
 import argparse
+from fabric import Connection
 import jsonschema
 import logging
 import os
+from paramiko import ssh_exception
+from pathlib import Path
 import sys
 import threading
-from pathlib import Path
 
 TOOLBOX_HOME = os.environ.get('TOOLBOX_HOME')
 if TOOLBOX_HOME is None:
@@ -23,6 +25,10 @@ else:
         exit(2)
     sys.path.append(str(p))
 from toolbox.json import *
+
+defaults = {
+    "user": "root"
+}
 
 def process_options():
     '''Handle the CLI argument parsing options'''
@@ -135,13 +141,13 @@ def process_options():
     return args
 
 def validate_log(msg):
-    return log.info(msg)
+    return print(msg)
 
 def validate_comment(msg):
-    return log.info("#" + msg)
+    return print("#" + msg)
 
 def validate_error(msg):
-    return log.error(msg)
+    return print("ERROR: " + msg)
 
 def validate():
     stream = "params:"
@@ -235,10 +241,39 @@ def validate():
         if userenvs[userenv] > 0:
             validate_log("userenv %s" % (userenv))
 
+    for remote in endpoint_settings["remotes"]:
+        remote_user = defaults["user"]
+        if "settings" in remote["config"] and "user" in remote["config"]["settings"]:
+            remote_user = remote["config"]["settings"]["user"]
+        elif "settings" in endpoint_settings and "user" in endpoint_settings["settings"]:
+            remote_user = endpoint_settings["settings"]["user"]
+
+        remote_can_login = False
+        try:
+            with Connection(host = remote["config"]["host"], user = remote_user) as c:
+                result = c.run("uptime", hide = True)
+                validate_comment("remote login verification for %s with user %s: rc=%d and stdout=[%s] annd stderr=[%s]" % (remote["config"]["host"], remote_user, result.exited, result.stdout.rstrip('\n'), result.stderr.rstrip('\n')))
+                remote_can_login = True
+        except ssh_exception.AuthenticationException as e:
+            validate_comment("remote login verification for %s with user %s resulted in an authentication exception" % (remote["config"]["host"], remote_user))
+        if not remote_can_login:
+            validate_error("Could not verify ability to login to remote %s" % (remote["config"]["host"]))
+        else:
+            with Connection(host = remote["config"]["host"], user = remote_user) as c:
+                result = c.run("podman --version", hide = True)
+                validate_comment("remote podman presence check for %s: rc=%d and stdout=[%s] and stderr=[%s]" % (remote["config"]["host"], result.exited, result.stdout.rstrip('\n'), result.stderr.rstrip('\n')))
+                if result.exited != 0:
+                    result = c.run("yum install -y podman", hide = True)
+                    validate_comment("remote podman installation for %s: rc=%d" % (remote["config"]["host"], result.exited))
+                    if result.exited != 0:
+                        validate_error("Could not install podman to remote %s" % (remote["config"]["host"]))
+                        validate_error("stdout:\n%s" % (result.stdout))
+                        validate_error("stderr:\n%s" % (result.stderr))
+
     return 0
 
 def init_settings():
-    log.debug("Initializing settings based on CLI parameters")
+    log.info("Initializing settings based on CLI parameters")
 
     settings["dirs"] = dict()
 
@@ -267,13 +302,13 @@ def init_settings():
     return 0
 
 def log_settings():
-    return log.debug("settings:\n%s" % (dump_json(settings)))
+    return log.info("settings:\n%s" % (dump_json(settings)))
 
 def dump_json(obj):
     return json.dumps(obj, indent = 4, separators=(',', ': '), sort_keys = True)
 
 def my_make_dirs(mydir):
-    log.debug("Creating directory %s (recurisvely if necessary)" % (mydir))
+    log.info("Creating directory %s (recurisvely if necessary)" % (mydir))
     return os.makedirs(mydir, exist_ok = True)
 
 def create_local_dirs():
@@ -283,7 +318,7 @@ def create_local_dirs():
     return 0
 
 def load_settings():
-    log.debug("Loading settings from config files")
+    log.info("Loading settings from config files")
 
     rickshaw_settings_file = settings["dirs"]["local"]["conf"] + "/rickshaw-settings.json.xz"
     settings["rickshaw"],err = load_json_file(rickshaw_settings_file, uselzma = True)
@@ -291,24 +326,21 @@ def load_settings():
         log.error("Failed to load rickshaw-settings from %s with error '%s'" % (rickshaw_settings_file, err))
         return 1
     else:
-        log.debug("Loaded rickshaw-settings from %s" % (rickshaw_settings_file))
+        log.info("Loaded rickshaw-settings from %s" % (rickshaw_settings_file))
 
     settings["run-file"],err = load_json_file(args.run_file)
     if settings["run-file"] is None:
         log.error("Failed to load run-file from %s with error '%s'" % (args.run_file, err))
         return 1
     else:
-        log.debug("Loaded run-file from %s" % (args.run_file))
+        log.info("Loaded run-file from %s" % (args.run_file))
 
     log_settings()
 
     return 0
 
 def setup_logger():
-    if args.validate:
-        logging.basicConfig(level = logging.DEBUG, format = '%(message)s', stream = sys.stdout)
-    else:
-        logging.basicConfig(level = logging.DEBUG, format = '[%(asctime)s %(levelname)s %(module)s %(funcName)s:%(lineno)d] %(message)s', stream = sys.stdout)
+    logging.basicConfig(level = logging.INFO, format = '[%(asctime)s %(levelname)s %(module)s %(funcName)s:%(lineno)d] %(message)s', stream = sys.stdout)
         
     return logging.getLogger(__file__)
 
@@ -322,6 +354,8 @@ def main():
     if args.validate:
         return(validate())
 
+    log = setup_logger()
+
     init_settings()
     if load_settings() != 0:
         return 1
@@ -331,6 +365,6 @@ def main():
 
 if __name__ == "__main__":
     args = process_options()
-    log = setup_logger()
+    log = None
     settings = dict()
     exit(main())
