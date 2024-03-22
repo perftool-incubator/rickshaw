@@ -269,6 +269,7 @@ function launch_osruntime() {
         cs_cmd+=" --net=host"
         cs_cmd+=" --security-opt=label=disable"
         cs_cmd+=" --mount=type=bind,source=$data_dir,destination=/tmp"
+        cs_cmd+=" --mount=type=bind,source=/run,destination=/run"
         cs_cmd+=" --mount=type=bind,source=/lib/firmware,destination=/lib/firmware"
         cs_cmd+=" --mount=type=bind,source=/lib/modules,destination=/lib/modules"
         cs_cmd+=" --mount=type=bind,source=/usr/src,destination=/usr/src"
