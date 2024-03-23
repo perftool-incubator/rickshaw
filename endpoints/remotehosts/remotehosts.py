@@ -205,10 +205,7 @@ def validate():
 
     validate_comment("engines: %s" % (engines))
     for role in engines.keys():
-        ids = ""
-        for id in engines[role]:
-            ids += " " + str(id)
-        validate_log("%s%s" % (role, ids))
+        validate_log("%s %s" % (role, " ".join(map(str, engines[role]))))
 
     validate_comment("userenvs: %s" % (userenvs))
     for userenv in userenvs:
