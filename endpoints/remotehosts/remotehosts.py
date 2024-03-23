@@ -183,83 +183,50 @@ def validate():
         validate_error(err)
         return 1
 
-    engines = dict()
-    userenvs = dict()
-    default_userenv = None
-    if "userenv" in endpoint_settings["settings"]:
-        default_userenv = endpoint_settings["settings"]["userenv"]
-    else:
-        rickshaw_settings_json, err = load_json_file(args.base_run_dir + "/config/rickshaw-settings.json.xz", uselzma = True)
-        if rickshaw_settings_json is None:
-            validate_error(err)
-            return 1
-        validate_comment("rickshaw-settings: %s" % rickshaw_settings_json)
-        default_userenv = rickshaw_settings_json["userenvs"]["default"]["benchmarks"]
-    userenvs[default_userenv] = 0
+    rickshaw_settings, err = load_json_file(args.base_run_dir + "/config/rickshaw-settings.json.xz", uselzma = True)
+    if rickshaw_settings is None:
+        validate_error(err)
+        return 1
+    validate_comment("rickshaw-settings: %s" % rickshaw_settings)
 
+    endpoint_settings = normalize_endpoint_settings(endpoint_settings, rickshaw_settings, validate = True)
+    validate_comment("normalized endpoint-settings: %s" % (endpoint_settings))
+
+    engines = dict()
+    userenvs = []
     for remote in endpoint_settings["remotes"]:
         for engine in remote["engines"]:
             if not engine["role"] in engines:
                 engines[engine["role"]] = []
-            if isinstance(engine["ids"], list):
-                for id in engine["ids"]:
-                    engines[engine["role"]].append(id)
-            else:
-                engines[engine["role"]].append(engine["ids"])
+            engines[engine["role"]].extend(engine["ids"])
 
-        if "settings" in remote["config"] and "userenv" in remote["config"]["settings"]:
-            if not userenvs[remote["config"]["settings"]["userenv"]]:
-                userenvs[remote["config"]["settings"]["userenv"]] = 1
-            else:
-                userenvs[remote["config"]["settings"]["userenv"]] += 1
-        else:
-            if default_userenv is not None:
-                userenvs[default_userenv] += 1
+        if not remote["config"]["settings"]["userenv"] in userenvs:
+            userenvs.append(remote["config"]["settings"]["userenv"])
 
     validate_comment("engines: %s" % (engines))
     for role in engines.keys():
-        stream = "%s" % (role)
+        ids = ""
         for id in engines[role]:
-            if isinstance(id, int):
-                stream += " %d" % (id)
-            elif isinstance(id, str):
-                subids = id.split("-")
-                if len(subids) == 1:
-                    stream += " %s" % (subids[0])
-                else:
-                    subids = list(map(int, subids))
-                    if subids[0] >= 0 and subids[0] < subids[1]:
-                        for subid in range(subids[0], subids[1]+1):
-                            stream += " %d" % (subid)
-                    else:
-                        validate_error("Invalid id range: %s" % (id))
-                        return 1
-        validate_log(stream)
+            ids += " " + str(id)
+        validate_log("%s%s" % (role, ids))
 
     validate_comment("userenvs: %s" % (userenvs))
-    for userenv in userenvs.keys():
-        if userenvs[userenv] > 0:
-            validate_log("userenv %s" % (userenv))
+    for userenv in userenvs:
+        validate_log("userenv %s" % (userenv))
 
     for remote in endpoint_settings["remotes"]:
-        remote_user = defaults["user"]
-        if "settings" in remote["config"] and "user" in remote["config"]["settings"]:
-            remote_user = remote["config"]["settings"]["user"]
-        elif "settings" in endpoint_settings and "user" in endpoint_settings["settings"]:
-            remote_user = endpoint_settings["settings"]["user"]
-
         remote_can_login = False
         try:
-            with Connection(host = remote["config"]["host"], user = remote_user) as c:
+            with Connection(host = remote["config"]["host"], user = remote["config"]["settings"]["user"]) as c:
                 result = c.run("uptime", hide = True)
-                validate_comment("remote login verification for %s with user %s: rc=%d and stdout=[%s] annd stderr=[%s]" % (remote["config"]["host"], remote_user, result.exited, result.stdout.rstrip('\n'), result.stderr.rstrip('\n')))
+                validate_comment("remote login verification for %s with user %s: rc=%d and stdout=[%s] annd stderr=[%s]" % (remote["config"]["host"], remote["config"]["settings"]["user"], result.exited, result.stdout.rstrip('\n'), result.stderr.rstrip('\n')))
                 remote_can_login = True
         except ssh_exception.AuthenticationException as e:
-            validate_comment("remote login verification for %s with user %s resulted in an authentication exception" % (remote["config"]["host"], remote_user))
+            validate_comment("remote login verification for %s with user %s resulted in an authentication exception" % (remote["config"]["host"], remote["config"]["settings"]["user"]))
         if not remote_can_login:
             validate_error("Could not verify ability to login to remote %s" % (remote["config"]["host"]))
         else:
-            with Connection(host = remote["config"]["host"], user = remote_user) as c:
+            with Connection(host = remote["config"]["host"], user = remote["config"]["settings"]["user"]) as c:
                 result = c.run("podman --version", hide = True)
                 validate_comment("remote podman presence check for %s: rc=%d and stdout=[%s] and stderr=[%s]" % (remote["config"]["host"], result.exited, result.stdout.rstrip('\n'), result.stderr.rstrip('\n')))
                 if result.exited != 0:
@@ -297,12 +264,22 @@ def init_settings():
     settings["dirs"]["remote"]["data"] = settings["dirs"]["remote"]["run"] + "/data"
     settings["dirs"]["remote"]["tmp"] = settings["dirs"]["remote"]["data"] + "/tmp"
 
-    log_settings()
+    log_settings(mode = "dirs")
 
     return 0
 
-def log_settings():
-    return log.info("settings:\n%s" % (dump_json(settings)))
+def log_settings(mode = "all"):
+    match mode:
+        case "dirs":
+            return log.info("settings[dirs]:\n%s" % (dump_json(settings["dirs"])))
+        case "endpoint":
+            return log.info("settings[endpoint]:\n%s" % (dump_json(settings["run-file"]["endpoints"][args.endpoint_index])))
+        case "rickshaw":
+            return log.info("settings[rickshaw]:\n%s" % (dump_json(settings["rickshaw"])))
+        case "run-file":
+            return log.info("settings[run-file]:\n%s" % (dump_json(settings["run-file"])))
+        case "all" | _:
+            return log.info("settings:\n%s" % (dump_json(settings)))
 
 def dump_json(obj):
     return json.dumps(obj, indent = 4, separators=(',', ': '), sort_keys = True)
@@ -328,6 +305,8 @@ def load_settings():
     else:
         log.info("Loaded rickshaw-settings from %s" % (rickshaw_settings_file))
 
+    log_settings(mode = "rickshaw")
+
     settings["run-file"],err = load_json_file(args.run_file)
     if settings["run-file"] is None:
         log.error("Failed to load run-file from %s with error '%s'" % (args.run_file, err))
@@ -335,9 +314,58 @@ def load_settings():
     else:
         log.info("Loaded run-file from %s" % (args.run_file))
 
-    log_settings()
+    log_settings(mode = "run-file")
+
+    log.info("Normalizing endpoint settings")
+    settings["run-file"]["endpoints"][args.endpoint_index] = normalize_endpoint_settings(endpoint = settings["run-file"]["endpoints"][args.endpoint_index], rickshaw = settings["rickshaw"])
+    log_settings(mode = "endpoint")
 
     return 0
+
+def normalize_endpoint_settings(endpoint, rickshaw, validate = False):
+    default_userenv = rickshaw["userenvs"]["default"]["benchmarks"]
+    default_remote_user = defaults["user"]
+
+    if "settings" in endpoint:
+        if "userenv" in endpoint["settings"]:
+            default_userenv = endpoint["settings"]["userenv"]
+
+        if "user" in endpoint["settings"]:
+            default_remote_user = endpoint["settings"]["user"]
+
+    for remote in endpoint["remotes"]:
+        if not "settings" in remote["config"]:
+            remote["config"]["settings"] = dict()
+
+        if not "userenv" in remote["config"]["settings"]:
+            remote["config"]["settings"]["userenv"] = default_userenv
+
+        if not "user" in remote["config"]["settings"]:
+            remote["config"]["settings"]["user"] = default_remote_user
+
+        for engine in remote["engines"]:
+            engine_ids = []
+            if isinstance(engine["ids"], int):
+                engine_ids.append(engine["ids"])
+            elif isinstance(engine["ids"], list):
+                for id in engine["ids"]:
+                    if isinstance(id, int):
+                        engine_ids.append(id)
+                    elif isinstance(id, str):
+                        subids = id.split("-")
+                        if len(subids) == 1:
+                            engine_ids.append(subids[0])
+                        else:
+                            subids = list(map(int, subids))
+                            if subids[0] >= 0 and subids[0] < subids[1]:
+                                for subid in range(subids[0], subids[1]+1):
+                                    engine_ids.append(subid)
+                            elif validate:
+                                validate_error("Invalid id range: %s" % (id))
+                                return None
+            engine["ids"] = engine_ids
+
+    return endpoint
 
 def setup_logger():
     logging.basicConfig(level = logging.INFO, format = '[%(asctime)s %(levelname)s %(module)s %(funcName)s:%(lineno)d] %(message)s', stream = sys.stdout)
