@@ -153,11 +153,14 @@ def validate_comment(msg):
 def validate_error(msg):
     return print("ERROR: " + msg)
 
-def validate():
-    stream = "params:"
+def cli_stream():
+    stream = ""
     for i in range(1, len(sys.argv)):
         stream += " %s" % sys.argv[i]
-    validate_comment(stream)
+    return stream
+
+def validate():
+    validate_comment("params: %s" % (cli_stream()))
 
     validate_comment("argparse: %s" % (args))
 
@@ -241,6 +244,18 @@ def validate():
                         validate_error("Could not install podman to remote %s" % (remote["config"]["host"]))
                         validate_error("stdout:\n%s" % (result.stdout))
                         validate_error("stderr:\n%s" % (result.stderr))
+
+    return 0
+
+def log_cli():
+    log.info("Logging CLI")
+
+    log.info("CLI parameters:\n%s" % (cli_stream()))
+
+    the_args = dict()
+    for arg in args.__dict__:
+        the_args[str(arg)] = args.__dict__[arg]
+    log.info("argparse:\n %s" % (dump_json(the_args)))
 
     return 0
 
@@ -536,6 +551,7 @@ def main():
 
     log = setup_logger()
 
+    log_cli()
     init_settings()
     if load_settings() != 0:
         return 1
