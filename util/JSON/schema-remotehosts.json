@@ -18,20 +18,37 @@
                         "type": "array",
                         "minItems": 1,
                         "items": {
-                            "type": "object",
-                            "properties": {
-                                "role": {
-                                    "type": "string",
-                                    "enum": [ "client", "server", "profiler" ]
+                            "oneOf": [
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "role": {
+                                            "type": "string",
+                                            "enum": [ "client", "server" ]
+                                        },
+                                        "ids": {
+                                            "$ref": "#/definitions/number-lists"
+                                        }
+                                    },
+                                    "additionalProperties": false,
+                                    "required": [
+                                        "role",
+                                        "ids"
+                                    ]
                                 },
-                                "ids": {
-                                    "$ref": "#/definitions/number-lists"
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "role": {
+                                            "type": "string",
+                                            "enum": [ "profiler" ]
+                                        }
+                                    },
+                                    "additionalProperties": false,
+                                    "required": [
+                                        "role"
+                                    ]
                                 }
-                            },
-                            "additionalProperties": false,
-                            "required": [
-                                "role",
-                                "ids"
                             ]
                         }
                     },
@@ -72,19 +89,22 @@
                 "cpu-partitioning": {
                     "type": "boolean"
                 },
+                "disable-tools": {
+                    "type": "boolean"
+                },
                 "numa-node": {
                     "type": "integer",
                     "minimum": 0
                 },
                 "osruntime": {
                     "type": "string",
-                    "minLength": 1
+		    "enum": [ "chroot", "podman" ]
                 },
-                "userenv": {
+                "user": {
                     "type": "string",
                     "minLength": 1
                 },
-                "user": {
+                "userenv": {
                     "type": "string",
                     "minLength": 1
                 }

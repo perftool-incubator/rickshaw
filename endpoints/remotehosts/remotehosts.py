@@ -26,7 +26,11 @@ else:
     sys.path.append(str(p))
 from toolbox.json import *
 
-defaults = {
+endpoint_defaults = {
+    "cpu-partitioning": False,
+    "disable-tools": False,
+    "numa-node": None,
+    "osruntime": "podman",
     "user": "root"
 }
 
@@ -196,6 +200,8 @@ def validate():
     userenvs = []
     for remote in endpoint_settings["remotes"]:
         for engine in remote["engines"]:
+            if engine["role"] == "profiler":
+                continue
             if not engine["role"] in engines:
                 engines[engine["role"]] = []
             engines[engine["role"]].extend(engine["ids"])
@@ -206,6 +212,8 @@ def validate():
     validate_comment("engines: %s" % (engines))
     for role in engines.keys():
         validate_log("%s %s" % (role, " ".join(map(str, engines[role]))))
+        if len(engines[role]) != len(set(engines[role])):
+            validate_error("There are duplicate IDs present for %s" % (role))
 
     validate_comment("userenvs: %s" % (userenvs))
     for userenv in userenvs:
@@ -214,16 +222,16 @@ def validate():
     for remote in endpoint_settings["remotes"]:
         remote_can_login = False
         try:
-            with Connection(host = remote["config"]["host"], user = remote["config"]["settings"]["user"]) as c:
+            with Connection(host = remote["config"]["host"], user = remote["config"]["settings"]["remote-user"]) as c:
                 result = c.run("uptime", hide = True)
-                validate_comment("remote login verification for %s with user %s: rc=%d and stdout=[%s] annd stderr=[%s]" % (remote["config"]["host"], remote["config"]["settings"]["user"], result.exited, result.stdout.rstrip('\n'), result.stderr.rstrip('\n')))
+                validate_comment("remote login verification for %s with user %s: rc=%d and stdout=[%s] annd stderr=[%s]" % (remote["config"]["host"], remote["config"]["settings"]["remote-user"], result.exited, result.stdout.rstrip('\n'), result.stderr.rstrip('\n')))
                 remote_can_login = True
         except ssh_exception.AuthenticationException as e:
-            validate_comment("remote login verification for %s with user %s resulted in an authentication exception" % (remote["config"]["host"], remote["config"]["settings"]["user"]))
+            validate_comment("remote login verification for %s with user %s resulted in an authentication exception" % (remote["config"]["host"], remote["config"]["settings"]["remote-user"]))
         if not remote_can_login:
             validate_error("Could not verify ability to login to remote %s" % (remote["config"]["host"]))
         else:
-            with Connection(host = remote["config"]["host"], user = remote["config"]["settings"]["user"]) as c:
+            with Connection(host = remote["config"]["host"], user = remote["config"]["settings"]["remote-user"]) as c:
                 result = c.run("podman --version", hide = True)
                 validate_comment("remote podman presence check for %s: rc=%d and stdout=[%s] and stderr=[%s]" % (remote["config"]["host"], result.exited, result.stdout.rstrip('\n'), result.stderr.rstrip('\n')))
                 if result.exited != 0:
@@ -248,6 +256,7 @@ def init_settings():
         "engine": args.base_run_dir + "/engine",
         "endpoint": args.base_run_dir + "/endpoint/" + args.endpoint_label
     }
+    settings["dirs"]["local"]["tool-cmds"] = settings["dirs"]["local"]["conf"] + "/tool-cmds"
     settings["dirs"]["local"]["engine-conf"] = settings["dirs"]["local"]["conf"] + "/engine"
     settings["dirs"]["local"]["engine-cmds"] = settings["dirs"]["local"]["engine-conf"] + "/bench-cmds"
     settings["dirs"]["local"]["engine-logs"] = settings["dirs"]["local"]["engine"] + "/logs"
@@ -343,27 +352,31 @@ def load_settings():
     return 0
 
 def normalize_endpoint_settings(endpoint, rickshaw, validate = False):
-    default_userenv = rickshaw["userenvs"]["default"]["benchmarks"]
-    default_remote_user = defaults["user"]
+    defaults = {
+        "cpu-partitioning": endpoint_defaults["cpu-partitioning"],
+        "disable-tools": endpoint_defaults["disable-tools"],
+        "numa-node": endpoint_defaults["numa-node"],
+        "osruntime": endpoint_defaults["osruntime"],
+        "remote-user": endpoint_defaults["user"],
+        "userenv": rickshaw["userenvs"]["default"]["benchmarks"]
+    }
 
     if "settings" in endpoint:
-        if "userenv" in endpoint["settings"]:
-            default_userenv = endpoint["settings"]["userenv"]
-
-        if "user" in endpoint["settings"]:
-            default_remote_user = endpoint["settings"]["user"]
+        for key in defaults.keys():
+            if key in endpoint["settings"]:
+                defaults[key] = endpoint["settings"][key]
 
     for remote in endpoint["remotes"]:
         if not "settings" in remote["config"]:
             remote["config"]["settings"] = dict()
 
-        if not "userenv" in remote["config"]["settings"]:
-            remote["config"]["settings"]["userenv"] = default_userenv
-
-        if not "user" in remote["config"]["settings"]:
-            remote["config"]["settings"]["user"] = default_remote_user
+        for key in defaults.keys():
+            if not key in remote["config"]["settings"]:
+                remote["config"]["settings"][key] = defaults[key]
 
         for engine in remote["engines"]:
+            if engine["role"] == "profiler":
+                continue
             engine_ids = []
             if isinstance(engine["ids"], int):
                 engine_ids.append(engine["ids"])
@@ -405,31 +418,40 @@ def check_base_requirements():
 
     return 0
 
-def build_config():
-    log.info("Building engine configs")
+def build_profiler_config():
+    log.info("Building profiler engine configs")
 
     settings["engines"] = dict()
     settings["engines"]["remotes"] = dict()
 
-    for remote in settings["run-file"]["endpoints"][args.endpoint_index]["remotes"]:
+    for remote_idx,remote in enumerate(settings["run-file"]["endpoints"][args.endpoint_index]["remotes"]):
+        if remote["config"]["settings"]["disable-tools"]:
+            continue
+
         if not remote["config"]["host"] in settings["engines"]["remotes"]:
             settings["engines"]["remotes"][remote["config"]["host"]] = {
                 "first-engine": None,
-                "roles": dict()
+                "roles": dict(),
+                "run-file-idx": []
             }
+
+        settings["engines"]["remotes"][remote["config"]["host"]]["run-file-idx"].append(remote_idx)
+
         for engine in remote["engines"]:
             if not engine["role"] in settings["engines"]["remotes"][remote["config"]["host"]]["roles"]:
                 settings["engines"]["remotes"][remote["config"]["host"]]["roles"][engine["role"]] = {
                     "ids": []
                 }
-            settings["engines"]["remotes"][remote["config"]["host"]]["roles"][engine["role"]]["ids"].extend(engine["ids"])
+            if engine["role"] != "profiler":
+                settings["engines"]["remotes"][remote["config"]["host"]]["roles"][engine["role"]]["ids"].extend(engine["ids"])
 
     for remote in settings["engines"]["remotes"].keys():
         for role in settings["engines"]["remotes"][remote]["roles"].keys():
-            settings["engines"]["remotes"][remote]["roles"][role]["ids"].sort()
+            if "ids" in settings["engines"]["remotes"][remote]["roles"][role]:
+                settings["engines"]["remotes"][remote]["roles"][role]["ids"].sort()
 
     for remote in settings["engines"]["remotes"].keys():
-        for role in [ "client", "server", "profiler" ]:
+        for role in [ "client", "server" ]:
             if settings["engines"]["remotes"][remote]["first-engine"] is None and role in settings["engines"]["remotes"][remote]["roles"] and len(settings["engines"]["remotes"][remote]["roles"][role]["ids"]) > 0:
                 settings["engines"]["remotes"][remote]["first-engine"] = {
                     "role": role,
@@ -443,7 +465,57 @@ def build_config():
                 "id": None
             }
 
+    profiler_count = 0
+    for remote in settings["engines"]["remotes"].keys():
+        tools = []
+        try:
+            tool_cmd_dir = settings["engines"]["remotes"][remote]["first-engine"]["role"]
+            if tool_cmd_dir != "profiler":
+                tool_cmd_dir += "/" + str(settings["engines"]["remotes"][remote]["first-engine"]["id"])
+            with open(settings["dirs"]["local"]["tool-cmds"] + "/" + tool_cmd_dir + "/start") as tool_cmd_file:
+                for line in tool_cmd_file:
+                    split_line = line.split(":")
+                    tools.append(split_line[0])
+        except IOError as e:
+            log.error("Failed to load the start tools command file from %s" % (tool_cmd_dir))
+            return 1
+
+        profiler_count += 1
+        for tool in tools:
+            profiler_id = args.endpoint_label + "-" + tool + "-" + str(profiler_count)
+
+            if not "profiler" in settings["engines"]["remotes"][remote]["roles"]:
+                settings["engines"]["remotes"][remote]["roles"]["profiler"] = {
+                    "ids": []
+                }
+
+            settings["engines"]["remotes"][remote]["roles"]["profiler"]["ids"].append(profiler_id)
+
     log_settings(mode = "engines")
+
+    log.info("Adding new profiler engines to endpoint settings")
+    for remote in settings["engines"]["remotes"].keys():
+        if not "profiler" in settings["engines"]["remotes"][remote]["roles"]:
+            continue
+
+        settings["engines"]["remotes"][remote]["run-file-idx"].sort()
+        run_file_idx = settings["engines"]["remotes"][remote]["run-file-idx"][0]
+
+        profiler_role_idx = None
+        for engine_idx,engine in enumerate(settings["run-file"]["endpoints"][args.endpoint_index]["remotes"][run_file_idx]["engines"]):
+            if engine["role"] == "profiler":
+                profiler_role_idx = engine_idx
+                engine["ids"] = []
+        if profiler_role_idx is None:
+            profiler_role = {
+                "role": "profiler",
+                "ids": []
+            }
+            settings["run-file"]["endpoints"][args.endpoint_index]["remotes"][run_file_idx]["engines"].append(profiler_role)
+            profiler_role_idx = len(settings["run-file"]["endpoints"][args.endpoint_index]["remotes"][run_file_idx]["engines"]) - 1
+        settings["run-file"]["endpoints"][args.endpoint_index]["remotes"][run_file_idx]["engines"][profiler_role_idx]["ids"].extend(settings["engines"]["remotes"][remote]["roles"]["profiler"]["ids"])
+
+    log_settings(mode = "endpoint")
 
     return 0
 
@@ -469,7 +541,8 @@ def main():
         return 1
     if check_base_requirements() != 0:
         return 1
-    build_config()
+    if build_profiler_config() != 0:
+        return 1
     create_local_dirs()
 
     return 1
