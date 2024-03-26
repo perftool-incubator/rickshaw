@@ -248,6 +248,8 @@ def init_settings():
         "engine": args.base_run_dir + "/engine",
         "endpoint": args.base_run_dir + "/endpoint/" + args.endpoint_label
     }
+    settings["dirs"]["local"]["engine-conf"] = settings["dirs"]["local"]["conf"] + "/engine"
+    settings["dirs"]["local"]["engine-cmds"] = settings["dirs"]["local"]["engine-conf"] + "/bench-cmds"
     settings["dirs"]["local"]["engine-logs"] = settings["dirs"]["local"]["engine"] + "/logs"
     settings["dirs"]["local"]["roadblock-msgs"] = settings["dirs"]["local"]["endpoint"] + "/roadblock-msgs"
 
@@ -263,10 +265,18 @@ def init_settings():
 
     log_settings(mode = "dirs")
 
+    log.info("Initializing misc settings")
+
+    settings["misc"] = dict()
+
     return 0
 
 def log_settings(mode = "all"):
     match mode:
+        case "engines":
+            return log.info("settings[engines]:\n%s" % (dump_json(settings["engines"])))
+        case "misc":
+            return log.info("settings[misc]:\n%s" % (dump_json(settings["misc"])))
         case "dirs":
             return log.info("settings[dirs]:\n%s" % (dump_json(settings["dirs"])))
         case "endpoint":
@@ -286,6 +296,7 @@ def my_make_dirs(mydir):
     return os.makedirs(mydir, exist_ok = True)
 
 def create_local_dirs():
+    log.info("Creating local directories")
     my_make_dirs(settings["dirs"]["local"]["run"])
     my_make_dirs(settings["dirs"]["local"]["engine-logs"])
     my_make_dirs(settings["dirs"]["local"]["roadblock-msgs"])
@@ -316,6 +327,18 @@ def load_settings():
     log.info("Normalizing endpoint settings")
     settings["run-file"]["endpoints"][args.endpoint_index] = normalize_endpoint_settings(endpoint = settings["run-file"]["endpoints"][args.endpoint_index], rickshaw = settings["rickshaw"])
     log_settings(mode = "endpoint")
+
+    log.info("Loading SSH private key into misc settings")
+    settings["misc"]["ssh-private-key"] = ""
+    try:
+        with open(settings["dirs"]["local"]["conf"] + "/rickshaw_id.rsa", "r", encoding = "ascii") as ssh_private_key:
+            for line in ssh_private_key:
+                settings["misc"]["ssh-private-key"] += line
+    except IOError as e:
+        log.error("Failed to load the SSH private key [%s]" % (e))
+        return 1
+
+    log_settings(mode = "misc")
 
     return 0
 
@@ -364,6 +387,66 @@ def normalize_endpoint_settings(endpoint, rickshaw, validate = False):
 
     return endpoint
 
+def check_base_requirements():
+    log.info("Checking base requirements")
+
+    if args.run_id == "":
+        log.error("The run ID was not provided")
+        return 1
+    else:
+        log.info("run-id: %s" % (args.run_id))
+
+    path = Path(settings["dirs"]["local"]["engine-cmds"] + "/client/1")
+    if not path.is_dir():
+        log.error("client-1 bench command directory not found [%s]" % (path))
+        return 1
+    else:
+        log.info("client-1 bench command directory found [%s]" % (path))
+
+    return 0
+
+def build_config():
+    log.info("Building engine configs")
+
+    settings["engines"] = dict()
+    settings["engines"]["remotes"] = dict()
+
+    for remote in settings["run-file"]["endpoints"][args.endpoint_index]["remotes"]:
+        if not remote["config"]["host"] in settings["engines"]["remotes"]:
+            settings["engines"]["remotes"][remote["config"]["host"]] = {
+                "first-engine": None,
+                "roles": dict()
+            }
+        for engine in remote["engines"]:
+            if not engine["role"] in settings["engines"]["remotes"][remote["config"]["host"]]["roles"]:
+                settings["engines"]["remotes"][remote["config"]["host"]]["roles"][engine["role"]] = {
+                    "ids": []
+                }
+            settings["engines"]["remotes"][remote["config"]["host"]]["roles"][engine["role"]]["ids"].extend(engine["ids"])
+
+    for remote in settings["engines"]["remotes"].keys():
+        for role in settings["engines"]["remotes"][remote]["roles"].keys():
+            settings["engines"]["remotes"][remote]["roles"][role]["ids"].sort()
+
+    for remote in settings["engines"]["remotes"].keys():
+        for role in [ "client", "server", "profiler" ]:
+            if settings["engines"]["remotes"][remote]["first-engine"] is None and role in settings["engines"]["remotes"][remote]["roles"] and len(settings["engines"]["remotes"][remote]["roles"][role]["ids"]) > 0:
+                settings["engines"]["remotes"][remote]["first-engine"] = {
+                    "role": role,
+                    "id": settings["engines"]["remotes"][remote]["roles"][role]["ids"][0]
+                }
+                break
+
+        if settings["engines"]["remotes"][remote]["first-engine"] is None:
+            settings["engines"]["remotes"][remote]["first-engine"] = {
+                "role": "profiler",
+                "id": None
+            }
+
+    log_settings(mode = "engines")
+
+    return 0
+
 def setup_logger():
     logging.basicConfig(level = logging.INFO, format = '[%(asctime)s %(levelname)s %(module)s %(funcName)s:%(lineno)d] %(message)s', stream = sys.stdout)
         
@@ -384,6 +467,9 @@ def main():
     init_settings()
     if load_settings() != 0:
         return 1
+    if check_base_requirements() != 0:
+        return 1
+    build_config()
     create_local_dirs()
 
     return 1
