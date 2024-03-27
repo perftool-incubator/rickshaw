@@ -2479,7 +2479,6 @@ sub deploy_endpoints() {
                     " --endpoint-deploy-timeout=" . $endpoint_deploy_timeout .
                     " --engine-script-start-timeout=" . $engine_script_start_timeout .
                     $endpoint_image_opt .
-                    $bench_ids_opt .
                     $endpoint_roadblock_opt .
                     " >" . $this_endpoint_run_dir . "/endpoint-stderrout.txt 2>&1";
             if ($type eq "remotehosts") {
@@ -2487,7 +2486,8 @@ sub deploy_endpoints() {
                     $cmd .= " --" . $arg;
                 }
             } else {
-                $cmd .= " --endpoint-opts=" . $opts;
+                $cmd .= " --endpoint-opts=" . $opts .
+                        $bench_ids_opt;
             }
             # The below 'system' needs to be forked, then wait for all to finish.
             # The endpoint program should get all clients/servers "ready", that is,
