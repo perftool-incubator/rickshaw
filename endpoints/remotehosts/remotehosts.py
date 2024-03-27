@@ -46,12 +46,6 @@ def process_options():
                         required = True,
                         type = str)
 
-    parser.add_argument("--bench-ids",
-                        dest = "bench_ids",
-                        help = "Comma separated list of the benchmarks to run on this endpoint and on which engine IDs",
-                        required = False,
-                        type = str)
-
     parser.add_argument("--endpoint-deploy-timeout",
                         dest = "endpoint_deploy_timeout",
                         help = "How long should the timeout be for the endpoint deployment phase.",
@@ -201,6 +195,9 @@ def validate():
         return 1
     validate_comment("normalized endpoint-settings: %s" % (endpoint_settings))
 
+    benchmark_engine_mapping = build_benchmark_engine_mapping(json["benchmarks"])
+    validate_comment("benchmark-engine-mapping: %s" % (benchmark_engine_mapping))
+
     engines = dict()
     userenvs = []
     for remote in endpoint_settings["remotes"]:
@@ -219,6 +216,14 @@ def validate():
         validate_log("%s %s" % (role, " ".join(map(str, engines[role]))))
         if len(engines[role]) != len(set(engines[role])):
             validate_error("There are duplicate IDs present for %s" % (role))
+        for engine_id in engines[role]:
+            found_engine = False
+            for benchmark in benchmark_engine_mapping.keys():
+                if engine_id in benchmark_engine_mapping[benchmark]["ids"]:
+                    found_engine = True
+                    break
+            if not found_engine:
+                validate_error("Could not find a benchmark mapping for engine ID %d" % (engine_id))
 
     validate_comment("userenvs: %s" % (userenvs))
     for userenv in userenvs:
@@ -299,6 +304,8 @@ def init_settings():
 
 def log_settings(mode = "all"):
     match mode:
+        case "benchmark-mapping":
+            return log.info("settings[benchmark-mapping]:\n%s" % (dump_json(settings["engines"]["benchmark-mapping"])))
         case "engines":
             return log.info("settings[engines]:\n%s" % (dump_json(settings["engines"])))
         case "misc":
@@ -367,6 +374,12 @@ def load_settings():
     log.info("Normalizing endpoint settings")
     settings["run-file"]["endpoints"][args.endpoint_index] = normalize_endpoint_settings(endpoint = settings["run-file"]["endpoints"][args.endpoint_index], rickshaw = settings["rickshaw"])
     log_settings(mode = "endpoint")
+
+    log.info("Building benchmark engine mapping")
+    if not "engines" in settings:
+        settings["engines"] = dict()
+    settings["engines"]["benchmark-mapping"] = build_benchmark_engine_mapping(settings["run-file"]["benchmarks"])
+    log_settings(mode = "benchmark-mapping")
 
     log.info("Loading SSH private key into misc settings")
     settings["misc"]["ssh-private-key"] = ""
@@ -474,8 +487,10 @@ def check_base_requirements():
 def build_profiler_config():
     log.info("Building profiler engine configs")
 
-    settings["engines"] = dict()
+    if not "engines" in settings:
+        settings["engines"] = dict()
     settings["engines"]["remotes"] = dict()
+    settings["engines"]["profiler-mapping"] = dict()
 
     for remote_idx,remote in enumerate(settings["run-file"]["endpoints"][args.endpoint_index]["remotes"]):
         if remote["config"]["settings"]["disable-tools"]:
@@ -544,6 +559,13 @@ def build_profiler_config():
 
             settings["engines"]["remotes"][remote]["roles"]["profiler"]["ids"].append(profiler_id)
 
+            if not tool in settings["engines"]["profiler-mapping"]:
+                settings["engines"]["profiler-mapping"][tool] = {
+                    "name": tool,
+                    "ids": []
+                }
+            settings["engines"]["profiler-mapping"][tool]["ids"].append(profiler_id)
+
     log_settings(mode = "engines")
 
     log.info("Adding new profiler engines to endpoint settings")
@@ -571,6 +593,18 @@ def build_profiler_config():
     log_settings(mode = "endpoint")
 
     return 0
+
+def build_benchmark_engine_mapping(benchmarks):
+    mapping = dict()
+
+    for benchmark_idx,benchmark in enumerate(benchmarks):
+        benchmark_id = benchmark["name"] + "-" + str(benchmark_idx)
+        mapping[benchmark_id] = {
+            "name": benchmark["name"],
+            "ids": expand_ids(benchmark["ids"])
+        }
+
+    return mapping
 
 def setup_logger():
     logging.basicConfig(level = logging.INFO, format = '[%(asctime)s %(levelname)s %(module)s %(funcName)s:%(lineno)d] %(message)s', stream = sys.stdout)
