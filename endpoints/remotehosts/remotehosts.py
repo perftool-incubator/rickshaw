@@ -300,6 +300,15 @@ def init_settings():
 
     settings["misc"] = dict()
 
+    log.info("Creating image map")
+    settings["misc"]["image-map"] = dict()
+    images = args.images.split(",")
+    for image in images:
+        image_split = image.split("::")
+        settings["misc"]["image-map"][image_split[0]] = image_split[1]
+
+    log_settings(mode = "misc")
+
     return 0
 
 def log_settings(mode = "all"):
