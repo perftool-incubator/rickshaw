@@ -1909,7 +1909,7 @@ sub validate_endpoints() {
                     $image_ids{$bench}{$$endpoint{'userenv'}} = \%userenv_info;
                 }
             } else {
-                printf "[ERROR]output from endpoint validation incorrect:\n%s\n", $line;
+                printf "[ERROR] output from endpoint validation incorrect for %s:\n%s\n", $$endpoint{'label'}, $line;
                 exit 1;
             }
         }
