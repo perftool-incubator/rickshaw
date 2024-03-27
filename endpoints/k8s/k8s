@@ -56,6 +56,7 @@ pod_prefix="rickshaw"
 project_name="crucible-rickshaw"
 hypervisor_host="none"
 unique_project="0"
+user_project=""
 hostNetwork="0"
 hugepage="0"
 osruntime[default]="pod"
@@ -421,7 +422,13 @@ function process_k8s_opts() {
         val=`echo $opt | sed -e s/^$arg://`
         case "$arg" in
             unique-project)
+                # This option auto-generates a project name. CLI option '--unique-project=1'
                 unique_project=${val}
+                ;;
+            user-project)
+                # This option allows a user-defined project name. CLI option '--user-project=my-k8s-project'
+                # unique-project option has higher precedence.
+                user_project=${val}
                 ;;
             kubeconfig)
                 kubeconfig=$val
@@ -517,6 +524,8 @@ function process_k8s_opts() {
 
     if [ "${unique_project}" == "1" ]; then
         project_name+="--${run_id}-${endpoint_label}"
+    elif [ ! -z "${user_project}" ]; then
+        project_name="${user_project}"
     fi
 }
 
