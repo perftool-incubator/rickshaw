@@ -11,6 +11,7 @@ from paramiko import ssh_exception
 from pathlib import Path
 import sys
 import threading
+import time
 
 TOOLBOX_HOME = os.environ.get('TOOLBOX_HOME')
 if TOOLBOX_HOME is None:
@@ -615,6 +616,91 @@ def build_benchmark_engine_mapping(benchmarks):
 
     return mapping
 
+def get_profiler(profiler_id):
+    for profiler_key in settings["engines"]["profiler-mapping"].keys():
+        if profiler_id in settings["engines"]["profiler-mapping"][profiler_key]["ids"]:
+            return settings["engines"]["profiler-mapping"][profiler_key]["name"]
+
+    return None
+
+def get_benchmark(benchmark_id):
+    for benchmark_key in settings["engines"]["benchmark-mapping"].keys():
+        if benchmark_id in settings["engines"]["benchmark-mapping"][benchmark_key]["ids"]:
+            return settings["engines"]["benchmark-mapping"][benchmark_key]["name"]
+
+    return None
+
+def get_image(image_id):
+    for image_key in settings["misc"]["image-map"].keys():
+        if image_id == image_key:
+            return settings["misc"]["image-map"][image_key]
+
+    return None
+
+def image_pull_thread(remote, threads_rcs):
+    log.info("Image pull thread for remote %s starting" % (remote))
+    rc = 0
+
+    my_unique_remote = settings["engines"]["remotes"][remote]
+    my_run_file_remote = settings["run-file"]["endpoints"][args.endpoint_index]["remotes"][my_unique_remote["run-file-idx"][0]]
+
+    with Connection(host = remote, user = my_run_file_remote["config"]["settings"]["remote-user"]) as c:
+        for image in my_unique_remote["images"]:
+            result = c.run("podman pull " + image, hide = True)
+            log.info("Image pull thread for remote %s attempted to pull %s with return code %d:\nstdout:\n%sstderr:\n%s" % (remote, image, result.exited, result.stdout, result.stderr))
+            rc += result.exited
+
+            result = c.run("echo '" + image + " " + str(int(time.time())) + "' >> " + settings["dirs"]["remote"]["base"] + "/remotehost-container-image-census", hide = True)
+            log.info("Image pull thread for remote %s recorded usage for %s in the census with return code %d:\nstdout:\n%sstderr:\n%s" % (remote, image, result.exited, result.stdout, result.stderr))
+            rc += result.exited
+
+    threads_rcs[remote] = rc
+
+def remotes_pull_images():
+    log.info("Determining which images to pull to which remotes")
+    for remote in settings["engines"]["remotes"].keys():
+        if not "images" in settings["engines"]["remotes"][remote]:
+            settings["engines"]["remotes"][remote]["images"] = []
+
+        for role in settings["engines"]["remotes"][remote]["roles"].keys():
+            for id in settings["engines"]["remotes"][remote]["roles"][role]["ids"]:
+                image = None
+                if role == "profiler":
+                    profiler = get_profiler(id)
+                    if profiler is None:
+                        log.error("Could not find profiler for remote %s with role %s and id %d" % (remote, role, id))
+                    else:
+                        image = get_image(profiler)
+                else:
+                    benchmark = get_benchmark(id)
+                    if benchmark is None:
+                        log.error("Could not find benchmark for remote %s with role %s and id %d" % (remote, role, id))
+                    else:
+                        image = get_image(benchmark)
+                if image is None:
+                    log.error("Could not find image for remote %s with role %s and id %d" % (remote, role, id))
+                else:
+                    settings["engines"]["remotes"][remote]["images"].append(image)
+
+        settings["engines"]["remotes"][remote]["images"] = list(set(settings["engines"]["remotes"][remote]["images"]))
+
+    log_settings(mode = "engines")
+
+    log.info("Launching %d image pull threads (one per unique remote)" % (len(settings["engines"]["remotes"])))
+    image_pull_threads = dict()
+    image_pull_threads_rcs = dict()
+    for remote in settings["engines"]["remotes"].keys():
+        log.info("Creating and starting impage pull thread for remote %s" % (remote))
+        image_pull_threads[remote] = threading.Thread(target = image_pull_thread, args = (remote, image_pull_threads_rcs))
+        image_pull_threads[remote].start()
+    for remote in settings["engines"]["remotes"].keys():
+        image_pull_threads[remote].join()
+        log.info("Thread joined for remote %s" % (remote))
+
+    log.info("Return codes for each image pull thread:\n%s" % (dump_json(image_pull_threads_rcs)))
+
+    return 0
+
 def setup_logger():
     logging.basicConfig(level = logging.INFO, format = '[%(asctime)s %(levelname)s %(module)s %(funcName)s:%(lineno)d] %(message)s', stream = sys.stdout)
         
@@ -641,6 +727,7 @@ def main():
     if build_profiler_config() != 0:
         return 1
     create_local_dirs()
+    remotes_pull_images()
 
     return 1
 
