@@ -197,6 +197,8 @@ def validate():
     validate_comment("rickshaw-settings: %s" % rickshaw_settings)
 
     endpoint_settings = normalize_endpoint_settings(endpoint_settings, rickshaw_settings, validate = True)
+    if endpoint_settings is None:
+        return 1
     validate_comment("normalized endpoint-settings: %s" % (endpoint_settings))
 
     engines = dict()
@@ -380,6 +382,42 @@ def load_settings():
 
     return 0
 
+def expand_id_range(id_range):
+    expanded_ids = []
+
+    split_id_range = id_range.split("-")
+    if len(split_id_range) == 1:
+        expanded_ids.append(int(split_id_range[0]))
+    else:
+        split_id_range = list(map(int, split_id_range))
+        if split_id_range[0] >= 0 and split_id_range[0] < split_id_range[1]:
+            for subid in range(split_id_range[0], split_id_range[1]+1):
+                expanded_ids.append(subid)
+        else:
+            raise ValueError("Invalid id range: %s" % (id_range))
+
+    return expanded_ids
+
+def expand_ids(ids):
+    new_ids = []
+
+    if isinstance(ids, str):
+        subids = ids.split("+")
+        for subid in subids:
+            new_ids.extend(expand_id_range(subid))
+    elif isinstance(ids, int):
+        new_ids.append(ids)
+    elif isinstance(ids, list):
+        for id in ids:
+            if isinstance(id, int):
+                ids.append(id)
+            elif isinstance(id, str):
+                new_ids.extend(expand_id_range(id))
+
+    new_ids.sort()
+
+    return new_ids
+
 def normalize_endpoint_settings(endpoint, rickshaw, validate = False):
     defaults = {
         "cpu-partitioning": endpoint_defaults["cpu-partitioning"],
@@ -406,26 +444,12 @@ def normalize_endpoint_settings(endpoint, rickshaw, validate = False):
         for engine in remote["engines"]:
             if engine["role"] == "profiler":
                 continue
-            engine_ids = []
-            if isinstance(engine["ids"], int):
-                engine_ids.append(engine["ids"])
-            elif isinstance(engine["ids"], list):
-                for id in engine["ids"]:
-                    if isinstance(id, int):
-                        engine_ids.append(id)
-                    elif isinstance(id, str):
-                        subids = id.split("-")
-                        if len(subids) == 1:
-                            engine_ids.append(subids[0])
-                        else:
-                            subids = list(map(int, subids))
-                            if subids[0] >= 0 and subids[0] < subids[1]:
-                                for subid in range(subids[0], subids[1]+1):
-                                    engine_ids.append(subid)
-                            elif validate:
-                                validate_error("Invalid id range: %s" % (id))
-                                return None
-            engine["ids"] = engine_ids
+            try:
+                engine["ids"] = expand_ids(engine["ids"])
+            except ValueError as e:
+                if validate:
+                    validate_error("While expanding '%s' encountered exception '%s'" % (engine["ids"], str(e)))
+                    return None
 
     return endpoint
 
