@@ -185,7 +185,7 @@ def validate():
     endpoint_settings = json["endpoints"][args.endpoint_index]
     validate_comment("endpoint-settings: %s" % (endpoint_settings))
 
-    valid, err = validate_schema(endpoint_settings, args.rickshaw_dir + "/util/JSON/schema-remotehosts.json")
+    valid, err = validate_schema(endpoint_settings, args.rickshaw_dir + "/schema/remotehosts.json")
     if not valid:
         validate_error(err)
         return 1
@@ -345,6 +345,20 @@ def load_settings():
         return 1
     else:
         log.info("Loaded run-file from %s" % (args.run_file))
+
+    valid, err = validate_schema(settings["run-file"], args.rickshaw_dir + "/util/JSON/schema.json")
+    if not valid:
+        log.error("JSON validation failed for run-file")
+        return 1
+    else:
+        log.info("First level JSON validation for run-file passed")
+
+    valid, err = validate_schema(settings["run-file"]["endpoints"][args.endpoint_index], args.rickshaw_dir + "/schema/remotehosts.json")
+    if not valid:
+        log.error("JSON validation failed for remotehosts endpoint at index %d in run-file" % (args.endpoint_index))
+        return 1
+    else:
+        log.info("Endpoint specific JSON validation for remotehosts endpoint at index %d in run-file passed" % (args.endpoint_index))
 
     log_settings(mode = "run-file")
 
