@@ -9,6 +9,7 @@ import logging
 import os
 from paramiko import ssh_exception
 from pathlib import Path
+import queue
 import sys
 import threading
 import time
@@ -637,24 +638,48 @@ def get_image(image_id):
 
     return None
 
-def image_pull_thread(remote, threads_rcs):
-    log.info("Image pull thread for remote %s starting" % (remote))
+def image_pull_worker_thread(thread_id, work_queue, threads_rcs):
+    thread_name = "IPWT-%d" % (thread_id)
+    thread_logger(thread_name, "Starting image pull thread with thread ID %d and name = '%s'" % (thread_id, thread_name))
     rc = 0
+    job_count = 0
 
-    my_unique_remote = settings["engines"]["remotes"][remote]
-    my_run_file_remote = settings["run-file"]["endpoints"][args.endpoint_index]["remotes"][my_unique_remote["run-file-idx"][0]]
+    while not work_queue.empty():
+        remote = None
+        try:
+            remote = work_queue.get(block = False)
+        except queue.Empty:
+            thread_logger(thread_name, "Received an work queue empty exception")
+            continue
 
-    with Connection(host = remote, user = my_run_file_remote["config"]["settings"]["remote-user"]) as c:
-        for image in my_unique_remote["images"]:
-            result = c.run("podman pull " + image, hide = True)
-            log.info("Image pull thread for remote %s attempted to pull %s with return code %d:\nstdout:\n%sstderr:\n%s" % (remote, image, result.exited, result.stdout, result.stderr))
-            rc += result.exited
+        if remote is None:
+            thread_logger("thread_name", "Received a null job")
+            continue
 
-            result = c.run("echo '" + image + " " + str(int(time.time())) + "' >> " + settings["dirs"]["remote"]["base"] + "/remotehost-container-image-census", hide = True)
-            log.info("Image pull thread for remote %s recorded usage for %s in the census with return code %d:\nstdout:\n%sstderr:\n%s" % (remote, image, result.exited, result.stdout, result.stderr))
-            rc += result.exited
+        job_count += 1
+        thread_logger(thread_name, "Retrieved remote %s" % (remote))
 
-    threads_rcs[remote] = rc
+        my_unique_remote = settings["engines"]["remotes"][remote]
+        my_run_file_remote = settings["run-file"]["endpoints"][args.endpoint_index]["remotes"][my_unique_remote["run-file-idx"][0]]
+
+        with Connection(host = remote, user = my_run_file_remote["config"]["settings"]["remote-user"]) as c:
+            for image in my_unique_remote["images"]:
+                result = c.run("podman pull " + image, hide = True)
+                thread_logger(thread_name, "Remote %s attempted to pull %s with return code %d:\nstdout:\n%sstderr:\n%s" % (remote, image, result.exited, result.stdout, result.stderr))
+                rc += result.exited
+
+                result = c.run("echo '" + image + " " + str(int(time.time())) + "' >> " + settings["dirs"]["remote"]["base"] + "/remotehost-container-image-census", hide = True)
+                thread_logger(thread_name, "Remote %s recorded usage for %s in the census with return code %d:\nstdout:\n%sstderr:\n%s" % (remote, image, result.exited, result.stdout, result.stderr))
+                rc += result.exited
+
+        work_queue.task_done()
+
+    threads_rcs[thread_id] = rc
+    thread_logger(thread_name, "Stopping image pull thread after processing %d job(s)" % (job_count))
+    return
+
+def thread_logger(thread_id, msg):
+    return log.info("[Thread: %s] %s" % (thread_id, msg))
 
 def remotes_pull_images():
     log.info("Determining which images to pull to which remotes")
@@ -686,18 +711,24 @@ def remotes_pull_images():
 
     log_settings(mode = "engines")
 
-    log.info("Launching %d image pull threads (one per unique remote)" % (len(settings["engines"]["remotes"])))
-    image_pull_threads = dict()
-    image_pull_threads_rcs = dict()
+    image_pull_work = queue.Queue()
     for remote in settings["engines"]["remotes"].keys():
-        log.info("Creating and starting impage pull thread for remote %s" % (remote))
-        image_pull_threads[remote] = threading.Thread(target = image_pull_thread, args = (remote, image_pull_threads_rcs))
-        image_pull_threads[remote].start()
-    for remote in settings["engines"]["remotes"].keys():
-        image_pull_threads[remote].join()
-        log.info("Thread joined for remote %s" % (remote))
-
-    log.info("Return codes for each image pull thread:\n%s" % (dump_json(image_pull_threads_rcs)))
+        image_pull_work.put(remote)
+    image_pull_worker_threads = [None] * len(settings["engines"]["remotes"])
+    image_pull_worker_threads_rcs = [None] * len(settings["engines"]["remotes"])
+    thread_logger("MAIN", "Launching %d Image Pull Worker Threads (IPWT)" % (len(settings["engines"]["remotes"])))
+    for image_pull_thread_id in range(0, len(settings["engines"]["remotes"])):
+        thread_logger("MAIN", "Creating and starting IPWT with thread ID %d" % (image_pull_thread_id))
+        image_pull_worker_threads[image_pull_thread_id] = threading.Thread(target = image_pull_worker_thread, args = (image_pull_thread_id, image_pull_work, image_pull_worker_threads_rcs))
+        image_pull_worker_threads[image_pull_thread_id].start()
+    thread_logger("MAIN", "Waiting for all image pull work jobs to be consumed")
+    image_pull_work.join()
+    thread_logger("MAIN", "All image pull work jobs have been consumed")
+    thread_logger("MAIN", "Joining IPWT")
+    for image_pull_thread_id in range(0, len(settings["engines"]["remotes"])):
+        image_pull_worker_threads[image_pull_thread_id].join()
+        thread_logger("MAIN", "Joined IPWT with thread ID %d" % (image_pull_thread_id))
+    thread_logger("MAIN", "Return codes for each image pull thread:\n%s" % (dump_json(image_pull_worker_threads_rcs)))
 
     return 0
 
