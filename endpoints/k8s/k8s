@@ -421,7 +421,7 @@ function process_k8s_opts() {
         val=`echo $opt | sed -e s/^$arg://`
         case "$arg" in
             unique-project)
-                # This option auto-generates a project name. CLI option '--unique-project=1'
+                # val="1" auto-generates a project name. val="other_string", use string as project name.
                 unique_project=${val}
                 ;;
             kubeconfig)
