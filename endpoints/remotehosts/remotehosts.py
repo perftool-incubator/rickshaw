@@ -702,7 +702,7 @@ def remotes_pull_images():
     return 0
 
 def setup_logger():
-    logging.basicConfig(level = logging.INFO, format = '[%(asctime)s %(levelname)s %(module)s %(funcName)s:%(lineno)d] %(message)s', stream = sys.stdout)
+    logging.basicConfig(level = logging.INFO, format = '[LOG %(asctime)s %(levelname)s %(module)s %(funcName)s:%(lineno)d] %(message)s', stream = sys.stdout)
         
     return logging.getLogger(__file__)
 
