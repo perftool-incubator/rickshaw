@@ -316,27 +316,27 @@ def init_settings():
 def log_settings(mode = "all"):
     match mode:
         case "benchmark-mapping":
-            return log.info("settings[benchmark-mapping]:\n%s" % (dump_json(settings["engines"]["benchmark-mapping"])))
+            return log.info("settings[benchmark-mapping]:\n%s" % (dump_json(settings["engines"]["benchmark-mapping"])), stacklevel = 2)
         case "engines":
-            return log.info("settings[engines]:\n%s" % (dump_json(settings["engines"])))
+            return log.info("settings[engines]:\n%s" % (dump_json(settings["engines"])), stacklevel = 2)
         case "misc":
-            return log.info("settings[misc]:\n%s" % (dump_json(settings["misc"])))
+            return log.info("settings[misc]:\n%s" % (dump_json(settings["misc"])), stacklevel = 2)
         case "dirs":
-            return log.info("settings[dirs]:\n%s" % (dump_json(settings["dirs"])))
+            return log.info("settings[dirs]:\n%s" % (dump_json(settings["dirs"])), stacklevel = 2)
         case "endpoint":
-            return log.info("settings[endpoint]:\n%s" % (dump_json(settings["run-file"]["endpoints"][args.endpoint_index])))
+            return log.info("settings[endpoint]:\n%s" % (dump_json(settings["run-file"]["endpoints"][args.endpoint_index])), stacklevel = 2)
         case "rickshaw":
-            return log.info("settings[rickshaw]:\n%s" % (dump_json(settings["rickshaw"])))
+            return log.info("settings[rickshaw]:\n%s" % (dump_json(settings["rickshaw"])), stacklevel = 2)
         case "run-file":
-            return log.info("settings[run-file]:\n%s" % (dump_json(settings["run-file"])))
+            return log.info("settings[run-file]:\n%s" % (dump_json(settings["run-file"])), stacklevel = 2)
         case "all" | _:
-            return log.info("settings:\n%s" % (dump_json(settings)))
+            return log.info("settings:\n%s" % (dump_json(settings)), stacklevel = 2)
 
 def dump_json(obj):
     return json.dumps(obj, indent = 4, separators=(',', ': '), sort_keys = True)
 
 def my_make_dirs(mydir):
-    log.info("Creating directory %s (recurisvely if necessary)" % (mydir))
+    log.info("Creating directory %s (recurisvely if necessary)" % (mydir), stacklevel = 2)
     return os.makedirs(mydir, exist_ok = True)
 
 def create_local_dirs():
@@ -694,11 +694,11 @@ def thread_logger(thread_id, msg, log_level = "info"):
     msg = "[Thread: %s] %s" % (thread_id, msg)
     match log_level:
         case "info":
-            return log.info(msg)
+            return log.info(msg, stacklevel = 2)
         case "warning":
-            return log.warning(msg)
+            return log.warning(msg, stacklevel = 2)
         case "error":
-            return log.error(msg)
+            return log.error(msg, stacklevel = 2)
         case _:
             raise ValueError("Uknown log_level '%s' in thread_logger" % (log_level))
 
