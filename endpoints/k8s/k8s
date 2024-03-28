@@ -421,6 +421,7 @@ function process_k8s_opts() {
         val=`echo $opt | sed -e s/^$arg://`
         case "$arg" in
             unique-project)
+                # val="1" auto-generates a project name. val="other_string", use string as project name.
                 unique_project=${val}
                 ;;
             kubeconfig)
@@ -517,6 +518,8 @@ function process_k8s_opts() {
 
     if [ "${unique_project}" == "1" ]; then
         project_name+="--${run_id}-${endpoint_label}"
+    elif [ ! -z "${unique_project}" ]  &&  [ "${unique_project}" != "0" ]; then
+        project_name="${unique_project}"
     fi
 }
 
