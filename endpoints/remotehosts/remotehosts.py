@@ -504,15 +504,18 @@ def build_profiler_config():
     settings["engines"]["profiler-mapping"] = dict()
 
     for remote_idx,remote in enumerate(settings["run-file"]["endpoints"][args.endpoint_index]["remotes"]):
-        if remote["config"]["settings"]["disable-tools"]:
-            continue
-
         if not remote["config"]["host"] in settings["engines"]["remotes"]:
             settings["engines"]["remotes"][remote["config"]["host"]] = {
                 "first-engine": None,
                 "roles": dict(),
-                "run-file-idx": []
+                "run-file-idx": [],
+                "disable-tools": None
             }
+
+        if settings["engines"]["remotes"][remote["config"]["host"]]["disable-tools"] is None:
+            settings["engines"]["remotes"][remote["config"]["host"]]["disable-tools"] = remote["config"]["settings"]["disable-tools"]
+        elif settings["engines"]["remotes"][remote["config"]["host"]]["disable-tools"] != remote["config"]["settings"]["disable-tools"]:
+            raise ValueError("Conflicting values for disable-tools for remote %s" % (remote["config"]["host"]))
 
         settings["engines"]["remotes"][remote["config"]["host"]]["run-file-idx"].append(remote_idx)
 
@@ -546,6 +549,9 @@ def build_profiler_config():
 
     profiler_count = 0
     for remote in settings["engines"]["remotes"].keys():
+        if settings["engines"]["remotes"][remote]["disable-tools"]:
+            continue
+
         tools = []
         try:
             tool_cmd_dir = settings["engines"]["remotes"][remote]["first-engine"]["role"]
