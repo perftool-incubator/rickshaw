@@ -665,11 +665,17 @@ def image_pull_worker_thread(thread_id, work_queue, threads_rcs):
         with Connection(host = remote, user = my_run_file_remote["config"]["settings"]["remote-user"]) as c:
             for image in my_unique_remote["images"]:
                 result = c.run("podman pull " + image, hide = True)
-                thread_logger(thread_name, "Remote %s attempted to pull %s with return code %d:\nstdout:\n%sstderr:\n%s" % (remote, image, result.exited, result.stdout, result.stderr))
+                loglevel = "info"
+                if result.exited != 0:
+                    loglevel = "error"
+                thread_logger(thread_name, "Remote %s attempted to pull %s with return code %d:\nstdout:\n%sstderr:\n%s" % (remote, image, result.exited, result.stdout, result.stderr), log_level = loglevel)
                 rc += result.exited
 
                 result = c.run("echo '" + image + " " + str(int(time.time())) + "' >> " + settings["dirs"]["remote"]["base"] + "/remotehost-container-image-census", hide = True)
-                thread_logger(thread_name, "Remote %s recorded usage for %s in the census with return code %d:\nstdout:\n%sstderr:\n%s" % (remote, image, result.exited, result.stdout, result.stderr))
+                loglevel = "info"
+                if result.exited != 0:
+                    loglevel = "error"
+                thread_logger(thread_name, "Remote %s recorded usage for %s in the census with return code %d:\nstdout:\n%sstderr:\n%s" % (remote, image, result.exited, result.stdout, result.stderr), log_level = loglevel)
                 rc += result.exited
 
         work_queue.task_done()
@@ -678,8 +684,17 @@ def image_pull_worker_thread(thread_id, work_queue, threads_rcs):
     thread_logger(thread_name, "Stopping image pull thread after processing %d job(s)" % (job_count))
     return
 
-def thread_logger(thread_id, msg):
-    return log.info("[Thread: %s] %s" % (thread_id, msg))
+def thread_logger(thread_id, msg, log_level = "info"):
+    msg = "[Thread: %s] %s" % (thread_id, msg)
+    match log_level:
+        case "info":
+            return log.info(msg)
+        case "warning":
+            return log.warning(msg)
+        case "error":
+            return log.error(msg)
+        case _:
+            raise ValueError("Uknown log_level '%s' in thread_logger" % (log_level))
 
 def remotes_pull_images():
     log.info("Determining which images to pull to which remotes")
