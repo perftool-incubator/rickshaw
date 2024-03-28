@@ -753,6 +753,22 @@ def remotes_pull_images():
 
     return 0
 
+def set_total_cpu_partitions():
+    log.info("Setting the total cpu-partitions per unique remote")
+    for remote in settings["engines"]["remotes"].keys():
+        settings["engines"]["remotes"][remote]["total-cpu-partitions"] = 0
+
+        for run_file_idx in settings["engines"]["remotes"][remote]["run-file-idx"]:
+            if settings["run-file"]["endpoints"][args.endpoint_index]["remotes"][run_file_idx]["config"]["settings"]["cpu-partitioning"]:
+                for engine in settings["run-file"]["endpoints"][args.endpoint_index]["remotes"][run_file_idx]["engines"]:
+                    if engine["role"] == "profiler":
+                        continue
+                    settings["engines"]["remotes"][remote]["total-cpu-partitions"] += len(engine["ids"])
+
+    log_settings(mode = "engines")
+
+    return 0
+
 def setup_logger():
     logging.basicConfig(level = logging.INFO, format = '[LOG %(asctime)s %(levelname)s %(module)s %(funcName)s:%(lineno)d] %(message)s', stream = sys.stdout)
         
@@ -780,7 +796,9 @@ def main():
         return 1
     create_local_dirs()
     remotes_pull_images()
+    set_total_cpu_partitions()
 
+    log.info("end-of-program")
     return 1
 
 if __name__ == "__main__":
