@@ -202,6 +202,7 @@ sub find_files {
                 ($entry =~ /^\.git$/) ||
                 ($entry =~ /^docs$/) ||
                 ($entry =~ /\.md$/) ||
+                ($entry =~ /^__pycache__$/) ||
                 ($entry =~ /^\.github$/)) {
                 next;
             }
@@ -497,7 +498,7 @@ sub calc_image_md5 {
     $md5->add(join("", @config_analysis_output));
 
     # Second is the hashing contents of files
-    for my $file (@files) {
+    for my $file (sort @files) {
         debug_log(sprintf "calc_image_md5(): adding '%s' to hash\n", $file);
         open(my $fh, $file);
         binmode($fh);
