@@ -210,7 +210,9 @@ def json_to_stream(json_obj, cfg, idx):
                         # other args. Instead of: k8s,foo:bar ==> type:k8s,foo:bar
                         if key != 'type':
                             stream += key + ':'
-                        stream += val_str + ','
+                            stream += val_str + ','
+                        else:
+                            stream = val_str + ',' + stream
                 except:
                     raise Exception("Error: Unexpected object type %s" % (type(val)))
                     return None
