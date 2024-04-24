@@ -1,0 +1,68 @@
+{
+    "benchmarks": [
+        {
+            "name": "cyclictest",
+            "ids": "1",
+            "mv-params": {
+                "global-options": [
+                    {
+			"name": "required",
+			"params": [
+                            { "arg": "duration", "vals": [ "10" ], "role": "client" },
+                            { "arg": "priority", "vals": [ "1", "2" ], "role": "client" },
+                            { "arg": "smi", "vals": [ "off" ], "role": "client" }
+			]
+                    }
+                ],
+                "sets": [
+                    {
+			"include": "required"
+                    }
+                ]
+            }
+        }
+    ],
+    "tool-params": [
+        {
+            "tool": "sysstat"
+        },
+        {
+            "tool": "procstat"
+        }
+    ],
+    "tags": {
+        "description": "cyclictest-k8s-run-file-json"
+    },
+    "endpoints": [
+        {
+            "type": "k8s",
+            "controller-ip": "CONTROLLER_IP",
+            "host": "CI_ENDPOINT_HOST",
+            "user": "CI_ENDPOINT_USER",
+            "server": 1,
+            "client": 1,
+            "config": [
+                {
+                    "targets": [
+                        { "role": "client", "ids": "1-2" }
+                    ],
+                    "settings": {
+                        "securityContext": {
+			    "privileged": true
+                        }
+                    }
+                },
+                {
+                    "targets": "all",
+                    "settings": {
+                        "cpu-partitioning": 1
+                    }
+                }
+            ]
+        }
+    ],
+    "run-params": {
+	    "num-samples": 1,
+	    "test-order": "s"
+    }
+}
