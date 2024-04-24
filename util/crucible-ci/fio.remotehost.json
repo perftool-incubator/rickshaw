@@ -11,7 +11,7 @@
 			    { "arg": "clocksource", "vals": [ "gettimeofday" ] },
 			    { "arg": "ramp_time", "vals": [ "5s" ] },
 
-			    { "arg": "bs", "vals": [ "4K" ] },
+			    { "arg": "bs", "vals": [ "4K", "512K" ] },
 			    { "arg": "unlink", "vals": [ "1" ] },
 			    { "arg": "filename", "vals": [ "/tmp/fio.foo" ] },
 			    { "arg": "runtime", "vals": [ "10s" ] },
@@ -33,18 +33,14 @@
     ],
     "tool-params": [
         {
-            "tool": "sysstat",
-            "params": [
-                { "arg": "subtools", "val": "mpstat", "enabled": "yes" }
-            ]
+            "tool": "sysstat"
         },
         {
             "tool": "procstat"
         }
     ],
     "tags": {
-        "run": "fio-run-file-json",
-        "userenv": "default"
+        "description": "fio-remotehost-run-file-json"
     },
     "endpoints": [
         {
@@ -52,7 +48,6 @@
             "controller-ip": "CONTROLLER_IP",
             "host": "CI_ENDPOINT_HOST",
             "user": "CI_ENDPOINT_USER",
-            "userenv": "default",
             "client": "1-2",
             "config": [
                 {
@@ -78,7 +73,6 @@
             "controller-ip": "CONTROLLER_IP",
             "host": "CI_ENDPOINT_HOST",
             "user": "CI_ENDPOINT_USER",
-            "userenv": "default",
             "profiler": "1",
             "config": [
                 {

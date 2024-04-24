@@ -55,18 +55,14 @@
     ],
     "tool-params": [
         {
-            "tool": "sysstat",
-            "params": [
-                { "arg": "subtools", "val": "mpstat", "enabled": "yes" }
-            ]
+            "tool": "sysstat"
         },
         {
             "tool": "procstat"
         }
     ],
     "tags": {
-        "run": "multibench-run-file-json",
-        "userenv": "default"
+        "description": "mulitbench-remotehost-run-file-json"
     },
     "endpoints": [
         {
@@ -74,7 +70,6 @@
             "controller-ip": "CONTROLLER_IP",
             "host": "CI_ENDPOINT_HOST",
             "user": "CI_ENDPOINT_USER",
-            "userenv": "default",
             "server": "1-2",
             "client": "1-2",
             "config": [
@@ -103,7 +98,6 @@
             "controller-ip": "CONTROLLER_IP",
             "host": "CI_ENDPOINT_HOST",
             "user": "CI_ENDPOINT_USER",
-            "userenv": "default",
             "profiler": "1",
             "config": [
                 {
