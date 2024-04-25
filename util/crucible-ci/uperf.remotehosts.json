@@ -1,0 +1,81 @@
+{
+    "benchmarks": [
+        {
+            "name": "uperf",
+            "ids": "1-2",
+            "mv-params": {
+                "global-options": [
+                    {
+                        "name": "required",
+                        "params": [
+                            { "arg": "protocol", "vals": [ "tcp" ], "role": "client" },
+                            { "arg": "wsize", "vals": [ "64" ], "role": "client" },
+                            { "arg": "rsize", "vals": [ "64" ], "role": "client" },
+                            { "arg": "duration", "vals": [ "10" ], "role": "client" },
+                            { "arg": "ifname", "vals" : [ "default-route" ], "role": "server" }
+                        ]
+                    }
+                ],
+                "sets": [
+                    {
+                        "include": "required",
+                        "params": [
+                            { "arg": "test-type", "vals": [ "stream" ], "role": "client" },
+                            { "arg": "nthreads", "vals": [ "1", "8" ], "role": "client" }
+                        ]
+                    }
+                ]
+            }
+        }
+    ],
+    "tool-params": [
+        {
+            "tool": "sysstat"
+        },
+        {
+            "tool": "procstat"
+        }
+    ],
+    "tags": {
+        "description": "uperf-remotehosts-run-file-json"
+    },
+    "endpoints": [
+	{
+	    "type": "remotehosts",
+	    "settings": {
+		"user": "CI_ENDPOINT_USER",
+		"controller-ip-address": "CONTROLLER_IP"
+	    },
+	    "remotes": [
+		{
+		    "engines": [
+			{ "role": "client", "ids": [ 1 ] },
+			{ "role": "server", "ids": [ 1 ] }
+		    ],
+		    "config": {
+			"host": "CI_ENDPOINT_HOST",
+			"settings": {
+			    "osruntime": "podman"
+			}
+		    }
+		},
+		{
+		    "engines": [
+			{ "role": "client", "ids": [ 2 ] },
+			{ "role": "server", "ids": [ 2 ] }
+		    ],
+		    "config": {
+			"host": "CI_ENDPOINT_HOST",
+			"settings": {
+			    "osruntime": "chroot"
+			}
+		    }
+		}
+	    ]
+	}
+    ],
+    "run-params": {
+	    "num-samples": 1,
+	    "test-order": "s"
+    }
+}

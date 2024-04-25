@@ -1,0 +1,74 @@
+{
+    "benchmarks": [
+        {
+            "name": "oslat",
+            "ids": "1-2",
+            "mv-params": {
+                "global-options": [
+                    {
+                        "name": "common-params",
+                        "params": [
+                            { "arg": "duration", "vals": [ "10" ], "role": "client" },
+                            { "arg": "rtprio", "vals": [ "1", "2" ], "role": "client" }
+                        ]
+                    }
+                ],
+                "sets": [
+                    {
+                        "include": "common-params"
+                    }
+                ]
+            }
+        }
+    ],
+    "tool-params": [
+        {
+            "tool": "sysstat"
+        },
+        {
+            "tool": "procstat"
+        }
+    ],
+    "tags": {
+        "description": "oslat-remotehosts-run-file-json"
+    },
+    "endpoints": [
+	{
+	    "type": "remotehosts",
+	    "settings": {
+		"user": "CI_ENDPOINT_USER",
+		"controller-ip-address": "CONTROLLER_IP",
+		"cpu-partitioning": true
+	    },
+	    "remotes": [
+		{
+		    "engines": [
+			{ "role": "client", "ids": [ 1 ] },
+			{ "role": "server", "ids": [ 1 ] }
+		    ],
+		    "config": {
+			"host": "CI_ENDPOINT_HOST",
+			"settings": {
+			    "osruntime": "podman"
+			}
+		    }
+		},
+		{
+		    "engines": [
+			{ "role": "client", "ids": [ 2 ] }
+		    ],
+		    "config": {
+			"host": "CI_ENDPOINT_HOST",
+			"settings": {
+			    "osruntime": "chroot"
+			}
+		    }
+		}
+	    ]
+	}
+    ],
+    "run-params": {
+	"num-samples": 1,
+	"test-order": "s"
+    }
+}
