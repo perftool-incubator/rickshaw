@@ -9,7 +9,7 @@
                         "name": "common-params",
                         "params": [
                             { "arg": "duration", "vals": [ "10" ], "role": "client" },
-                            { "arg": "rtprio", "vals": [ "1" ], "role": "client" }
+                            { "arg": "rtprio", "vals": [ "1", "2" ], "role": "client" }
                         ]
                     }
                 ],
@@ -23,18 +23,14 @@
     ],
     "tool-params": [
         {
-            "tool": "sysstat",
-            "params": [
-                { "arg": "subtools", "val": "mpstat", "enabled": "yes" }
-            ]
+            "tool": "sysstat"
         },
         {
             "tool": "procstat"
         }
     ],
     "tags": {
-        "run": "single-json-all-in-one",
-        "userenv": "alma8"
+        "description": "oslat-k8s-run-file-json"
     },
     "endpoints": [
         {
@@ -42,9 +38,6 @@
             "controller-ip": "CONTROLLER_IP",
             "host": "CI_ENDPOINT_HOST",
             "user": "CI_ENDPOINT_USER",
-            "userenv": "alma8",
-            "unique-project": 1,
-            "kubeconfig": 0,
             "server": 1,
             "client": 1,
             "config": [

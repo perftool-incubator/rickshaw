@@ -62,53 +62,16 @@
         }
     ],
     "tags": {
-        "description": "mulitbench-remotehost-run-file-json"
+        "description": "multibench-k8s-run-file-json"
     },
     "endpoints": [
         {
-            "type": "remotehost",
+            "type": "k8s",
             "controller-ip": "CONTROLLER_IP",
             "host": "CI_ENDPOINT_HOST",
             "user": "CI_ENDPOINT_USER",
             "server": "1-2",
-            "client": "1-2",
-            "config": [
-                {
-                    "targets": [
-                        { "role": "client", "ids": "1" },
-                        { "role": "server", "ids": "1" }
-                    ],
-                    "settings": {
-                        "osruntime": "podman"
-                    }
-                },
-                {
-                    "targets": [
-                        { "role": "client", "ids": "2" },
-                        { "role": "server", "ids": "2" }
-                    ],
-                   "settings": {
-                        "osruntime": "chroot"
-                    }
-                }             
-            ]
-        },
-        {
-            "type": "remotehost",
-            "controller-ip": "CONTROLLER_IP",
-            "host": "CI_ENDPOINT_HOST",
-            "user": "CI_ENDPOINT_USER",
-            "profiler": "1",
-            "config": [
-                {
-                    "targets": [
-                        { "role": "profiler", "ids": "1" }
-                    ],
-                    "settings": {
-                        "osruntime": "chroot"
-                    }
-                }
-            ]
+            "client": "1-2"
         }
     ],
     "run-params": {

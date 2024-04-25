@@ -1,31 +1,21 @@
 {
     "benchmarks": [
         {
-            "name": "fio",
+            "name": "oslat",
             "ids": "1",
             "mv-params": {
                 "global-options": [
                     {
-			"name": "required",
-			"params": [
-			    { "arg": "clocksource", "vals": [ "gettimeofday" ] },
-			    { "arg": "ramp_time", "vals": [ "5s" ] },
-
-			    { "arg": "bs", "vals": [ "4K", "512K" ] },
-			    { "arg": "unlink", "vals": [ "1" ] },
-			    { "arg": "filename", "vals": [ "/tmp/fio.foo" ] },
-			    { "arg": "runtime", "vals": [ "10s" ] },
-			    { "arg": "time_based", "vals": [ "1" ] },
-			    { "arg": "norandommap", "vals": [ "ON" ] },
-			    { "arg": "rw", "vals": [ "randrw" ] },
-			    { "arg": "ioengine", "vals": [ "sync" ] },
-			    { "arg": "size", "vals": [ "10M" ] }
-			]
+                        "name": "common-params",
+                        "params": [
+                            { "arg": "duration", "vals": [ "10" ], "role": "client" },
+                            { "arg": "rtprio", "vals": [ "1", "2" ], "role": "client" }
+                        ]
                     }
                 ],
                 "sets": [
                     {
-			"include": "required"
+                        "include": "common-params"
                     }
                 ]
             }
@@ -40,7 +30,7 @@
         }
     ],
     "tags": {
-        "description": "fio-remotehost-run-file-json"
+        "description": "oslat-remotehost-run-file-json"
     },
     "endpoints": [
         {
@@ -48,11 +38,13 @@
             "controller-ip": "CONTROLLER_IP",
             "host": "CI_ENDPOINT_HOST",
             "user": "CI_ENDPOINT_USER",
+            "server": "1",
             "client": "1-2",
             "config": [
                 {
                     "targets": [
-                        { "role": "client", "ids": "1" }
+                        { "role": "client", "ids": "1" },
+                        { "role": "server", "ids": "1" }
                     ],
                     "settings": {
                         "osruntime": "podman"
@@ -64,6 +56,12 @@
                     ],
                    "settings": {
                         "osruntime": "chroot"
+                    }
+                },
+                {
+                   "targets": "default",
+                   "settings": {
+                        "cpu-partitioning": "1"
                     }
                 }             
             ]
@@ -79,15 +77,15 @@
                     "targets": [
                         { "role": "profiler", "ids": "1" }
                     ],
-		    "settings": {
-			"osruntime": "podman"
-		    }
+                    "settings": {
+                        "osruntime": "podman"
+                    }
                 }
             ]
         }
     ],
     "run-params": {
-	    "num-samples": 1,
-	    "test-order": "s"
+	"num-samples": 1,
+	"test-order": "s"
     }
 }

@@ -31,55 +31,31 @@
         }
     ],
     "tags": {
-        "description": "cyclictest-remotehost-run-file-json"
+        "description": "cyclictest-k8s-run-file-json"
     },
     "endpoints": [
         {
-            "type": "remotehost",
+            "type": "k8s",
             "controller-ip": "CONTROLLER_IP",
             "host": "CI_ENDPOINT_HOST",
             "user": "CI_ENDPOINT_USER",
-            "server": "1",
-            "client": "1-2",
+            "server": 1,
+            "client": 1,
             "config": [
                 {
                     "targets": [
-                        { "role": "client", "ids": "1" },
-                        { "role": "server", "ids": "1" }
+                        { "role": "client", "ids": "1-2" }
                     ],
                     "settings": {
-                        "osruntime": "podman"
+                        "securityContext": {
+			    "privileged": true
+                        }
                     }
                 },
                 {
-                    "targets": [
-                        { "role": "client", "ids": "2" }
-                    ],
-                   "settings": {
-                        "osruntime": "chroot"
-                    }
-                },
-                {
-                   "targets": "default",
-                   "settings": {
-                        "cpu-partitioning": "1"
-                    }
-                }             
-            ]
-        },
-        {
-            "type": "remotehost",
-            "controller-ip": "CONTROLLER_IP",
-            "host": "CI_ENDPOINT_HOST",
-            "user": "CI_ENDPOINT_USER",
-            "profiler": "1",
-            "config": [
-                {
-                    "targets": [
-                        { "role": "profiler", "ids": "1" }
-                    ],
+                    "targets": "all",
                     "settings": {
-                        "osruntime": "chroot"
+                        "cpu-partitioning": 1
                     }
                 }
             ]
