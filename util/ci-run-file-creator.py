@@ -58,7 +58,7 @@ def process_options():
                         dest = "endpoint",
                         help = "The endpoint to return a run-file for",
                         required = True,
-                        choices = [ "remotehost", "k8s" ],
+                        choices = [ "k8s", "remotehost", "remotehosts" ],
                         type = str)
 
     parser.add_argument("--endpoint-sub-type",
@@ -159,7 +159,7 @@ def update_endpoint_sub_type():
     run_file["tags"]["endpoint-sub-type"] = args.endpoint_sub_type
 
     match args.endpoint:
-        case "remotehost":
+        case "remotehost"|"remotehosts":
             if args.endpoint_sub_type != "NONE":
                 msg = "%s endpoint expected sub-type of 'NONE' (not '%s')" % (args.endpoint, args.endpoint_sub_type)
                 log.error(msg)
@@ -222,6 +222,35 @@ def update_userenvs():
                     else:
                         log.info("Creating %s userenv for endpoint %d since requested userenv is not default" % (args.endpoint, endpoint_idx))
                         endpoint["userenv"] = args.userenv
+        case "remotehosts":
+            endpoint = run_file["endpoints"][0]
+            if "userenv" in endpoint["settings"]:
+                if args.userenv == "default":
+                    log.info("Found existing %s global userenv but since requested userenv is default is is being removed" % (args.endpoint))
+                    del endpoint["settings"]["userenv"]
+                else:
+                    log.info("Updating existing %s global userenv" % (args.endpoint))
+                    endpoint["settings"]["userenv"] = args.userenv
+            else:
+                if args.userenv == "default":
+                    log.info("No %s global userenv to update since requested userenv is default" % (args.endpoint))
+                else:
+                    log.info("Creating %s global userenv since requested userenv is not default" % (args.endpoint))
+                    endpoint["settings"]["userenv"] = args.userenv
+
+            for remote_idx,remote in enumerate(endpoint["remotes"]):
+                if "settings" in remote["config"]:
+                    if "userenv" in remote["config"]["settings"]:
+                        if args.userenv == "default":
+                            log.info("Found existing %s userenv for remote %s but since requested userenv is default it is being removed" % (args.endpoint, remote_idx))
+                            del remote["config"]["settings"]["userenv"]
+                        else:
+                            log.info("Updating existing %s userenv for remote %s" % (args.endpoint, remote_idx))
+                            remote["config"]["settings"]["userenv"] = args.userenv
+                    else:
+                        log.info("No userenv in %s settings for remote %d so requested userenv will be inherited from endpoint global" % (args.endpoint, remote_idx))
+                else:
+                    log.info("No %s settings for remote %d so requested userenv will be inherited from endpoint global" % (args.endpoint, remote_idx))
 
     return
 
@@ -254,6 +283,24 @@ def update_controller_ip():
                     endpoint["controller-ip"] = args.controller_ip
                 else:
                     log.debug("No controller-ip to update for %s endpoint %d" % (args.endpoint, endpoint_idx))
+        case "remotehosts":
+            endpoint = run_file["endpoints"][0]
+            if "controller-ip-address" in endpoint["settings"]:
+                log.info("Found existing %s global controller-ip-address so updating it" % (args.endpoint))
+            else:
+                log.info("Creating %s global controller-ip-address" % (args.endpoint))
+
+            endpoint["settings"]["controller-ip-address"] = args.controller_ip
+
+            for remote_idx,remote in enumerate(endpoint["remotes"]):
+                if "settings" in remote["config"]:
+                    if "controller-ip-address" in remote["config"]["settings"]:
+                        log.info("Updating existing %s controller-ip-address for remote %d" % (args.endpoint, remote_idx))
+                        remote["config"]["settings"]["controller-ip-address"] = args.controller_ip
+                    else:
+                        log.info("No controller-ip-address in %s settings for remote %d so it will be inherited from endpoint global" % (args.endpoint, remote_idx))
+                else:
+                    log.info("No %s settings for remote %d so controller-ip-address will be inherited from endpoint global" % (args.endpoint, remote_idx))
 
     return
 
@@ -286,6 +333,15 @@ def update_host():
                     endpoint["host"] = args.host
                 else:
                     log.debug("No host to update for %s endpoint %d" % (args.endpoint, endpoint_idx))
+        case "remotehosts":
+            endpoint = run_file["endpoints"][0]
+            for remote_idx,remote in enumerate(endpoint["remotes"]):
+                if "host" in remote["config"]:
+                    log.info("Updating existing %s host for remote %d" % (args.endpoint, remote_idx))
+                else:
+                    log.info("Creating %s host for remote %d" % (args.endpoint, remote_idx))
+
+                remote["config"]["host"] = args.host
 
     return
 
@@ -318,6 +374,24 @@ def update_user():
                     endpoint["user"] = args.user
                 else:
                     log.debug("No user to update for %s endpoint %d" % (args.endpoint, endpoint_idx))
+        case "remotehosts":
+            endpoint = run_file["endpoints"][0]
+            if "user" in endpoint["settings"]:
+                log.info("Found existing %s global user so updating it" % (args.endpoint))
+            else:
+                log.info("Creating %s global user" % (args.endpoint))
+
+            endpoint["settings"]["user"] = args.user
+
+            for remote_idx,remote in enumerate(endpoint["remotes"]):
+                if "settings" in remote["config"]:
+                    if "user" in remote["config"]["settings"]:
+                        log.info("Updating existing %s user for remote %d" % (args.endpoint, remote_idx))
+                        remote["config"]["settings"]["user"] = args.user
+                    else:
+                        log.info("No user in %s settings for remote %s so it will be inherited from endpoint global" % (args.endpoint, remote_idx))
+                else:
+                    log.info("No %s settings for remote %d so user will be inherited from endpoint global" % (args.endpoint, remote_idx))
 
     return
 

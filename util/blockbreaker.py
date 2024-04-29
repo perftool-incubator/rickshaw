@@ -130,6 +130,9 @@ def json_to_stream(json_obj, cfg, idx):
             endpoint_type = json_blk["type"]
             if not validate_schema(json_blk, "schema-" + endpoint_type + ".json"):
                 return None
+            if endpoint_type == "remotehosts":
+                stream = endpoint_type + ",run-file=" + args.json_file + ",endpoint-index=" + str(idx)
+                return stream
         else:
             # single object w/ key:value pairs e.g. "tags" block
             json_blk = json_obj[cfg]

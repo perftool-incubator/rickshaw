@@ -1763,6 +1763,7 @@ sub endpoint_validation_worker_thread() {
         if (defined $job) {
             debug_log(sprintf "Endpoint Validation Thread-%d got a job for %s, cmd is '%s'\n", $thread_idx, $job->{'endpoint'}, $job->{'command'});
             (my $cmd, my $output, my $cmd_rc) = run_cmd($job->{'command'});
+            $endpoint_outputs->{$job->{'endpoint'}} = $output;
             if ($cmd_rc > 0) {
                 printf "[ERROR] Endpoint " . $job->{'endpoint'} .
                        " validation returned non-zero exit code " . $cmd_rc . "\n" .
@@ -1772,7 +1773,6 @@ sub endpoint_validation_worker_thread() {
                 $job_errors_lock->up();
             } else {
                 debug_log(sprintf "Endpoint %s validated\n", $job->{'endpoint'});
-                $endpoint_outputs->{$job->{'endpoint'}} = $output;
             }
         }
     }
@@ -1809,8 +1809,15 @@ sub validate_endpoints() {
                                      "/" . $$endpoint{'type'} .
                                      " --endpoint-label=" . $$endpoint{'label'} .
                                      " --base-run-dir=" . $run{'base-run-dir'} .
-                                     " --endpoint-opts=" . $$endpoint{'opts'} .
+                                     " --rickshaw-dir=" . $rickshaw_project_dir .
                                      " --validate" );
+        if ($$endpoint{'type'} eq "remotehosts") {
+            foreach my $arg (split(/,/, $$endpoint{'opts'})) {
+                $job{'command'} .= " --" . $arg;
+            }
+        } else {
+            $job{'command'} .= " --endpoint-opts=" . $$endpoint{'opts'};
+        }
         $job_queue->enqueue(\%job);
     }
 
@@ -1855,6 +1862,21 @@ sub validate_endpoints() {
         sleep 1;
     }
     debug_log("Endpoint Validation Job processing complete\n");
+
+    # archive the endpoint validation output in the result directory
+    -e $run{'base-run-dir'} || mkdir($run{'base-run-dir'});
+    my $validations_dir = $run{'base-run-dir'} . "/validations";
+    mkdir($validations_dir);
+    foreach my $endpoint (@endpoints) {
+        my $validation_file = $validations_dir . "/" . $$endpoint{'label'} . ".txt";
+        if (open(EPV, ">", $validation_file)) {
+            print EPV $endpoint_outputs{$$endpoint{'label'}};
+            close EPV;
+        } else {
+            printf "ERROR: Could not open %s for writing!\n", $validation_file;
+            exit 1;
+        }
+    }
 
     # wait and die here on validation error(s) so that we generate all
     # the errors rather than just a subset
@@ -1909,7 +1931,7 @@ sub validate_endpoints() {
                     $image_ids{$bench}{$$endpoint{'userenv'}} = \%userenv_info;
                 }
             } else {
-                printf "[ERROR]output from endpoint validation incorrect:\n%s\n", $line;
+                printf "[ERROR] output from endpoint validation incorrect for %s:\n%s\n", $$endpoint{'label'}, $line;
                 exit 1;
             }
         }
@@ -2448,8 +2470,8 @@ sub deploy_endpoints() {
         if (-e $endpoint_project_dir) {
             my $pushd_dir = pushd($endpoint_project_dir);
             my $cmd = "./" . $type .
+                    " --rickshaw-dir=" . $rickshaw_project_dir .
                     " --packrat-dir=" . $run{'packrat-dir'} .
-                    " --endpoint-opts=" . $opts .
                     " --endpoint-label=" . $label .
                     " --run-id=" . $run{'id'} .
                     " --base-run-dir=" . $run{'base-run-dir'} .
@@ -2458,9 +2480,16 @@ sub deploy_endpoints() {
                     " --endpoint-deploy-timeout=" . $endpoint_deploy_timeout .
                     " --engine-script-start-timeout=" . $engine_script_start_timeout .
                     $endpoint_image_opt .
-                    $bench_ids_opt .
                     $endpoint_roadblock_opt .
                     " >" . $this_endpoint_run_dir . "/endpoint-stderrout.txt 2>&1";
+            if ($type eq "remotehosts") {
+                foreach my $arg (split(/,/, $opts)) {
+                    $cmd .= " --" . $arg;
+                }
+            } else {
+                $cmd .= " --endpoint-opts=" . $opts .
+                        $bench_ids_opt;
+            }
             # The below 'system' needs to be forked, then wait for all to finish.
             # The endpoint program should get all clients/servers "ready", that is,
             # waiting for instructions from roadblock.  The above command needs
