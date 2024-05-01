@@ -65,51 +65,39 @@
         "description": "mulitbench-remotehosts-run-file-json"
     },
     "endpoints": [
-        {
-            "type": "remotehost",
-            "controller-ip": "CONTROLLER_IP",
-            "host": "CI_ENDPOINT_HOST",
-            "user": "CI_ENDPOINT_USER",
-            "server": "1-2",
-            "client": "1-2",
-            "config": [
-                {
-                    "targets": [
-                        { "role": "client", "ids": "1" },
-                        { "role": "server", "ids": "1" }
-                    ],
-                    "settings": {
-                        "osruntime": "podman"
-                    }
-                },
-                {
-                    "targets": [
-                        { "role": "client", "ids": "2" },
-                        { "role": "server", "ids": "2" }
-                    ],
-                   "settings": {
-                        "osruntime": "chroot"
-                    }
-                }             
-            ]
-        },
-        {
-            "type": "remotehost",
-            "controller-ip": "CONTROLLER_IP",
-            "host": "CI_ENDPOINT_HOST",
-            "user": "CI_ENDPOINT_USER",
-            "profiler": "1",
-            "config": [
-                {
-                    "targets": [
-                        { "role": "profiler", "ids": "1" }
-                    ],
-                    "settings": {
-                        "osruntime": "chroot"
-                    }
-                }
-            ]
-        }
+	{
+	    "type": "remotehosts",
+	    "settings": {
+		"user": "CI_ENDPOINT_USER",
+		"controller-ip-address": "CONTROLLER_IP"
+	    },
+	    "remotes": [
+		{
+		    "engines": [
+			{ "role": "client", "ids": [ 1 ] },
+			{ "role": "server", "ids": [ 1 ] }
+		    ],
+		    "config": {
+			"host": "CI_ENDPOINT_HOST",
+			"settings": {
+			    "osruntime": "podman"
+			}
+		    }
+		},
+		{
+		    "engines": [
+			{ "role": "client", "ids": [ 2 ] },
+			{ "role": "server", "ids": [ 2 ] }
+		    ],
+		    "config": {
+			"host": "CI_ENDPOINT_HOST",
+			"settings": {
+			    "osruntime": "chroot"
+			}
+		    }
+		}
+	    ]
+	}
     ],
     "run-params": {
 	    "num-samples": 1,
