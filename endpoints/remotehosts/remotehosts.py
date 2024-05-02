@@ -1276,7 +1276,8 @@ def image_pull_worker_thread(thread_id, work_queue, threads_rcs):
     Returns:
         None
     """
-    thread_name = "IPWT-%d" % (thread_id)
+    thread = threading.current_thread()
+    thread_name = thread.name
     thread_logger(thread_name, "Starting image pull thread with thread ID %d and name = '%s'" % (thread_id, thread_name))
     rc = 0
     job_count = 0
@@ -1427,7 +1428,7 @@ def create_thread_pool(description, acronym, work, worker_threads_count, worker_
             thread_logger("MAIN", "Aborting %s launch because no more work to do" % (acronym))
             break
         thread_logger("MAIN", "Creating and starting %s with thread ID %d" % (acronym, thread_id))
-        worker_threads[thread_id] = threading.Thread(target = worker_thread_function, args = (thread_id, work, worker_threads_rcs))
+        worker_threads[thread_id] = threading.Thread(target = worker_thread_function, args = (thread_id, work, worker_threads_rcs), name = "%s-%d" % (acronym, thread_id))
         worker_threads[thread_id].start()
 
     thread_logger("MAIN", "Waiting for all %s work jobs to be consumed" % (acronym))
@@ -1500,7 +1501,8 @@ def remote_mkdirs_worker_thread(thread_id, work_queue, threads_rcs):
     Returns:
         None
     """
-    thread_name = "RWMT-%d" % (thread_id)
+    thread = threading.current_thread()
+    thread_name = thread.name
     thread_logger(thread_name, "Starting remote mkdirs thread with thread ID %d and name = '%s'" % (thread_id, thread_name))
     rc = 0
     job_count = 0
@@ -1952,7 +1954,8 @@ def launch_engines_worker_thread(thread_id, work_queue, threads_rcs):
     Returns:
         None
     """
-    thread_name = "LEWT-%d" % (thread_id)
+    thread = threading.current_thread()
+    thread_name = thread.name
     thread_logger(thread_name, "Starting launch engines thread with thread ID %d and name = '%s'" % (thread_id, thread_name))
     rc = 0
     job_count = 0
@@ -3295,7 +3298,8 @@ def shutdown_engines_worker_thread(thread_id, work_queue, threads_rcs):
     Returns:
         None
     """
-    thread_name = "SEWT-%d" % (thread_id)
+    thread = threading.current_thread()
+    thread_name = thread.name
     thread_logger(thread_name, "Starting shutdown engines thread with thread ID %d and name = '%s'" % (thread_id, thread_name))
     rc = 0
     job_count = 0
@@ -3409,7 +3413,8 @@ def image_mgmt_worker_thread(thread_id, work_queue, threads_rcs):
     Returns:
         None
     """
-    thread_name = "IMWT-%d" % (thread_id)
+    thread = threading.current_thread()
+    thread_name = thread.name
     thread_logger(thread_name, "Starting image management thread with thread ID %d and name = '%s'" % (thread_id, thread_name))
     rc = 0
     job_count = 0
@@ -3500,7 +3505,8 @@ def collect_sysinfo_worker_thread(thread_id, work_queue, threads_rcs):
     Returns:
         None
     """
-    thread_name = "CSWT-%d" % (thread_id)
+    thread = threading.current_thread()
+    thread_name = thread.name
     thread_logger(thread_name, "Starting collect sysinfo thread with thread ID %d and name = '%s'" % (thread_id, thread_name))
     rc = 0
     job_count = 0
