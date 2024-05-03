@@ -1288,10 +1288,10 @@ def image_pull_worker_thread(thread_id, work_queue, threads_rcs):
             remote = work_queue.get(block = False)
         except queue.Empty:
             thread_logger(thread_name, "Received a work queue empty exception")
-            continue
+            break
 
         if remote is None:
-            thread_logger(thread_name, "Received a null job")
+            thread_logger(thread_name, "Received a null job", log_level = "warning")
             continue
 
         job_count += 1
@@ -1513,10 +1513,10 @@ def remote_mkdirs_worker_thread(thread_id, work_queue, threads_rcs):
             remote = work_queue.get(block = False)
         except queue.Empty:
             thread_logger(thread_name, "Received a work queue empty exception")
-            continue
+            break
 
         if remote is None:
-            thread_logger(thread_name, "Received a null job")
+            thread_logger(thread_name, "Received a null job", log_level = "warning")
             continue
 
         job_count += 1
@@ -1966,10 +1966,11 @@ def launch_engines_worker_thread(thread_id, work_queue, threads_rcs):
             remote_idx = work_queue.get(block = False)
         except queue.Empty:
             thread_logger(thread_name, "Received a work queue empty exception")
-            continue
+            break
 
         if remote_idx is None:
-            thread_logger(thread_name, "Received a null job")
+            thread_logger(thread_name, "Received a null job", log_level = "warning")
+            continue
 
         job_count += 1
 
@@ -3310,10 +3311,11 @@ def shutdown_engines_worker_thread(thread_id, work_queue, threads_rcs):
             remote_idx = work_queue.get(block = False)
         except queue.Empty:
             thread_logger(thread_name, "Received a work queue empty exception")
-            continue
+            break
 
         if remote_idx is None:
-            thread_logger(thread_name, "Received a null job")
+            thread_logger(thread_name, "Received a null job", log_level = "warning")
+            continue
 
         job_count += 1
 
@@ -3425,10 +3427,11 @@ def image_mgmt_worker_thread(thread_id, work_queue, threads_rcs):
             remote = work_queue.get(block = False)
         except queue.Empty:
             thread_logger(thread_name, "Received a work queue empty exception")
-            continue
+            break
 
         if remote is None:
-            thread_logger(thread_name, "Received a null job")
+            thread_logger(thread_name, "Received a null job", log_level = "warning")
+            continue
 
         job_count += 1
 
@@ -3517,10 +3520,11 @@ def collect_sysinfo_worker_thread(thread_id, work_queue, threads_rcs):
             remote = work_queue.get(block = False)
         except queue.Empty:
             thread_logger(thread_name, "Received a work queue empty exception")
-            continue
+            break
 
         if remote is None:
-            thread_logger(thread_name, "Received a null job")
+            thread_logger(thread_name, "Received a null job", log_level = "warning")
+            continue
 
         job_count += 1
 
