@@ -101,7 +101,7 @@ def remote_connection(host, user):
                     validate_comment(msg)
                 else:
                     log.info(msg)
-                break
+            break
         except (ssh_exception.AuthenticationException, ssh_exception.NoValidConnectionsError) as e:
             msg = "Failed to connect to remote '%s' as user '%s' on attempt %d due to '%s'" % (host, user, attempt, str(e))
             if args.validate:
