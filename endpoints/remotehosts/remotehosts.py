@@ -21,6 +21,7 @@ import sys
 import tempfile
 import threading
 import time
+import traceback
 
 TOOLBOX_HOME = os.environ.get('TOOLBOX_HOME')
 if TOOLBOX_HOME is None:
@@ -3721,6 +3722,28 @@ def setup_logger():
 
     return logging.getLogger(__file__)
 
+def thread_exception_hook(args):
+    """
+    Generic thread exception handler
+
+    Args:
+        args (namespace): information about the exception being handled
+
+    Globals:
+        log: a logger instance
+
+    Returns:
+        None
+    """
+    thread_name = "UNKNOWN"
+    if not args.thread is None:
+        thread_name = args.thread.name
+
+    msg = "[Thread %s] Thread failed with exception:\ntype: %s\nvalue: %s\ntraceback:\n%s" % (thread_name, args.exc_type, args.exc_value, "".join(traceback.format_list(traceback.extract_tb(args.exc_traceback))))
+    log.error(msg, stacklevel = 3)
+
+    return
+
 def main():
     """
     Main control block
@@ -3737,6 +3760,8 @@ def main():
     global args
     global log
     global settings
+
+    threading.excepthook = thread_exception_hook
 
     if args.validate:
         return(validate())
