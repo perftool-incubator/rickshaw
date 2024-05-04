@@ -1427,9 +1427,13 @@ def create_thread_pool(description, acronym, work, worker_threads_count, worker_
         if work.empty():
             thread_logger("MAIN", "Aborting %s launch because no more work to do" % (acronym))
             break
-        thread_logger("MAIN", "Creating and starting %s with thread ID %d" % (acronym, thread_id))
-        worker_threads[thread_id] = threading.Thread(target = worker_thread_function, args = (thread_id, work, worker_threads_rcs), name = "%s-%d" % (acronym, thread_id))
-        worker_threads[thread_id].start()
+        thread_name = "%s-%d" % (acronym, thread_id)
+        thread_logger("MAIN", "Creating and starting thread %s" % (thread_name))
+        try:
+            worker_threads[thread_id] = threading.Thread(target = worker_thread_function, args = (thread_id, work, worker_threads_rcs), name = thread_name)
+            worker_threads[thread_id].start()
+        except RuntimeError as e:
+            thread_logger("MAIN", "Failed to create and start thread %s due to exception '%s'" % (thread_name, str(e)), log_level = "error")
 
     thread_logger("MAIN", "Waiting for all %s work jobs to be consumed" % (acronym))
     work.join()
@@ -1437,10 +1441,15 @@ def create_thread_pool(description, acronym, work, worker_threads_count, worker_
 
     thread_logger("MAIN", "Joining %s" % (acronym))
     for thread_id in range(0, worker_threads_count):
-        if worker_threads[thread_id] is None:
-            break
-        worker_threads[thread_id].join()
-        thread_logger("MAIN", "Joined %s with thread ID %d" % (acronym, thread_id))
+        thread_name = "%s-%d" % (acronym, thread_id)
+        if not worker_threads[thread_id] is None:
+            if not worker_threads[thread_id].native_id is None:
+                worker_threads[thread_id].join()
+                thread_logger("MAIN", "Joined thread %s" % (thread_name))
+            else:
+                thread_logger("MAIN", "Skipping join of thread %s because it was not started" % (thread_name), log_level = "warning")
+        else:
+            thread_logger("MAIN", "Skipping join of thread %s because it does not exist" % (thread_name), log_level = "warning")
 
     thread_logger("MAIN", "Return codes for each %s:\n%s" % (acronym, dump_json(worker_threads_rcs)))
 
