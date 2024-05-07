@@ -257,6 +257,12 @@ def process_options():
                         required = True,
                         type = str)
 
+    parser.add_argument("--roadblock-dir",
+                        dest = "roadblock_dir",
+                        help = "Path to the root of the roadblock project directory.",
+                        required = False,
+                        type = str)
+
     parser.add_argument("--roadblock-id",
                         dest = "roadblock_id",
                         help = "The roadblock ID to use to build roadblock names.",
@@ -2206,7 +2212,7 @@ def do_roadblock(label = None, timeout = None, messages = None, wait_for = None,
         log.info(ping_log_msg)
 
     cmd = [
-        "/usr/local/bin/roadblocker.py",
+        args.roadblock_dir + "/roadblocker.py",
         "--role=follower",
         "--redis-server=" + redis_server,
         "--leader-id=" + leader,

@@ -65,18 +65,15 @@ my %image_ids; # {$benchmark-or-tool}{$userenv}
 my %run; # A multi-dimensional, nested hash, schema TBD
          # This hash documents what was run.
 my $redis_passwd = "flubber"; # TODO: make this cmdline setting
-my $rb_bin = "/usr/local/bin/roadblocker.py";
-my $rb_module = "/usr/local/bin/roadblock.py";
+my $rb_bin = "roadblocker.py";
+my $rb_module = "roadblock.py";
 my $messages_ref;
 my $default_rb_timeout;
 my $collect_sysinfo_timeout;
 my $endpoint_deploy_timeout;
 my $engine_script_start_timeout;
 my $endpoint_move_data_rb_timeout;
-my $base_rb_leader_cmd = $rb_bin . " --role=leader --redis-server=localhost" .
-                         " --redis-password=" . $redis_passwd;
-my $base_rb_follower_cmd = $rb_bin . " --role=follower --redis-server=localhost" .
-                           " --redis-password=" . $redis_passwd . "\$abort_opt";
+my $base_rb_leader_cmd = "--role=leader --redis-server=localhost --redis-password=" . $redis_passwd;
 my $config_dir;
 my $engine_config_dir;
 my $engine_bench_cmds_dir;
@@ -1428,10 +1425,8 @@ sub process_cmdline() {
 }
 
 sub validate_controller_env() {
-    if (defined $run{'roadblock-dir'} and -e $run{'roadblock-dir'} . "/roadblocker.py") {
-        copy($run{'roadblock-dir'} . "/roadblocker.py", $rb_bin);
-        chmod 0755, "$rb_bin";
-        copy($run{'roadblock-dir'} . "/roadblock.py", $rb_module);
+    if (defined $run{'roadblock-dir'} and -e $run{'roadblock-dir'} . "/" . $rb_bin) {
+        $base_rb_leader_cmd = $run{'roadblock-dir'} . "/" . $rb_bin . " " . $base_rb_leader_cmd;
     } else {
         printf "ERROR, roadblock project directory not defined or roadblocker.py not found";
         exit 1;
@@ -2471,6 +2466,7 @@ sub deploy_endpoints() {
             my $pushd_dir = pushd($endpoint_project_dir);
             my $cmd = "./" . $type .
                     " --rickshaw-dir=" . $rickshaw_project_dir .
+                    " --roadblock-dir=" . $run{'roadblock-dir'} .
                     " --packrat-dir=" . $run{'packrat-dir'} .
                     " --endpoint-label=" . $label .
                     " --run-id=" . $run{'id'} .

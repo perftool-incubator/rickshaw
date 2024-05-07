@@ -39,6 +39,7 @@ endpoint_run_dir=""
 bootstrap_script="/usr/local/bin/bootstrap"
 engine_run_script="/usr/local/bin/engine-script"
 roadblock_msgs_dir=""
+roadblock_dir="/supply/me"
 
 declare -A clients=()
 declare -A servers=()
@@ -146,7 +147,7 @@ function process_opts() {
     local longopts="validate,endpoint-opts:,endpoint-label:,run-id:,base-run-dir:,image:"
     local longopts+=",roadblock-server:,roadblock-passwd:,roadblock-id:,osruntime:,max-sample-failures:"
     local longopts+=",max-rb-attempts:,endpoint-deploy-timeout:,engine-script-start-timeout:"
-    local longopts+=",packrat-dir:,bench-ids:"
+    local longopts+=",packrat-dir:,bench-ids:,roadblock-dir:"
     local opts=$(getopt -q -o "" --longoptions "$longopts" -n "getopt.sh" -- "$@");
     if [ $? -ne 0 ]; then
         exit_error "Unrecognized option specified" endpoint-deploy  
@@ -154,6 +155,11 @@ function process_opts() {
     eval set -- "$opts";
     while true; do
         case "$1" in
+            --roadblock-dir)
+                shift
+                roadblock_dir="${1}"
+                shift
+                ;;
             --packrat-dir)
                 shift
                 packrat_dir="${1}"
@@ -574,7 +580,7 @@ function do_roadblock() {
     local cmd=""
     local role="follower"
     ping -w 10 -c 4 localhost
-    cmd="${cmd} /usr/local/bin/roadblocker.py --role=${role} --redis-server=localhost"
+    cmd="${cmd} ${roadblock_dir}/roadblocker.py --role=${role} --redis-server=localhost"
     cmd="${cmd} --leader-id=${leader} --timeout=${timeout} --redis-password=${rb_passwd}"
     cmd="${cmd} --follower-id=${endpoint_label} --message-log=${msgs_log_file}"
     if [ -n "${message}" ]; then
