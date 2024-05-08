@@ -37,6 +37,20 @@ else:
     sys.path.append(str(p))
 from toolbox.json import *
 
+ROADBLOCK_HOME = os.environ.get('ROADBLOCK_HOME')
+if ROADBLOCK_HOME is None:
+    print("This script requires libraries that are provided by the roadblock project.")
+    print("Roadblock can be acquired from https://github.com/perftool-incubator/roadblock and")
+    print("then use 'export ROADBLOCK_HOME=/path/to/roadblock so that it can be located.")
+    exit(1)
+else:
+    p = Path(ROADBLOCK_HOME) / 'roadblock.py'
+    if not p.exists() or not p.is_file():
+        print("ERROR: <ROADBLOCK_HOME>/roadblock.py ('%s') does not exist!" % (p))
+        exit(2)
+    sys.path.append(str(Path(ROADBLOCK_HOME)))
+from roadblock import roadblock
+
 endpoint_defaults = {
     "controller-ip-address": None,
     "cpu-partitioning": False,
@@ -255,12 +269,6 @@ def process_options():
                         dest = "rickshaw_dir",
                         help = "Path to the root of the rickshaw project directory.",
                         required = True,
-                        type = str)
-
-    parser.add_argument("--roadblock-dir",
-                        dest = "roadblock_dir",
-                        help = "Path to the root of the roadblock project directory.",
-                        required = False,
                         type = str)
 
     parser.add_argument("--roadblock-id",
@@ -2211,44 +2219,33 @@ def do_roadblock(label = None, timeout = None, messages = None, wait_for = None,
     else:
         log.info(ping_log_msg)
 
-    cmd = [
-        args.roadblock_dir + "/roadblocker.py",
-        "--role=follower",
-        "--redis-server=" + redis_server,
-        "--leader-id=" + leader,
-        "--timeout=" + str(timeout),
-        "--redis-password=" + args.roadblock_passwd,
-        "--follower-id=" + args.endpoint_label,
-        "--message-log=" + msgs_log_file
-    ]
-
-    if not messages is None:
-        cmd.append("--user-message=" + messages)
-
-    if not wait_for is None:
-        cmd.append("--wait-for=" + wait_for)
-        cmd.append("--wait-for-log=" + wait_for_log)
-
-    if not abort is None:
-        cmd.append("--abort")
-
     attempts = 0
     rc = -1
     while attempts < args.max_rb_attempts and rc != roadblock_exits["success"] and rc != roadblock_exits["abort"]:
         attempts += 1
         log.info("[%s] Attempt number: %d" % (label, attempts))
 
-        rb_cmd = copy.deepcopy(cmd)
-        rb_cmd.append("--uuid=%d:%s" % (attempts, uuid))
-        log.info("[%s] Going to run this command:\n%s" % (label, dump_json(rb_cmd)))
+        my_roadblock = roadblock(log, False)
+        my_roadblock.set_uuid("%d:%s" % (attempts, uuid))
+        my_roadblock.set_role("follower")
+        my_roadblock.set_follower_id(args.endpoint_label)
+        my_roadblock.set_leader_id(leader)
+        my_roadblock.set_timeout(timeout)
+        my_roadblock.set_redis_server(redis_server)
+        my_roadblock.set_redis_password(args.roadblock_passwd)
+        my_roadblock.set_abort(abort)
+        my_roadblock.set_message_log(msgs_log_file)
+        my_roadblock.set_user_messages(messages)
+        if not wait_for is None:
+            my_roadblock.set_wait_for_cmd(wait_for)
+            my_roadblock.set_wait_for_log(wait_for_log)
 
-        result = run_local(" ".join(rb_cmd))
-        result_log_msg = "[%s] Roadblock attempted with return code %d:\nstdout:\n%sstderr:\n%s" % (label, result.exited, result.stdout, result.stderr)
-        if result.exited != 0:
+        rc = my_roadblock.run_it()
+        result_log_msg = "[%s] Roadblock resulted in return code %d" % (label, rc)
+        if rc != 0:
             log.error(result_log_msg)
         else:
             log.info(result_log_msg)
-        rc = result.exited
 
         stream = ""
         with open(msgs_log_file, "r", encoding = "ascii") as msgs_log_file_fp:

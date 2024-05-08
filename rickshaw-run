@@ -1807,6 +1807,8 @@ sub validate_endpoints() {
                                      " --rickshaw-dir=" . $rickshaw_project_dir .
                                      " --validate" );
         if ($$endpoint{'type'} eq "remotehosts") {
+            $ENV{'ROADBLOCK_HOME'} = $run{'roadblock-dir'};
+
             foreach my $arg (split(/,/, $$endpoint{'opts'})) {
                 $job{'command'} .= " --" . $arg;
             }
@@ -2466,7 +2468,6 @@ sub deploy_endpoints() {
             my $pushd_dir = pushd($endpoint_project_dir);
             my $cmd = "./" . $type .
                     " --rickshaw-dir=" . $rickshaw_project_dir .
-                    " --roadblock-dir=" . $run{'roadblock-dir'} .
                     " --packrat-dir=" . $run{'packrat-dir'} .
                     " --endpoint-label=" . $label .
                     " --run-id=" . $run{'id'} .
@@ -2479,10 +2480,13 @@ sub deploy_endpoints() {
                     $endpoint_roadblock_opt .
                     " >" . $this_endpoint_run_dir . "/endpoint-stderrout.txt 2>&1";
             if ($type eq "remotehosts") {
+                $ENV{'ROADBLOCK_HOME'} = $run{'roadblock-dir'};
+
                 foreach my $arg (split(/,/, $opts)) {
                     $cmd .= " --" . $arg;
                 }
             } else {
+                $cmd .= " --roadblock-dir=" . $run{'roadblock-dir'};
                 $cmd .= " --endpoint-opts=" . $opts .
                         $bench_ids_opt;
             }
