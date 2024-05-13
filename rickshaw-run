@@ -2503,8 +2503,10 @@ sub deploy_endpoints() {
                 debug_log(sprintf "going to run and wait for: %s\n", $cmd);
                 #system($cmd);
             } else {
-                #debug_log(sprintf "going to run %s\n", $cmd);
-                system($cmd . " &");
+                if (!fork()) {
+                    #debug_log(sprintf "going to run %s\n", $cmd);
+                    exec($cmd);
+                }
             }
         } else {
             printf "[ERROR]could not find endpoint ./endpoints/%s\n", $type;
@@ -2589,6 +2591,42 @@ sub process_roadblocks() {
     ($roadblock_rc, @dropped_followers) = do_roadblock("endpoint-cleanup-end", $default_rb_timeout, $messages_ref, @active_followers);
     remove_dropped_followers(\@active_followers, \@dropped_followers);
     ####################################################################
+}
+
+sub wait_for_endpoints() {
+    print "Waiting for endpoints to exit\n";
+    wait();
+    print "All endpoints have exited\n";
+
+    print "Compressing endpoint logs:\n";
+    for (my $i = 0; $i < scalar(@endpoints); $i++) {
+        my $label = $endpoints[$i]{'label'};
+        my $endpoint_log = $base_endpoint_run_dir . "/" . $label . "/endpoint-stderrout.txt";
+        my $xz_cmd = "xz --verbose --best --threads=0 " . $endpoint_log;
+        printf "\t%s\n", $label;
+        ($xz_cmd, my $xz_output, my $xz_rc) = run_cmd($xz_cmd);
+        if ($xz_rc == 0) {
+            $xz_cmd = "xz --verbose --list " . $endpoint_log . ".xz";
+            ($xz_cmd, my $xz_output, my $xz_rc) = run_cmd($xz_cmd);
+            if ($xz_rc == 0) {
+                my @xz_output = split(/\n/, $xz_output);
+                for (my $i = 0; $i < scalar(@xz_output); $i++) {
+                    if ($xz_output[$i] =~ /Ratio:/) {
+                        chomp($xz_output[$i]);
+                        my @fields = split(/\s+/, $xz_output[$i]);
+                        my $ratio = $fields[2];
+                        my $savings = (1.0 - $ratio) * 100.0;
+                        printf "\t\t%.2f%% reduction\n", $savings;
+                        last;
+                    }
+                }
+            } else {
+                print "\t\tfailed to query\n";
+            }
+        } else {
+            print "\t\tfailed to compress\n";
+        }
+    }
 }
 
 sub organize_run_data() {
@@ -2825,6 +2863,7 @@ debug_log(sprintf "image_ids(after):\n" . Dumper \%image_ids);
 add_ssh_keys();
 deploy_endpoints();
 process_roadblocks();
+wait_for_endpoints();
 organize_run_data();
 remove_ssh_keys();
 
