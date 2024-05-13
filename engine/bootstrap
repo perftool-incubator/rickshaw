@@ -48,6 +48,10 @@ function scp_from_controller() {
     scp_cmd="scp -o StrictHostKeyChecking=no"
     scp_cmd+=" -o BatchMode=yes"
     scp_cmd+=" -v"
+    scp_cmd+=" -o ControlMaster=auto"
+    scp_cmd+=" -o ControlPath=/tmp/ssh/sockets/%r@%h-%p"
+    scp_cmd+=" -o ControlPersist=60"
+    mkdir -p /tmp/ssh/sockets
     scp_cmd+=" -o ConnectionAttempts=10"
     scp_cmd+=" -i $ssh_id_file"
     if echo $rickshaw_host | grep -q ":"; then
@@ -57,15 +61,15 @@ function scp_from_controller() {
     fi
     while [ $scp_rc -gt 0 -a $scp_attempts -lt $max_attempts ]; do
         echo "Trying to scp $rickshaw_host:$src $dest"
-        scp_output=`$scp_cmd 2>&1`
+        echo "scp command: $scp_cmd"
+        $scp_cmd
         scp_rc=$?
         if [ $scp_rc -gt 0 ]; then
             echo "scp failed, trying again"
             echo "scp exit code: $scp_rc"
-            echo "scp command: $scp_cmd"
-            echo "scp output:"
-            echo "$scp_output"
             sleep $scp_attempts
+        else
+            echo "scp succeeded"
         fi
         let scp_attempts=$scp_attempts+1
     done
