@@ -174,6 +174,9 @@ function archive_to_controller() {
     while [ $ssh_rc -gt 0 -a $ssh_attempts -lt $max_attempts ]; do
         echo "Trying to tar/ssh fron ${src} to ${dest_host}:${dest}"
         tar czf - . | ssh \
+                       -o ControlMaster=auto \
+                       -o ControlPath=/tmp/ssh/sockets/%r@%h-%p \
+                       -o ControlPersist=60 \
                        -o StrictHostKeyChecking=no \
                        -o ConnectionAttempts=10 \
                        -i "/tmp/rickshaw_id.rsa" \
