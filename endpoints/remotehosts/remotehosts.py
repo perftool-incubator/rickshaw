@@ -1333,6 +1333,7 @@ def image_pull_worker_thread(thread_id, work_queue, threads_rcs):
                 thread_logger(thread_name, "Recorded usage for %s in the census with return code %d:\nstdout:\n%sstderr:\n%s" % (image, result.exited, result.stdout, result.stderr), log_level = loglevel, remote_name = remote)
                 rc += result.exited
 
+        thread_logger(thread_name, "Notifying work queue that job processing is complete", remote_name = remote)
         work_queue.task_done()
 
     threads_rcs[thread_id] = rc
@@ -1552,9 +1553,10 @@ def remote_mkdirs_worker_thread(thread_id, work_queue, threads_rcs):
         with remote_connection(remote, my_run_file_remote["config"]["settings"]["remote-user"]) as con:
             for remote_dir in settings["dirs"]["remote"].keys():
                 result = run_remote(con, "mkdir --parents --verbose " + settings["dirs"]["remote"][remote_dir])
-                thread_logger(thread_name, "Remote %s attempted to mkdir %s with return code %d:\nstdout:\n%sstderr:\n%s" % (remote, settings["dirs"]["remote"][remote_dir], result.exited, result.stdout, result.stderr), log_level = get_result_log_level(result))
+                thread_logger(thread_name, "Remote attempted to mkdir %s with return code %d:\nstdout:\n%sstderr:\n%s" % (settings["dirs"]["remote"][remote_dir], result.exited, result.stdout, result.stderr), log_level = get_result_log_level(result), remote_name = remote)
                 rc += result.exited
 
+        thread_logger(thread_name, "Notifying work queue that job processing is complete", remote_name = remote)
         work_queue.task_done()
 
     threads_rcs[thread_id] = rc
@@ -2098,6 +2100,7 @@ def launch_engines_worker_thread(thread_id, work_queue, threads_rcs):
 
                             start_chroot(thread_name, remote_name, engine_name, container_name, con, remote["config"]["host"], remote["config"]["settings"]["controller-ip-address"], cpu_partitioning, numa_node, remote["chroots"][engine_name]["mount"])
 
+        thread_logger(thread_name, "Notifying work queue that job processing is complete", remote_name = remote_name)
         work_queue.task_done()
 
     threads_rcs[thread_id] = rc
@@ -3065,7 +3068,7 @@ def remove_image(thread_name, remote_name, log_prefix, connection, image):
     Returns:
         None
     """
-    thread_logger(thread_name, "Removing image '%s'" % (image), log_level = "warning", remote_name = remote_name, log_prefix = log_prefix)
+    thread_logger(thread_name, "Removing image '%s'" % (image), remote_name = remote_name, log_prefix = log_prefix)
 
     result = run_remote(connection, "podman rmi " + image)
     thread_logger(thread_name, "Removing podman image '%s' gave return code %d:\nstdout:\n%sstderr:\n%s" % (image, result.exited, result.stdout, result.stderr), log_level = get_result_log_level(result), remote_name = remote_name, log_prefix = log_prefix)
@@ -3145,7 +3148,7 @@ def remote_image_manager(thread_name, remote_name, connection, image_max_cache_s
     deletes = []
     for image in images["rickshaw"].keys():
         if not image in images["podman"]:
-            thread_logger(thread_name, "Rickshaw image '%s' is no longer present in podman images, removing from consideration" % (image), log_level = "warning", remote_name = remote_name, log_prefix = log_prefix)
+            thread_logger(thread_name, "Rickshaw image '%s' is no longer present in podman images, removing from consideration" % (image), remote_name = remote_name, log_prefix = log_prefix)
             deletes.append(image)
             continue
 
@@ -3381,6 +3384,7 @@ def shutdown_engines_worker_thread(thread_id, work_queue, threads_rcs):
             result = run_remote(con, "podman mount")
             thread_logger(thread_name, "All podman container mounts on this remote host:\nstdout:\n%sstderr:\n%s" % (result.stdout, result.stderr), remote_name = remote_name)
 
+        thread_logger(thread_name, "Notifying work queue that job processing is complete", remote_name = remote_name)
         work_queue.task_done()
 
     threads_rcs[thread_id] = rc
@@ -3456,6 +3460,7 @@ def image_mgmt_worker_thread(thread_id, work_queue, threads_rcs):
         with remote_connection(remote, my_run_file_remote["config"]["settings"]["remote-user"]) as con:
             remote_image_manager(thread_name, remote, con, my_run_file_remote["config"]["settings"]["image-cache-size"])
 
+        thread_logger(thread_name, "Notifying work queue that job processing is complete", remote_name = remote)
         work_queue.task_done()
 
     threads_rcs[thread_id] = rc
@@ -3576,6 +3581,7 @@ def collect_sysinfo_worker_thread(thread_id, work_queue, threads_rcs):
             result = run_remote(con, "rm --recursive --force " + remote_packrat_file + " " + settings["dirs"]["remote"]["sysinfo"] + "/packrat-archive")
             thread_logger(thread_name, "Removing remote packrat files resulted in return code %d:\nstdout:\n%sstderr:\n%s" % (result.exited, result.stdout, result.stderr), log_level = get_result_log_level(result), remote_name = remote)
 
+        thread_logger(thread_name, "Notifying work queue that job processing is complete", remote_name = remote)
         work_queue.task_done()
 
     threads_rcs[thread_id] = rc
