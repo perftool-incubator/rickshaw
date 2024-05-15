@@ -61,7 +61,7 @@ endpoint_defaults = {
     "numa-node": None,
     "osruntime": "podman",
     "user": "root",
-    "maximum-worker-threads-count": None
+    "maximum-worker-threads-count": 250
 }
 
 roadblock_exits = {
