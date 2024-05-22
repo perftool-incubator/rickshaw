@@ -846,13 +846,19 @@ def is_ip(ip_address):
     Returns:
         True or False
     """
+    msg = "Checking to see if '%s' is an IP address" % (ip_address)
+    if args.validate:
+        validate_comment(msg)
+    else:
+        log.info(msg)
+
     # check for IPv4
     m = re.search(r"[1-9][0-9]{0,2}\.[1-9][0-9]{0,2}\.[1-9][0-9]{0,2}\.[1-9][0-9]{0,2}", ip_address)
     if m:
         return True
 
     # check for IPv6
-    m.re.search(r"[0-9a-fA-F]{1,4}:[0-9a-fA-F]{1,4}:[0-9a-fA-F]{1,4}:[0-9a-fA-F]{1,4}:[0-9a-fA-F]{1,4}:[0-9a-fA-F]{1,4}:[0-9a-fA-F]{1,4}:[0-9a-fA-F]", ip_address)
+    m = re.search(r"[0-9a-fA-F]{1,4}:[0-9a-fA-F]{1,4}:[0-9a-fA-F]{1,4}:[0-9a-fA-F]{1,4}:[0-9a-fA-F]{1,4}:[0-9a-fA-F]{1,4}:[0-9a-fA-F]{1,4}:[0-9a-fA-F]", ip_address)
     if m:
         return True
 
