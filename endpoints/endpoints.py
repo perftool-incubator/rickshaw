@@ -60,7 +60,7 @@ def run_remote(connection, command, validate = False, debug = False):
         None
 
     Returns:
-        a Fabric run result
+        Fabric run result (obj)
     """
     debug_msg = "on remote '%s' as '%s' running command '%s'" % (connection.host, connection.user, command)
     if validate:
