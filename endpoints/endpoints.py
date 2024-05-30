@@ -1,3 +1,7 @@
+"""
+Module with common code for use by all endpoints written in Python
+"""
+
 import argparse
 import calendar
 from fabric import Connection
