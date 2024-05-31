@@ -4,7 +4,6 @@
 Endpoint to run 1 or more engines on 1 or more remotehost systems
 """
 
-import argparse
 import base64
 import copy
 from fabric import Connection
@@ -53,128 +52,6 @@ endpoint_defaults = {
     "user": "root",
     "maximum-worker-threads-count": 250
 }
-
-def process_options():
-    """
-    Handle the CLI argument parsing options
-
-    Args:
-        None
-
-    Globals:
-        None
-
-    Returns:
-        args (namespace): The CLI parameters
-    """
-    parser = argparse.ArgumentParser(description = "Endpoint to run 1 or more engines on 1 or more remotehost systems",
-                                     formatter_class = argparse.ArgumentDefaultsHelpFormatter)
-
-    parser.add_argument("--base-run-dir",
-                        dest = "base_run_dir",
-                        help = "The base directory where the run (and all it's components, data, results, etc.) are stored.",
-                        required = True,
-                        type = str)
-
-    parser.add_argument("--endpoint-deploy-timeout",
-                        dest = "endpoint_deploy_timeout",
-                        help = "How long should the timeout be for the endpoint deployment phase.",
-                        required = False,
-                        type = int,
-                        default = 300)
-
-    parser.add_argument("--endpoint-index",
-                        dest = "endpoint_index",
-                        help = "What is the index into the run-file's endpoints array that is assigned to this instance of the endpoint.",
-                        required = True,
-                        type = int)
-
-    parser.add_argument("--endpoint-label",
-                        dest = "endpoint_label",
-                        help = "The name assigned to the endpoint, likely in the form <endpoint-type>-<id>.",
-                        required = True,
-                        type = str)
-
-    parser.add_argument("--engine-script-start-timeout",
-                        dest = "engine_script_start_timeout",
-                        help = "How long should the timeout be for the engine start phase.",
-                        required = False,
-                        type = int,
-                        default = 300)
-
-    parser.add_argument("--image",
-                        dest = "images",
-                        help = "Comma separated list of images to use for particular tools/workloads.",
-                        required = False,
-                        type = str)
-
-    parser.add_argument("--log-level",
-                        dest = "log_level",
-                        help = "Allow the user to control the degree of verbosity of the output.",
-                        required = False,
-                        type = str,
-                        choices = [ "debug", "normal" ],
-                        default = "normal")
-
-    parser.add_argument("--max-rb-attempts",
-                        dest = "max_rb_attempts",
-                        help = "The maximum number of times a roadblock should be attempted if it fails.",
-                        required = False,
-                        type = int,
-                        default = 1)
-
-    parser.add_argument("--max-sample-failures",
-                        dest = "max_sample_failures",
-                        help = "The maximum number of times an iteration's samples can fail before the iteration fails.",
-                        required = False,
-                        type = int,
-                        default = 1)
-
-    parser.add_argument("--packrat-dir",
-                        dest = "packrat_dir",
-                        help = "Path to the packrat directory so that the endpoint can use it.",
-                        required = False,
-                        type = str)
-
-    parser.add_argument("--rickshaw-dir",
-                        dest = "rickshaw_dir",
-                        help = "Path to the root of the rickshaw project directory.",
-                        required = True,
-                        type = str)
-
-    parser.add_argument("--roadblock-id",
-                        dest = "roadblock_id",
-                        help = "The roadblock ID to use to build roadblock names.",
-                        required = False,
-                        type = str)
-
-    parser.add_argument("--roadblock-passwd",
-                        dest = "roadblock_passwd",
-                        help = "The password to pass to roadblock to make redis connections.",
-                        required = False,
-                        type = str)
-
-    parser.add_argument("--run-id",
-                        dest = "run_id",
-                        help = "The run identifier (generally a UUID) that is assigned to the run.",
-                        required = False,
-                        type = str)
-
-    parser.add_argument("--run-file",
-                        dest = "run_file",
-                        help = "The user supplied run-file that specifies all settings for the run.",
-                        required = True,
-                        type = str)
-
-    parser.add_argument("--validate",
-                        dest = "validate",
-                        help = "Signal that endpoint validation should be performed instead of actually running the endpoint.",
-                        required = False,
-                        action = "store_true")
-
-    args = parser.parse_args()
-    
-    return args
 
 def validate():
     """
@@ -2664,7 +2541,7 @@ def main():
     return rc
 
 if __name__ == "__main__":
-    args = process_options()
+    args = endpoints.process_options()
     log = None
     settings = dict()
     exit(main())
