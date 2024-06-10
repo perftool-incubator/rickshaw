@@ -21,5 +21,8 @@
     },
     "workshop": {
       "force-builds": "false"
+    },
+    "quay": {
+        "image-expiration": "2w"
     }
 }

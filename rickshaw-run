@@ -118,6 +118,7 @@ my $roadblock_exit_abort_waiting = 6;
 my $abort_via_roadblock = 0;
 my $workshop_base_cmd;
 my $workshop_force_builds;
+my $quay_image_expiration;
 my $cs_conf_file;
 my %cs_conf;
 
@@ -1723,6 +1724,13 @@ sub load_settings_info() {
         print "load_settings_info(): failed to load workshop force\n";
         exit 1;
     }
+
+    ($rc, $quay_image_expiration) = get_json_setting("quay.image-expiration", $jsonsettings);
+    if ($rc != 0) {
+        print "load_settings_info(): failed to load quay image-expiration\n";
+        exit 1;
+    }
+
     printf "Finished loading json settings\n";
 }
 
@@ -2835,7 +2843,7 @@ $cs_conf_file = $config_dir . "/cs-conf.json";
                 },
                 'config' => {
                     'entrypoint' => [ "/bin/sh", "-c", "/usr/local/bin/bootstrap" ],
-                    'labels' => [ 'quay.expires-after=2w' ],
+                    'labels' => [ 'quay.expires-after=' . $quay_image_expiration ],
                     'envs' => [ 'TOOLBOX_HOME=/opt/toolbox' ]
                 }
             );
