@@ -579,10 +579,6 @@ sub workshop_build_image {
         printf "skip_update was not defined, so setting to false\n";
         $skip_update = "false";
     }
-    if (put_json_file($cs_conf_file, \%cs_conf) > 0) {
-        printf "workshop_build_image(): put_json_file(): %s: add failed\n", $cs_conf_file;
-        exit 1;
-    }
     my $proj;
     if (defined $run{'reg-proj'}) {
         $proj = $run{'reg-host'} . "/" . $run{'reg-proj'};
