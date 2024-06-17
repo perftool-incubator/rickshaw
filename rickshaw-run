@@ -910,7 +910,7 @@ sub source_container_image {
     build_reqs(\@requirements, $userenv, $benchmark);
 
     # First build a workshop-cmd args containing: (userenv_arg, req_args, tag), starting with the base userenv only (has no req_args),
-    # then each additional item in the list is a userenv arg mathcing the md5sum of the previous image, plus one more requirement.
+    # then each additional item in the list is a userenv arg matching the md5sum of the previous image, plus one more requirement.
     # Keep adding to this list until @requirements is empty.
     my @workshop_args;
     my $userenv_arg;
