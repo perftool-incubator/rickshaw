@@ -579,10 +579,6 @@ sub workshop_build_image {
         printf "skip_update was not defined, so setting to false\n";
         $skip_update = "false";
     }
-    if (put_json_file($cs_conf_file, \%cs_conf) > 0) {
-        printf "workshop_build_image(): put_json_file(): %s: add failed\n", $cs_conf_file;
-        exit 1;
-    }
     my $proj;
     if (defined $run{'reg-proj'}) {
         $proj = $run{'reg-host'} . "/" . $run{'reg-proj'};
@@ -914,7 +910,7 @@ sub source_container_image {
     build_reqs(\@requirements, $userenv, $benchmark);
 
     # First build a workshop-cmd args containing: (userenv_arg, req_args, tag), starting with the base userenv only (has no req_args),
-    # then each additional item in the list is a userenv arg mathcing the md5sum of the previous image, plus one more requirement.
+    # then each additional item in the list is a userenv arg matching the md5sum of the previous image, plus one more requirement.
     # Keep adding to this list until @requirements is empty.
     my @workshop_args;
     my $userenv_arg;
@@ -935,7 +931,32 @@ sub source_container_image {
             $req_arg = shift(@requirements);
             $skip_update = "true";
         }
+
+        # keep separate cs_conf_file contents before and after md5
+        # calculation so that the quay.io image expiration value is
+        # not factored into the image hash
+        %cs_conf = (
+                'workshop' => {
+                    'schema' => {
+                        'version' => '2020.04.30'
+                    }
+                },
+                'config' => {
+                    'entrypoint' => [ "/bin/sh", "-c", "/usr/local/bin/bootstrap" ],
+                    'envs' => [ 'TOOLBOX_HOME=/opt/toolbox' ]
+                }
+            );
+        if (put_json_file($cs_conf_file, \%cs_conf) > 0) {
+            printf "put_json_file(): initial %s: failed\n", $cs_conf_file;
+            exit 1;
+        }
         my $tag = calc_image_md5($workshop_base_cmd, $userenv_arg, $req_arg, $container_arch);
+        $cs_conf{'config'}{'labels'} = [ 'quay.expires-after=' . $quay_image_expiration ];
+        if (put_json_file($cs_conf_file, \%cs_conf) > 0) {
+            printf "put_json_file(): update %s: failed\n", $cs_conf_file;
+            exit 1;
+        }
+
         my %args = ( 'userenv' => $userenv_arg, 'reqs' => $req_arg, 'tag' => $tag, 'skip-update' => $skip_update );
         push (@workshop_args, \%args);
 
@@ -2834,25 +2855,9 @@ if ($run{'reg-auth'} eq "") {
     printf "Disabling registry authorization due to empty 'reg-auth' variable\n";
     $skip_registry_auth = 1;
 }
-$cs_conf_file = $config_dir . "/cs-conf.json";
-%cs_conf = (
-                'workshop' => {
-                    'schema' => {
-                        'version' => '2020.04.30'
-                    }
-                },
-                'config' => {
-                    'entrypoint' => [ "/bin/sh", "-c", "/usr/local/bin/bootstrap" ],
-                    'labels' => [ 'quay.expires-after=' . $quay_image_expiration ],
-                    'envs' => [ 'TOOLBOX_HOME=/opt/toolbox' ]
-                }
-            );
-if (put_json_file($cs_conf_file, \%cs_conf) > 0) {
-    printf "put_json_file(): %s: failed\n", $cs_conf_file;
-    exit 1;
-}
 build_test_order();
 prepare_bench_tool_engines();
+$cs_conf_file = $config_dir . "/cs-conf.json";
 print "Preparing userenvs:\n";
 debug_log (sprintf "image_ids (before):\n" . Dumper \%image_ids);
 foreach my $bench_or_tool (sort (keys %image_ids)) {
