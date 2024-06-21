@@ -417,6 +417,10 @@ sub calc_image_md5 {
     die "calc_image_md5(): \$userenv_arg must be defined" if (!defined $userenv_arg);
     my $req_args = shift;
     my $arch_suffix = shift;
+    my $userenv = shift;
+    my $benchmark_tool = shift;
+    my $stage = shift;
+    debug_log(sprintf "calc_image_md5(): userenv=%s benchmark/tool=%s stage=%d\n", $userenv, $benchmark_tool, $stage);
     my $workshop_sub_cmd;
     if (defined $req_args) {
         $workshop_sub_cmd = $workshop_base_cmd . " " . $userenv_arg . " " . $req_args;
@@ -489,24 +493,43 @@ sub calc_image_md5 {
         }
     }
 
+    my $tag_calc_data = $workshop_build_dir . "tag-calc-data__" . $userenv . "__" . $benchmark_tool . "__stage-" . $stage . ".txt";
+    debug_log(sprintf "calc_image_md5(): logging tag calculation data to %s\n", $tag_calc_data);
+    my $tag_fh = open_write_text_file($tag_calc_data) || die "Failed to open " . $tag_calc_data . " for writing\n";
+
     # compute an md5 hash of relevant information to identify the
     # userenv
     my $md5 = Digest::MD5->new;
 
+    my $item_header = "# Item #########################################################################\n";
+    my $item;
+
     # First is the Initial hash calc on workshop reqs
+    print $tag_fh $item_header . "Workshop Config Output:\n" . join("", @config_analysis_output) . "\n";
     $md5->add(join("", @config_analysis_output));
 
     # Second is the hashing contents of files
     for my $file (sort @files) {
         debug_log(sprintf "calc_image_md5(): adding '%s' to hash\n", $file);
+
+        print $tag_fh $item_header . "File: " . $file . "\nFile Contents:\n";
+
         open(my $fh, $file);
+        while(<$fh>) {
+            print $tag_fh $_;
+        }
+        print $tag_fh "\n";
+        seek $fh, 0, 0;
+
         binmode($fh);
-        $md5->add($file);
         $md5->addfile($fh);
+
         close($fh);
     }
     my $base_hash = $md5->hexdigest;
     my $full_hash = $base_hash . "_" . $arch_suffix;
+    print $tag_fh $item_header . "Hash: " . $full_hash . "\n";
+    close($tag_fh);
     debug_log(sprintf "calc_image_md5(): returning '%s'\n", $full_hash);
 
     return $full_hash;
@@ -950,7 +973,7 @@ sub source_container_image {
             printf "put_json_file(): initial %s: failed\n", $cs_conf_file;
             exit 1;
         }
-        my $tag = calc_image_md5($workshop_base_cmd, $userenv_arg, $req_arg, $container_arch);
+        my $tag = calc_image_md5($workshop_base_cmd, $userenv_arg, $req_arg, $container_arch, $userenv, $benchmark, scalar(@workshop_args) + 1);
         $cs_conf{'config'}{'labels'} = [ 'quay.expires-after=' . $quay_image_expiration ];
         if (put_json_file($cs_conf_file, \%cs_conf) > 0) {
             printf "put_json_file(): update %s: failed\n", $cs_conf_file;
