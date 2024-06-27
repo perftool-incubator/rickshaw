@@ -118,6 +118,9 @@ my $roadblock_exit_abort_waiting = 6;
 my $abort_via_roadblock = 0;
 my $workshop_base_cmd;
 my $workshop_force_builds;
+my $workshop_refresh_timestamps_token_file;
+my $workshop_refresh_timestamps_token;
+my $workshop_refresh_timestamps_api_url;
 my $quay_image_expiration;
 my $cs_conf_file;
 my %cs_conf;
@@ -1050,8 +1053,42 @@ sub source_container_image {
         push(@local_images, $userenv_image);
     }
     my $x = 0;
+    my $refresh_timestamp;
+    if (defined $workshop_refresh_timestamps_token && defined $workshop_refresh_timestamps_api_url) {
+        if ($quay_image_expiration =~ m/([0-9]+)w/) {
+            #                              weeks   days/week   hours/day   min/hour   seconds/min
+            $refresh_timestamp = time() + ($1    * 7         * 24        * 60       * 60);
+
+            my $refresh_timestamp_str = localtime($refresh_timestamp);
+            printf "Going to refresh image expiration timestamps with this value: %d (%s)\n", $refresh_timestamp, $refresh_timestamp_str;
+        } else {
+            print "Failed to determine quay image expiration weeks\n";
+            exit 1;
+        }
+    }
     while ($x < $i) {
-        printf "Processing stage %d (%s)...\n\tReady\n", $x + 1, $workshop_args[$x]{'tag'};
+        printf "Processing stage %d (%s)...\n", $x + 1, $workshop_args[$x]{'tag'};
+        if (defined $workshop_refresh_timestamps_token && defined $workshop_refresh_timestamps_api_url) {
+            if (remote_image_found($workshop_args[$x]{'tag'})) {
+                my $refresh_cmd = 'curl --silent' .
+                                  ' -X PUT -H "Authorization: Bearer ' . $workshop_refresh_timestamps_token . '"' .
+                                  ' -H "Content-type: application/json" -d \'{ "expiration": ' . $refresh_timestamp . ' }\'' .
+                                  ' ' . $workshop_refresh_timestamps_api_url . $workshop_args[$x]{'tag'};
+
+                ($refresh_cmd, my $refresh_status, my $refresh_rc) = run_cmd($refresh_cmd);
+                chomp($refresh_status);
+
+                if (($refresh_rc == 0) && ($refresh_status eq "\"Updated\"")) {
+                    print "\tRefreshed expiration timestamp\n";
+                } else {
+                    print "\tFailed to refresh expiration timestamp\n";
+                    exit 1;
+                }
+            } else {
+                print "\tskipping refresh timestamp because remote image does not exist (!!)\n";
+            }
+        }
+        print "\tReady\n";
         $x++;
     }
     while ($i <= $num_images - 1) {
@@ -1761,6 +1798,31 @@ sub load_settings_info() {
     if ($rc != 0) {
         print "load_settings_info(): failed to load workshop force\n";
         exit 1;
+    }
+
+    ($rc, $workshop_refresh_timestamps_token_file) = get_json_setting("workshop.refresh-timestamps.token-file", $jsonsettings);
+    if ($rc != 0) {
+        debug_log("load_settings_info(): failed to load workshop refresh-timestamps token-file\n");
+    } else {
+        if (open(TOKEN, "<", $workshop_refresh_timestamps_token_file)) {
+            $workshop_refresh_timestamps_token = <TOKEN>;
+            chomp($workshop_refresh_timestamps_token);
+            close TOKEN;
+        } else {
+            printf "load_settings_file(): failed to load token from workshop refresh-timestamps token-file\n";
+            exit 1;
+        }
+
+        printf "load_settings_info(): loaded workshop refresh-timestamps token-file: %s\n", $workshop_refresh_timestamps_token_file;
+
+        ($rc, $workshop_refresh_timestamps_api_url) = get_json_setting("workshop.refresh-timestamps.api-url", $jsonsettings);
+
+        if ($rc != 0) {
+            print "load_settings_info(): failed to load workshop refresh-timestamps api-url\n";
+            exit 1;
+        } else {
+            printf "load_settings_info(): loaded workshop refresh-timestamps api-url: %s\n", $workshop_refresh_timestamps_api_url;
+        }
     }
 
     ($rc, $default_tool_userenv) = get_json_setting("userenvs.default.tools", $jsonsettings);
