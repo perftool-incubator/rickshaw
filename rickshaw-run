@@ -1073,7 +1073,7 @@ sub source_container_image {
                 my $query_cmd   = 'curl --silent' .
                                   ' -X GET -H "Authorization: Bearer ' . $workshop_refresh_timestamps_token . '"' .
                                   ' "' . $workshop_refresh_timestamps_api_url .
-                                  '?limit=1&specificTag=' . $workshop_args[$x]{'tag'} . '"';
+                                  '/tag/?limit=1&specificTag=' . $workshop_args[$x]{'tag'} . '"';
 
                 ($query_cmd, my $query_status, my $query_rc) = run_cmd($query_cmd);
                 chomp($query_status);
@@ -1101,7 +1101,7 @@ sub source_container_image {
                     my $refresh_cmd = 'curl --silent' .
                                       ' -X PUT -H "Authorization: Bearer ' . $workshop_refresh_timestamps_token . '"' .
                                       ' -H "Content-type: application/json" -d \'{ "expiration": ' . $refresh_timestamp . ' }\'' .
-                                      ' ' . $workshop_refresh_timestamps_api_url . $workshop_args[$x]{'tag'};
+                                      ' ' . $workshop_refresh_timestamps_api_url . '/tag/' . $workshop_args[$x]{'tag'};
 
                     ($refresh_cmd, my $refresh_status, my $refresh_rc) = run_cmd($refresh_cmd);
                     chomp($refresh_status);
