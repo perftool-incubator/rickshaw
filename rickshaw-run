@@ -1070,19 +1070,48 @@ sub source_container_image {
         printf "Processing stage %d (%s)...\n", $x + 1, $workshop_args[$x]{'tag'};
         if (defined $workshop_refresh_timestamps_token && defined $workshop_refresh_timestamps_api_url) {
             if (remote_image_found($workshop_args[$x]{'tag'})) {
-                my $refresh_cmd = 'curl --silent' .
-                                  ' -X PUT -H "Authorization: Bearer ' . $workshop_refresh_timestamps_token . '"' .
-                                  ' -H "Content-type: application/json" -d \'{ "expiration": ' . $refresh_timestamp . ' }\'' .
-                                  ' ' . $workshop_refresh_timestamps_api_url . $workshop_args[$x]{'tag'};
+                my $query_cmd   = 'curl --silent' .
+                                  ' -X GET -H "Authorization: Bearer ' . $workshop_refresh_timestamps_token . '"' .
+                                  ' "' . $workshop_refresh_timestamps_api_url .
+                                  '?limit=1&specificTag=' . $workshop_args[$x]{'tag'} . '"';
 
-                ($refresh_cmd, my $refresh_status, my $refresh_rc) = run_cmd($refresh_cmd);
-                chomp($refresh_status);
+                ($query_cmd, my $query_status, my $query_rc) = run_cmd($query_cmd);
+                chomp($query_status);
 
-                if (($refresh_rc == 0) && ($refresh_status eq "\"Updated\"")) {
-                    print "\tRefreshed expiration timestamp\n";
+                my $current_timestamp;
+                if ($query_rc == 0) {
+                    my $coder = JSON::XS->new;
+                    my $query_ref = $coder->decode($query_status);
+
+                    if (defined $$query_ref{'tags'}[0]) {
+                        $current_timestamp = $$query_ref{'tags'}[0]{'end_ts'};
+                    } else {
+                        print "\tTag information returned from query is incomplete\n";
+                        print Dumper $query_ref;
+                        exit 1;
+                    }
                 } else {
-                    print "\tFailed to refresh expiration timestamp\n";
+                    print "\tFailed to query for tag information\n";
                     exit 1;
+                }
+
+                if ($current_timestamp >= $refresh_timestamp) {
+                    printf "\tThe current expiration timestamp (%d) is greater than or equal to the refresh timestamp so not refreshing\n", $current_timestamp;
+                } else {
+                    my $refresh_cmd = 'curl --silent' .
+                                      ' -X PUT -H "Authorization: Bearer ' . $workshop_refresh_timestamps_token . '"' .
+                                      ' -H "Content-type: application/json" -d \'{ "expiration": ' . $refresh_timestamp . ' }\'' .
+                                      ' ' . $workshop_refresh_timestamps_api_url . $workshop_args[$x]{'tag'};
+
+                    ($refresh_cmd, my $refresh_status, my $refresh_rc) = run_cmd($refresh_cmd);
+                    chomp($refresh_status);
+
+                    if (($refresh_rc == 0) && ($refresh_status eq "\"Updated\"")) {
+                        print "\tRefreshed expiration timestamp\n";
+                    } else {
+                        print "\tFailed to refresh expiration timestamp\n";
+                        exit 1;
+                    }
                 }
             } else {
                 print "\tskipping refresh timestamp because remote image does not exist (!!)\n";
