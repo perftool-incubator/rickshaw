@@ -20,7 +20,11 @@
 	}
     },
     "workshop": {
-      "force-builds": "false"
+        "force-builds": "false",
+        "refresh-timestamps": {
+            "token-file": null,
+            "api-url": null
+        }
     },
     "quay": {
         "image-expiration": "2w"

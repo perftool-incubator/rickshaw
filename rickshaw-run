@@ -1831,25 +1831,29 @@ sub load_settings_info() {
 
     ($rc, $workshop_refresh_timestamps_token_file) = get_json_setting("workshop.refresh-timestamps.token-file", $jsonsettings);
     if ($rc != 0) {
-        debug_log("load_settings_info(): failed to load workshop refresh-timestamps token-file\n");
+        print "load_settings_info(): failed to load workshop refresh-timestamps token-file\n";
+        exit 1;
     } else {
-        if (open(TOKEN, "<", $workshop_refresh_timestamps_token_file)) {
-            $workshop_refresh_timestamps_token = <TOKEN>;
-            chomp($workshop_refresh_timestamps_token);
-            close TOKEN;
-        } else {
-            printf "load_settings_file(): failed to load token from workshop refresh-timestamps token-file\n";
-            exit 1;
+        if (defined $workshop_refresh_timestamps_token_file) {
+            if (open(TOKEN, "<", $workshop_refresh_timestamps_token_file)) {
+                $workshop_refresh_timestamps_token = <TOKEN>;
+                chomp($workshop_refresh_timestamps_token);
+                close TOKEN;
+            } else {
+                printf "load_settings_file(): failed to load token from workshop refresh-timestamps token-file\n";
+                exit 1;
+            }
+
+            printf "load_settings_info(): loaded workshop refresh-timestamps token-file: %s\n", $workshop_refresh_timestamps_token_file;
         }
+    }
 
-        printf "load_settings_info(): loaded workshop refresh-timestamps token-file: %s\n", $workshop_refresh_timestamps_token_file;
-
-        ($rc, $workshop_refresh_timestamps_api_url) = get_json_setting("workshop.refresh-timestamps.api-url", $jsonsettings);
-
-        if ($rc != 0) {
-            print "load_settings_info(): failed to load workshop refresh-timestamps api-url\n";
-            exit 1;
-        } else {
+    ($rc, $workshop_refresh_timestamps_api_url) = get_json_setting("workshop.refresh-timestamps.api-url", $jsonsettings);
+    if ($rc != 0) {
+        print "load_settings_info(): failed to load workshop refresh-timestamps api-url\n";
+        exit 1;
+    } else {
+        if (defined $workshop_refresh_timestamps_api_url) {
             printf "load_settings_info(): loaded workshop refresh-timestamps api-url: %s\n", $workshop_refresh_timestamps_api_url;
         }
     }
