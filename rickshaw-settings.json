@@ -20,13 +20,13 @@
         }
     },
     "workshop": {
-        "force-builds": "false",
-        "refresh-timestamps": {
+        "force-builds": "false"
+    },
+    "quay": {
+        "image-expiration": "2w",
+        "refresh-expiration": {
             "token-file": null,
             "api-url": null
         }
-    },
-    "quay": {
-        "image-expiration": "2w"
     }
 }
