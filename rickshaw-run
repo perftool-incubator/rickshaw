@@ -118,6 +118,9 @@ my $roadblock_exit_abort_waiting = 6;
 my $abort_via_roadblock = 0;
 my $workshop_base_cmd;
 my $workshop_force_builds;
+my $quay_refresh_expiration_token_file;
+my $quay_refresh_expiration_token;
+my $quay_refresh_expiration_api_url;
 my $quay_image_expiration;
 my $cs_conf_file;
 my %cs_conf;
@@ -1050,8 +1053,71 @@ sub source_container_image {
         push(@local_images, $userenv_image);
     }
     my $x = 0;
+    my $refresh_expiration;
+    if (defined $quay_refresh_expiration_token && defined $quay_refresh_expiration_api_url) {
+        if ($quay_image_expiration =~ m/([0-9]+)w/) {
+            #                               weeks   days/week   hours/day   min/hour   seconds/min
+            $refresh_expiration = time() + ($1    * 7         * 24        * 60       * 60);
+
+            my $refresh_expiration_str = localtime($refresh_expiration);
+            printf "Going to refresh image expiration with this value: %d (%s)\n", $refresh_expiration, $refresh_expiration_str;
+        } else {
+            print "Failed to determine quay image expiration weeks\n";
+            exit 1;
+        }
+    }
     while ($x < $i) {
-        printf "Processing stage %d (%s)...\n\tReady\n", $x + 1, $workshop_args[$x]{'tag'};
+        printf "Processing stage %d (%s)...\n", $x + 1, $workshop_args[$x]{'tag'};
+        if (defined $quay_refresh_expiration_token && defined $quay_refresh_expiration_api_url) {
+            if (remote_image_found($workshop_args[$x]{'tag'})) {
+                my $query_cmd   = 'curl --silent' .
+                                  ' -X GET -H "Authorization: Bearer ' . $quay_refresh_expiration_token . '"' .
+                                  ' "' . $quay_refresh_expiration_api_url .
+                                  '/tag/?limit=1&specificTag=' . $workshop_args[$x]{'tag'} . '"';
+
+                ($query_cmd, my $query_status, my $query_rc) = run_cmd($query_cmd);
+                chomp($query_status);
+
+                my $current_expiration;
+                if ($query_rc == 0) {
+                    my $coder = JSON::XS->new;
+                    my $query_ref = $coder->decode($query_status);
+
+                    if (defined $$query_ref{'tags'}[0]) {
+                        $current_expiration = $$query_ref{'tags'}[0]{'end_ts'};
+                    } else {
+                        print "\tTag information returned from query is incomplete\n";
+                        print Dumper $query_ref;
+                        exit 1;
+                    }
+                } else {
+                    print "\tFailed to query for tag information\n";
+                    exit 1;
+                }
+
+                if ($current_expiration >= $refresh_expiration) {
+                    printf "\tThe current expiration (%d) is greater than or equal to the refresh expiration so not refreshing\n", $current_expiration;
+                } else {
+                    my $refresh_cmd = 'curl --silent' .
+                                      ' -X PUT -H "Authorization: Bearer ' . $quay_refresh_expiration_token . '"' .
+                                      ' -H "Content-type: application/json" -d \'{ "expiration": ' . $refresh_expiration . ' }\'' .
+                                      ' ' . $quay_refresh_expiration_api_url . '/tag/' . $workshop_args[$x]{'tag'};
+
+                    ($refresh_cmd, my $refresh_status, my $refresh_rc) = run_cmd($refresh_cmd);
+                    chomp($refresh_status);
+
+                    if (($refresh_rc == 0) && ($refresh_status eq "\"Updated\"")) {
+                        print "\tRefreshed expiration\n";
+                    } else {
+                        print "\tFailed to refresh expiration\n";
+                        exit 1;
+                    }
+                }
+            } else {
+                print "\tskipping expiration refresh because remote image does not exist (!!)\n";
+            }
+        }
+        print "\tReady\n";
         $x++;
     }
     while ($i <= $num_images - 1) {
@@ -1761,6 +1827,35 @@ sub load_settings_info() {
     if ($rc != 0) {
         print "load_settings_info(): failed to load workshop force\n";
         exit 1;
+    }
+
+    ($rc, $quay_refresh_expiration_token_file) = get_json_setting("quay.refresh-expiration.token-file", $jsonsettings);
+    if ($rc != 0) {
+        print "load_settings_info(): failed to load workshop refresh-expiration token-file\n";
+        exit 1;
+    } else {
+        if (defined $quay_refresh_expiration_token_file) {
+            if (open(TOKEN, "<", $quay_refresh_expiration_token_file)) {
+                $quay_refresh_expiration_token = <TOKEN>;
+                chomp($quay_refresh_expiration_token);
+                close TOKEN;
+            } else {
+                printf "load_settings_file(): failed to load token from workshop refresh-expiration token-file\n";
+                exit 1;
+            }
+
+            printf "load_settings_info(): loaded workshop refresh-expiration token-file: %s\n", $quay_refresh_expiration_token_file;
+        }
+    }
+
+    ($rc, $quay_refresh_expiration_api_url) = get_json_setting("quay.refresh-expiration.api-url", $jsonsettings);
+    if ($rc != 0) {
+        print "load_settings_info(): failed to load workshop refresh-expiration api-url\n";
+        exit 1;
+    } else {
+        if (defined $quay_refresh_expiration_api_url) {
+            printf "load_settings_info(): loaded workshop refresh-expiration api-url: %s\n", $quay_refresh_expiration_api_url;
+        }
     }
 
     ($rc, $default_tool_userenv) = get_json_setting("userenvs.default.tools", $jsonsettings);
