@@ -1073,7 +1073,7 @@ sub source_container_image {
                 my $query_cmd   = 'curl --silent' .
                                   ' -X GET -H "Authorization: Bearer ' . $quay_refresh_expiration_token . '"' .
                                   ' "' . $quay_refresh_expiration_api_url .
-                                  '/tag/?limit=1&specificTag=' . $workshop_args[$x]{'tag'} . '"';
+                                  '/tag/?onlyActiveTags=true&specificTag=' . $workshop_args[$x]{'tag'} . '"';
 
                 ($query_cmd, my $query_status, my $query_rc) = run_cmd($query_cmd);
                 chomp($query_status);
