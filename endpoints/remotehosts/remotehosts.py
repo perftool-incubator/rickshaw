@@ -2044,11 +2044,22 @@ def remote_image_manager(thread_name, remote_name, connection, image_max_cache_s
     deletes["rickshaw"] = []
     deletes["podman"] = []
     for image in images["podman"].keys():
-        m = re.search(r"client-server", image)
+        image_repo = os.environ.get("RS_REG_REPO")
+        if image_repo is None:
+            image_prefix = r"client-server"
+            thread_logger(thread_name, "Using default podman image prefix '%s'" % (image_prefix), log_level = "warning", remote_name = remote_name, log_prefix = log_prefix)
+        else:
+            image_prefix = image_repo.split("/")
+            image_prefix = image_prefix[len(image_prefix) - 1]
+            thread_logger(thread_name, "Using podman image prefix '%s'" % (image_prefix), remote_name = remote_name, log_prefix = log_prefix)
+
+        m = re.search(image_prefix, image)
         if m is None:
-            thread_logger(thread_name, "Podman image '%s' is not a client-server image, ignoring" % (image), remote_name = remote_name, log_prefix = log_prefix)
+            thread_logger(thread_name, "Podman image '%s' is not a '%s' image, ignoring" % (image, image_prefix), remote_name = remote_name, log_prefix = log_prefix)
             deletes["podman"].append(image)
             continue
+        else:
+            thread_logger(thread_name, "Podman image '%s' is a '%s' image, processing" % (image, image_prefix), remote_name = remote_name, log_prefix = log_prefix)
 
         if not image in images["rickshaw"]:
             thread_logger(thread_name, "Podman image '%s' is not present in rickshaw container image census, removing it from the image cache" % (image), remote_name = remote_name, log_prefix = log_prefix)
