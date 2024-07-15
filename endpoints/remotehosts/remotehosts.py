@@ -14,6 +14,7 @@ from paramiko import ssh_exception
 from pathlib import Path
 import queue
 import re
+import requests
 import sys
 import tempfile
 import threading
@@ -1931,7 +1932,7 @@ def remote_image_manager(thread_name, remote_name, connection, image_max_cache_s
                                     in order to cache a complete set of images for a run)
 
     Globals:
-        None
+        settings (dict): the one data structure to rule then all
 
     Returns:
         None
@@ -1945,6 +1946,7 @@ def remote_image_manager(thread_name, remote_name, connection, image_max_cache_s
     images = dict()
     images["rickshaw"] = dict()
     images["podman"] = dict()
+    images["quay"] = dict()
 
     result = endpoints.run_remote(connection, "cat /var/lib/crucible/remotehosts-container-image-census")
     if result.exited != 0:
@@ -1985,8 +1987,38 @@ def remote_image_manager(thread_name, remote_name, connection, image_max_cache_s
             }
     thread_logger(thread_name, "images[podman]:\n%s" % (endpoints.dump_json(images["podman"])), remote_name = remote_name, log_prefix = log_prefix)
 
+    if settings["rickshaw"]["quay"]["refresh-expiration"]["api-url"] is not None:
+        thread_logger(thread_name, "Found configuration information necessary to utilize the quay API to obtain image expiration", remote_name = remote_name, log_prefix = log_prefix)
+        thread_logger(thread_name, "Quay API URL: %s" % (settings["rickshaw"]["quay"]["refresh-expiration"]["api-url"]), remote_name = remote_name, log_prefix = log_prefix)
+
+        for image in images["podman"].keys():
+            image_parts = image.split(":")
+
+            get_request = requests.get(settings["rickshaw"]["quay"]["refresh-expiration"]["api-url"] + "/tag", params = { "onlyActiveTags": True, "specificTag": image_parts[1] })
+
+            query_log_level = "info"
+            if get_request.status_code != requests.codes.ok:
+                query_log_level = "warning"
+
+            thread_logger(thread_name, "Quay API query for %s returned %d" % (image, get_request.status_code), log_level = query_log_level, remote_name = remote_name, log_prefix = log_prefix)
+
+            if get_request.status_code == requests.codes.ok:
+                image_json = get_request.json()
+                if len(image_json["tags"]) == 1:
+                    images["quay"][image] = image_json["tags"][0]
+                else:
+                    thread_logger(thread_name, "Quay API query for %s found %d tags" % (image, len(image_json["tags"])), log_level = "warning", remote_name = remote_name, log_prefix = log_prefix)
+
+        thread_logger(thread_name, "images[quay]:\n%s" % (endpoints.dump_json(images["quay"])), remote_name = remote_name, log_prefix = log_prefix)
+    else:
+        thread_logger(thread_name, "Configuration information necessary to utilize the quay API to obtain image expiration timestamps is not available", remote_name = remote_name, log_prefix = log_prefix)
+
     image_expiration = endpoints.image_expiration_gmepoch()
-    thread_logger(thread_name, "Images created before %d will be considered expired" % (image_expiration), remote_name = remote_name, log_prefix = log_prefix)
+    thread_logger(thread_name, "Images evaludated by their expiration data will be considered expired if it is before %d" % (image_expiration), remote_name = remote_name, log_prefix = log_prefix)
+
+    expiration_weeks = int(settings["rickshaw"]["quay"]["image-expiration"].rstrip("w"))
+    image_created_expiration = endpoints.image_created_expiration_gmepoch(expiration_weeks)
+    thread_logger(thread_name, "Images evaludated by their creation data will be considered expired if it is before %d (%d weeks ago)" % (image_created_expiration, expiration_weeks), remote_name = remote_name, log_prefix = log_prefix)
 
     deletes = []
     for image in images["rickshaw"].keys():
@@ -2020,12 +2052,24 @@ def remote_image_manager(thread_name, remote_name, connection, image_max_cache_s
             thread_logger(thread_name, "Podman image '%s' is not present in rickshaw container image census, removing it from the image cache" % (image), remote_name = remote_name, log_prefix = log_prefix)
             deletes["podman"].append(image)
             remove_image(thread_name, remote_name, log_prefix, connection, image)
-        elif images["podman"][image]["created"] < image_expiration:
-            thread_logger(thread_name, "Podman image '%s' has expired, removing it from the image cache" % (image), remote_name = remote_name, log_prefix = log_prefix)
+
+        if image in images["quay"]:
+            if images["quay"][image]["end_ts"] < image_expiration:
+                thread_logger(thread_name, "Podman image '%s' has been evaluated based on it's expiration data and has expired, removing it from the image cache" % (image), remote_name = remote_name, log_prefix = log_prefix)
+                deletes["podman"].append(image)
+                deletes["rickshaw"].append(image)
+                remove_image(thread_name, remote_name, log_prefix, connection, image)
+            else:
+                thread_logger(thread_name, "Podman image '%s' has been evaluated based on it's expiration data and has not expired" % (image), remote_name = remote_name, log_prefix = log_prefix)
+        elif images["podman"][image]["created"] < image_created_expiration:
+            thread_logger(thread_name, "Podman image '%s' has been evaluated based on it's creation data and has expired, removing it from the image cache" % (image), remote_name = remote_name, log_prefix = log_prefix)
             deletes["podman"].append(image)
             deletes["rickshaw"].append(image)
             remove_image(thread_name, remote_name, log_prefix, connection, image)
         else:
+            thread_logger(thread_name, "Podman image '%s' has been evaluated based on it's creation data and has not expired" % (image), remote_name = remote_name, log_prefix = log_prefix)
+
+        if not image in deletes["podman"]:
             thread_logger(thread_name, "Podman image '%s' is valid and remains under consideration" % (image), remote_name = remote_name, log_prefix = log_prefix)
     for kind in deletes.keys():
         for image in deletes[kind]:
