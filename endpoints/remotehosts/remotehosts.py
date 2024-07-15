@@ -67,6 +67,8 @@ def validate():
     Returns:
         int: zero for success / non-zero for failure
     """
+    endpoints.validate_comment("environment: %s" % (dict(os.environ)))
+
     endpoints.validate_comment("params: %s" % (endpoints.cli_stream()))
 
     endpoints.validate_comment("argparse: %s" % (args))
@@ -2545,6 +2547,7 @@ def main():
 
     log = endpoints.setup_logger(args.log_level)
 
+    endpoints.log_env()
     endpoints.log_cli(args)
     init_settings()
     if load_settings() != 0:
