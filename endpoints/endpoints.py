@@ -249,6 +249,23 @@ def log_cli(args):
 
     return 0
 
+def log_env():
+    """
+    Log the environment variables in a readable form
+
+    Args:
+        None
+
+    Globals:
+        None
+
+    Returns:
+        0
+    """
+    log.info("Logging Environment Variables:\n%s" % (dump_json(dict(os.environ))))
+
+    return 0
+
 def cli_stream():
     """
     Recreate the argument list that the script was called with
