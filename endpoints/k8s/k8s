@@ -57,6 +57,7 @@ project_name="crucible-rickshaw"
 hypervisor_host="none"
 unique_project="0"
 hostNetwork="0"
+lbSvc=""
 hugepage="0"
 osruntime[default]="pod"
 runtimeClassName=""
@@ -133,6 +134,67 @@ function endpoint_k8s_test_stop() {
     fi
 }
 
+lb_json=""
+function create_lb_svc_cr() {
+    local endpoint_run_dir=$1
+    local ports="$2"
+    local name="$3"
+    local pool_name="$4"
+    lb_json=$endpoint_run_dir/$name-lb.json
+
+    echo name: $name
+    echo ports: $ports
+    echo '{' >$lb_json
+    echo '    "apiVersion": "v1",' >>$lb_json
+    echo '    "kind": "Service",' >>$lb_json
+    echo '    "metadata": {' >>$lb_json
+    echo '        "name": "rickshaw-'$name'-lb",' >>$lb_json
+    echo '        "namespace": "'$project_name'",' >>$lb_json
+    echo '        "annotations": {'  >>$lb_json
+    echo '            "metallb.universe.tf/address-pool": "'$pool_name'"' >>$lb_json
+    echo '          }' >>$lb_json
+    echo '    },' >>$lb_json
+    echo '    "spec": {' >>$lb_json
+    echo '        "selector": {'  >>$lb_json
+    echo '            "app": "rickshaw-'$name'"' >>$lb_json
+    echo '         },' >>$lb_json
+    echo '        "type": "LoadBalancer",' >>$lb_json
+    echo '        "ports": [' >>$lb_json
+
+    local next=0
+    local port_list=""
+    for port in $ports; do
+       if [ $next -eq 1 ]; then
+           port_list+=", $port"
+           echo '            ,{' >>$lb_json
+       else
+           port_list="$port"
+           echo '            {' >>$lb_json
+           let next=1
+       fi
+       echo '                "name": "tcp-port-'$port'",' >>$lb_json
+       echo '                "port": '$port',' >>$lb_json
+       echo '                "nodePort": '$port',' >>$lb_json
+       echo '                "protocol": "TCP",' >>$lb_json
+       echo '                "targetPort": '$port >>$lb_json
+       echo '            }' >>$lb_json
+    done
+
+    for port in $ports; do
+        echo '            ,{' >>$lb_json
+        echo '                "name": "udp-port-'$port'",' >>$lb_json
+        echo '                "port": '$port',' >>$lb_json
+        echo '                "nodePort": '$port',' >>$lb_json
+        echo '                "protocol": "UDP",' >>$lb_json
+        echo '                "targetPort": '$port >>$lb_json
+        echo '            }' >>$lb_json
+    done
+    echo '        ]' >>$lb_json
+    echo '    }' >>$lb_json
+    echo '}' >>$lb_json
+    cleanup_json "${lb_json}"
+}
+
 function endpoint_k8s_test_start() {
     # This function runs right after a server starts any service and right before a client starts
     # and tries to contect the server's service.  The purpose of this function is to do any
@@ -149,9 +211,13 @@ function endpoint_k8s_test_start() {
     # absolutely necessary for our  benchmarks, but it is a best practice for cloud-native
     # aps, so we do it anyway.  If the client is not in the k8s cluster, then we must assume 
     # it does not have direct access to the pod cluster network, and some form of 'ingress' must
-    # be set up.  Currently, this endpoint implements 'NodePort', which provides a port for
-    # the service which can be accessed on any of the cluster's nodes.  However, we provide the
-    # IP address of the node which happens to host the server pod.
+    # be set up.  Currently, this endpoint implements 'NodePort' and Loadbalancer svc. For NodePort.
+    # which provides a port for the service which can be accessed on any of the cluster's nodes,
+    # we provide the IP address of the node which happens to host the server pod. For LoadBalancer,
+    # the external IP is assigned dynamically from the LB AddressPool when the svc is created. 
+    # For baremetal, the MetalLB LoadBalancer setup is outside crucible. We just need the PoolName 
+    # in the k8s endpoint option lbSvc="PoolName".
+    #
     local msgs_dir="$1"; shift
     local test_id="$1"; shift
     local tx_msgs_dir="$1"; shift
@@ -277,91 +343,108 @@ function endpoint_k8s_test_start() {
                     # client inside cluster
                 else
                     # client outside cluster
-                    echo "Client is outside cluster, so creating ingress NodePort Service"
-                    # We currently support a "NodePort" type of service
-                    local nodep_json=$endpoint_run_dir/$name-nodep.json
-                    echo name: $name
-                    echo ports: $ports
-                    echo '{' >$nodep_json
-                    echo '    "apiVersion": "v1",' >>$nodep_json
-                    echo '    "kind": "Service",' >>$nodep_json
-                    echo '    "metadata": {' >>$nodep_json
-                    echo '        "name": "rickshaw-'$name'-nodeport",' >>$nodep_json
-                    echo '        "namespace": "'$project_name'"' >>$nodep_json
-                    echo '    },' >>$nodep_json
-                    echo '    "spec": {' >>$nodep_json
-                    echo '        "type": "NodePort",' >>$nodep_json
-                    echo '        "ports": [' >>$nodep_json
-                    local next=0
-                    local port_list=""
-                    for port in $ports; do
-                        if [ $next -eq 1 ]; then
-                            port_list+=", $port"
+                    if [ ! -z "$lbSvc" ]; then
+                        echo "Client is outside cluster, so creating ingress LoadBalancer Service"
+                        create_lb_svc_cr $endpoint_run_dir "$ports" "$name"  "$lbSvc"
+                        # LB address pool can be limited. So blindly delete it in case previous run did not clean up properly i.e CTL-C
+                        cat "$lb_json" | do_ssh $user@$host "kubectl delete -f -" >"$endpoint_run_dir/create-svc-lb-$name.txt"
+                        cat "$lb_json" | do_ssh $user@$host "kubectl create -f -" >"$endpoint_run_dir/create-svc-lb-$name.txt"
+
+                        echo "Finding LBsvc IP"
+                        local svc_name="rickshaw-'$name'-lb"
+                        svc_ip=$(do_ssh $user@$host "kubectl  -n $project_name get svc $svc_name -o jsonpath='{.status.loadBalancer.ingress[0].ip}'")
+                        echo lb_ip=$svc_ip
+                        if [ -z "$svc_ip" ]; then
+                            exit_error "Failed to create a LB svc"
+                        fi
+                   else
+                        echo "Client is outside cluster, so creating ingress NodePort Service"
+                        # We currently support a "NodePort" type of service
+                        local nodep_json=$endpoint_run_dir/$name-nodep.json
+                        echo name: $name
+                        echo ports: $ports
+                        echo '{' >$nodep_json
+                        echo '    "apiVersion": "v1",' >>$nodep_json
+                        echo '    "kind": "Service",' >>$nodep_json
+                        echo '    "metadata": {' >>$nodep_json
+                        echo '        "name": "rickshaw-'$name'-nodeport",' >>$nodep_json
+                        echo '        "namespace": "'$project_name'"' >>$nodep_json
+                        echo '    },' >>$nodep_json
+                        echo '    "spec": {' >>$nodep_json
+                        echo '        "type": "NodePort",' >>$nodep_json
+                        echo '        "ports": [' >>$nodep_json
+                        local next=0
+                        local port_list=""
+                        for port in $ports; do
+                            if [ $next -eq 1 ]; then
+                                port_list+=", $port"
+                                echo '            ,{' >>$nodep_json
+                            else
+                                port_list="$port"
+                                echo '            {' >>$nodep_json
+                                let next=1
+                            fi
+                            echo '                "name": "tcp-port-'$port'",' >>$nodep_json
+                            echo '                "nodePort": '$port',' >>$nodep_json
+                            echo '                "port": '$port',' >>$nodep_json
+                            echo '                "protocol": "TCP",' >>$nodep_json
+                            echo '                "targetPort": '$port >>$nodep_json
+                            echo '            }' >>$nodep_json
+                        done
+
+                        for port in $ports; do
                             echo '            ,{' >>$nodep_json
-                        else
-                            port_list="$port"
-                            echo '            {' >>$nodep_json
-                            let next=1
-                        fi
-                        echo '                "name": "tcp-port-'$port'",' >>$nodep_json
-                        echo '                "nodePort": '$port',' >>$nodep_json
-                        echo '                "port": '$port',' >>$nodep_json
-                        echo '                "protocol": "TCP",' >>$nodep_json
-                        echo '                "targetPort": '$port >>$nodep_json
-                        echo '            }' >>$nodep_json
-                    done
+                            echo '                "name": "udp-port-'$port'",' >>$nodep_json
+                            echo '                "nodePort": '$port',' >>$nodep_json
+                            echo '                "port": '$port',' >>$nodep_json
+                            echo '                "protocol": "UDP",' >>$nodep_json
+                            echo '                "targetPort": '$port >>$nodep_json
+                            echo '            }' >>$nodep_json
+                        done
+                        echo '        ]' >>$nodep_json
+                        echo '    }' >>$nodep_json
+                        echo '}' >>$nodep_json
 
-                    for port in $ports; do
-                        echo '            ,{' >>$nodep_json
-                        echo '                "name": "udp-port-'$port'",' >>$nodep_json
-                        echo '                "nodePort": '$port',' >>$nodep_json
-                        echo '                "port": '$port',' >>$nodep_json
-                        echo '                "protocol": "UDP",' >>$nodep_json
-                        echo '                "targetPort": '$port >>$nodep_json
-                        echo '            }' >>$nodep_json
-                    done
-                    echo '        ]' >>$nodep_json
-                    echo '    }' >>$nodep_json
-                    echo '}' >>$nodep_json
+                        cleanup_json "${nodep_json}"
 
-                    cleanup_json "${nodep_json}"
-                    cat "$nodep_json" | do_ssh $user@$host "kubectl create -f -" >"$endpoint_run_dir/create-svc-nodeport-$name.txt"
-                    local endp_nodep_json=$endpoint_run_dir/$name-nodeport-endpoint.json
-                    echo '{' >$endp_nodep_json
-                    echo '    "apiVersion": "v1",' >>$endp_nodep_json
-                    echo '    "kind": "Endpoints",' >>$endp_nodep_json
-                    echo '    "metadata": {' >>$endp_nodep_json
-                    echo '        "name": "rickshaw-'$name'-nodeport",' >>$endp_nodep_json
-                    echo '        "namespace": "'$project_name'"' >>$endp_nodep_json
-                    echo '    },' >>$endp_nodep_json
-                    echo '    "subsets": [{' >>$endp_nodep_json
-                    # We use pod's IP
-                    echo '        "addresses": [ { "ip": "'$pod_ip'" } ],' >>$endp_nodep_json
-                    echo '        "ports": [' >>$endp_nodep_json
-                    local next=0
-                    for port in $ports; do
-                        if [ $next -eq 1 ]; then
-                            echo '            ,{' >>$endp_nodep_json
-                        else
-                            echo '            {' >>$endp_nodep_json
-                            let next=1
-                        fi
-                            echo '                "name": "tcp-port-'$port'", "protocol": "TCP", "port": '$port'}' >>$endp_nodep_json
-                    done
-                    for port in $ports; do
-                            echo '            ,{' >>$endp_nodep_json
-                            echo '                "name": "udp-port-'$port'", "protocol": "UDP", "port": '$port'}' >>$endp_nodep_json
-                    done
-                    echo '        ]' >>$endp_nodep_json
-                    echo '    }]' >>$endp_nodep_json
-                    echo '}' >>$endp_nodep_json
-                    cleanup_json "${endp_nodep_json}"
-                    cat "$endp_nodep_json" | do_ssh $user@$host "kubectl create -f -" >"$endpoint_run_dir/create-endp-nodeport-$name.txt"
-                    # $svc_ip must now be reassigned to the IP used for NodePort.  NodePort is available on -any- worker node
-                    # However, we should provide an IP of the current worker which hosts the pod
-                    local node=`do_ssh $user@$host "kubectl -n $project_name get pod rickshaw-$name -o json" | jq -r '.spec.nodeName'`
-                    echo "Finding IP for worker node $node"
-                    svc_ip=`do_ssh $user@$host "kubectl get nodes/$node -o wide" | grep $node | awk '{print $6}' | tr -d "\n"`
+                        cat "$nodep_json" | do_ssh $user@$host "kubectl create -f -" >"$endpoint_run_dir/create-svc-nodeport-$name.txt"
+                        local endp_nodep_json=$endpoint_run_dir/$name-nodeport-endpoint.json
+                        echo '{' >$endp_nodep_json
+                        echo '    "apiVersion": "v1",' >>$endp_nodep_json
+                        echo '    "kind": "Endpoints",' >>$endp_nodep_json
+                        echo '    "metadata": {' >>$endp_nodep_json
+                        echo '        "name": "rickshaw-'$name'-nodeport",' >>$endp_nodep_json
+                        echo '        "namespace": "'$project_name'"' >>$endp_nodep_json
+                        echo '    },' >>$endp_nodep_json
+                        echo '    "subsets": [{' >>$endp_nodep_json
+                        # We use pod's IP
+                        echo '        "addresses": [ { "ip": "'$pod_ip'" } ],' >>$endp_nodep_json
+                        echo '        "ports": [' >>$endp_nodep_json
+                        local next=0
+                        for port in $ports; do
+                            if [ $next -eq 1 ]; then
+                                echo '            ,{' >>$endp_nodep_json
+                            else
+                                echo '            {' >>$endp_nodep_json
+                                let next=1
+                            fi
+                                echo '                "name": "tcp-port-'$port'", "protocol": "TCP", "port": '$port'}' >>$endp_nodep_json
+                        done
+                        for port in $ports; do
+                                echo '            ,{' >>$endp_nodep_json
+                                echo '                "name": "udp-port-'$port'", "protocol": "UDP", "port": '$port'}' >>$endp_nodep_json
+                        done
+                        echo '        ]' >>$endp_nodep_json
+                        echo '    }]' >>$endp_nodep_json
+                        echo '}' >>$endp_nodep_json
+                        cleanup_json "${endp_nodep_json}"
+                        cat "$endp_nodep_json" | do_ssh $user@$host "kubectl create -f -" >"$endpoint_run_dir/create-endp-nodeport-$name.txt"
+                        # $svc_ip must now be reassigned to the IP used for NodePort.  NodePort is available on -any- worker node
+                        # However, we should provide an IP of the current worker which hosts the pod
+                        local node=`do_ssh $user@$host "kubectl -n $project_name get pod rickshaw-$name -o json" | jq -r '.spec.nodeName'`
+                        echo "Finding IP for worker node $node"
+                        svc_ip=`do_ssh $user@$host "kubectl get nodes/$node -o wide" | grep $node | awk '{print $6}' | tr -d "\n"`
+                   fi # svc=nodePort
                 fi # client is outside cluster
             else
                 echo "Benchmark-server-provided IP $ip does not match pod IP $pod_ip, so not creating a k8s-service or k8s-endpoint"
@@ -457,6 +540,9 @@ function process_k8s_opts() {
             hostNetwork)
                 hostNetwork="$val"
                 ;;
+            lbSvc)
+               lbSvc="$val"
+                ;;
             runtimeClassName)
                 runtimeClassName="$val"
                 ;;
@@ -543,6 +629,13 @@ function build_pod_spec() {
     echo "  ,\"kind\": \"Pod\"" >>$json
     echo "  ,\"metadata\": {" >>$json
     echo "    \"name\": \"$pod_prefix-$name\"," >>$json
+
+    if [ "$type" == "cs" ]; then
+        # server pod needs a label for loadBalancer svc to select.
+        echo "    \"labels\": {"  >>$json
+        echo "        \"app\": \"$pod_prefix-$name\""  >>$json
+        echo "    }," >>$json
+    fi
     echo "    \"namespace\": \"$project_name\"" >>$json
     if [ "$type" == "cs" ]; then
     set +u
