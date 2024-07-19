@@ -51,6 +51,7 @@ endpoint_defaults = {
     "numa-node": None,
     "osruntime": "podman",
     "user": "root",
+    "podman-settings": {},
     "maximum-worker-threads-count": 250
 }
 
@@ -399,6 +400,7 @@ def normalize_endpoint_settings(endpoint, rickshaw):
         "numa-node": endpoint_defaults["numa-node"],
         "osruntime": endpoint_defaults["osruntime"],
         "remote-user": endpoint_defaults["user"],
+        "podman-settings": endpoint_defaults["podman-settings"],
         "userenv": rickshaw["userenvs"]["default"]["benchmarks"]
     }
 
@@ -1021,7 +1023,7 @@ def set_total_cpu_partitions():
 
     return 0
 
-def create_podman(thread_name, remote_name, engine_name, container_name, connection, remote, controller_ip, role, image, cpu_partitioning, numa_node, host_mounts):
+def create_podman(thread_name, remote_name, engine_name, container_name, connection, remote, controller_ip, role, image, cpu_partitioning, numa_node, host_mounts, podman_settings):
     """
     Using an existing connection create a podman pod for use as a podman pod at runtime
 
@@ -1038,6 +1040,7 @@ def create_podman(thread_name, remote_name, engine_name, container_name, connect
         cpu_partitioning (int): Whether to use cpu-partitioning for thie engine or not
         numa_node (int): The NUMA node to bind this engine to
         host_mounts (list): The user requested host directories to bind mount into the engine
+        podman-settings (dict): settings specific to only podman
 
     Globals:
         args (namespace): the script's CLI parameters
@@ -1100,10 +1103,17 @@ def create_podman(thread_name, remote_name, engine_name, container_name, connect
                    "--name=" + container_name,
                    "--env-file=" + remote_env_file_name,
                    "--privileged",
-                   "--ipc=host",
                    "--pid=host",
                    "--net=host",
                    "--security-opt=label=disable" ]
+
+    if "device" in podman_settings:
+        create_cmd.append("--device " + podman_settings["device"])
+
+    if "shm-size" in podman_settings:
+        create_cmd.append("--shm-size " + podman_settings["shm-size"])
+    else:
+        create_cmd.append("--ipc=host") # only works when not using shm
 
     for mount in mandatory_mounts + host_mounts:
         if not "dest" in mount:
@@ -1464,7 +1474,7 @@ def launch_engines_worker_thread(thread_id, work_queue, threads_rcs):
                                 numa_node = remote["config"]["settings"]["numa-node"]
                             thread_logger(thread_name, "numa-node is '%s'" % (str(numa_node)), remote_name = remote_name, engine_name = engine_name)
 
-                            create_podman(thread_name, remote_name, engine_name, container_name, con, remote["config"]["host"], remote["config"]["settings"]["controller-ip-address"], engine["role"], image, cpu_partitioning, numa_node, remote["config"]["settings"]["host-mounts"])
+                            create_podman(thread_name, remote_name, engine_name, container_name, con, remote["config"]["host"], remote["config"]["settings"]["controller-ip-address"], engine["role"], image, cpu_partitioning, numa_node, remote["config"]["settings"]["host-mounts"], remote["config"]["settings"]["podman-settings"])
                         case "chroot":
                             if not "chroots" in remote:
                                 remote["chroots"] = dict()
