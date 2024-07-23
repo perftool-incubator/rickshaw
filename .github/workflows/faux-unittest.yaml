@@ -7,6 +7,7 @@ on:
       - LICENSE
       - '**.md'
       - .github/workflows/run-crucible-tracking.yaml
+      - .github/workflows/crucible-merged.yaml
       - .github/workflows/faux-unittest.yaml
       - .github/workflows/faux-crucible-ci.yaml
       - 'docs/**'
