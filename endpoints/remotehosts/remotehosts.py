@@ -2100,6 +2100,10 @@ def remote_image_manager(thread_name, remote_name, connection, image_max_cache_s
     thread_logger(thread_name, "images[rickshaw]:\n%s" % (endpoints.dump_json(images["rickshaw"])), remote_name = remote_name, log_prefix = log_prefix)
     thread_logger(thread_name, "images[podman]:\n%s" % (endpoints.dump_json(images["podman"])), remote_name = remote_name, log_prefix = log_prefix)
 
+    if len(images["rickshaw"]) == 0 or len(images["podman"]) == 0:
+        thread_logger(thread_name, "Invalid state, exiting image manager", remote_name = remote_name, log_prefix = log_prefix)
+        return
+
     cache_size = 0
 
     if cache_size < image_max_cache_size:
