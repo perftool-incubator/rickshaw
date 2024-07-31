@@ -1070,29 +1070,43 @@ sub source_container_image {
         printf "Processing stage %d (%s)...\n", $x + 1, $workshop_args[$x]{'tag'};
         if (defined $quay_refresh_expiration_token && defined $quay_refresh_expiration_api_url) {
             if (remote_image_found($workshop_args[$x]{'tag'})) {
+                my $max_refresh_attempts = 3;
+                my $refresh_attempts;
+
                 my $query_cmd   = 'curl --silent' .
                                   ' -X GET -H "Authorization: Bearer ' . $quay_refresh_expiration_token . '"' .
                                   ' "' . $quay_refresh_expiration_api_url .
                                   '/tag/?onlyActiveTags=true&specificTag=' . $workshop_args[$x]{'tag'} . '"';
 
-                ($query_cmd, my $query_status, my $query_rc) = run_cmd($query_cmd);
-                chomp($query_status);
-
                 my $current_expiration;
-                if ($query_rc == 0) {
-                    my $coder = JSON::XS->new;
-                    my $query_ref = $coder->decode($query_status);
 
-                    if (defined $$query_ref{'tags'}[0]) {
-                        $current_expiration = $$query_ref{'tags'}[0]{'end_ts'};
+                $refresh_attempts = 1;
+                while ($refresh_attempts <= $max_refresh_attempts) {
+                    $refresh_attempts += 1;
+
+                    ($query_cmd, my $query_status, my $query_rc) = run_cmd($query_cmd);
+                    chomp($query_status);
+
+                    if ($query_rc == 0) {
+                        my $coder = JSON::XS->new;
+                        my $query_ref = $coder->decode($query_status);
+
+                        if (defined $$query_ref{'tags'}[0]) {
+                            $current_expiration = $$query_ref{'tags'}[0]{'end_ts'};
+                            last;
+                        } else {
+                            print "\tTag information returned from query is incomplete\n";
+                            print Dumper $query_ref;
+                            exit 1;
+                        }
                     } else {
-                        print "\tTag information returned from query is incomplete\n";
-                        print Dumper $query_ref;
-                        exit 1;
+                        if ($refresh_attempts > $max_refresh_attempts) {
+                            printf "\tFailed to query for tag information on %d attempts\n", $max_refresh_attempts;
+                            exit 1;
+                        } else {
+                            sleep 1;
+                        }
                     }
-                } else {
-                    print "\tFailed to query for tag information\n";
-                    exit 1;
                 }
 
                 if ($current_expiration >= $refresh_expiration) {
@@ -1103,14 +1117,24 @@ sub source_container_image {
                                       ' -H "Content-type: application/json" -d \'{ "expiration": ' . $refresh_expiration . ' }\'' .
                                       ' ' . $quay_refresh_expiration_api_url . '/tag/' . $workshop_args[$x]{'tag'};
 
-                    ($refresh_cmd, my $refresh_status, my $refresh_rc) = run_cmd($refresh_cmd);
-                    chomp($refresh_status);
+                    $refresh_attempts = 1;
+                    while ($refresh_attempts <= $max_refresh_attempts) {
+                        $refresh_attempts += 1;
 
-                    if (($refresh_rc == 0) && ($refresh_status eq "\"Updated\"")) {
-                        print "\tRefreshed expiration\n";
-                    } else {
-                        print "\tFailed to refresh expiration\n";
-                        exit 1;
+                        ($refresh_cmd, my $refresh_status, my $refresh_rc) = run_cmd($refresh_cmd);
+                        chomp($refresh_status);
+
+                        if (($refresh_rc == 0) && ($refresh_status eq "\"Updated\"")) {
+                            print "\tRefreshed expiration\n";
+                            last;
+                        } else {
+                            if ($refresh_attempts > $max_refresh_attempts) {
+                                printf "\tFailed to refresh expiration on %d attempts\n", $max_refresh_attempts;
+                                exit 1;
+                            } else {
+                                sleep 1;
+                            }
+                        }
                     }
                 }
             } else {
