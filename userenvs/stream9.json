@@ -1,7 +1,7 @@
 {
   "workshop": {
     "schema": {
-      "version": "2023.02.16"
+      "version": "2024.08.07"
     }
   },
   "userenv": {
@@ -9,7 +9,8 @@
     "label": "CentOS Stream 9",
     "origin": {
       "image": "quay.io/centos/centos",
-      "tag": "stream9"
+      "tag": "stream9",
+      "build-policy": "missing"
     },
     "properties": {
       "platform": [

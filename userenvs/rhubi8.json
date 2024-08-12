@@ -1,7 +1,7 @@
 {
   "workshop": {
     "schema": {
-      "version": "2023.02.16"
+      "version": "2024.08.07"
     }
   },
   "userenv": {
@@ -9,7 +9,8 @@
     "label": "Red Hat UBI 8",
     "origin": {
       "image": "registry.access.redhat.com/ubi8/ubi",
-      "tag": "latest"
+      "tag": "latest",
+      "build-policy": "missing"
     },
     "properties": {
       "platform": [

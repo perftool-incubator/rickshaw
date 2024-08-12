@@ -3,7 +3,8 @@
     "label": "Fedora 38",
     "origin": {
       "image": "registry.fedoraproject.org/fedora",
-      "tag": "38"
+      "tag": "38",
+      "build-policy": "missing"
     },
     "properties": {
       "platform": [

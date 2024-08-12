@@ -3,7 +3,8 @@
     "label": "AlmaLinux 8",
     "origin": {
       "image": "quay.io/almalinuxorg/8-base",
-      "tag": "8"
+      "tag": "8",
+      "build-policy": "missing"
     },
     "properties": {
       "platform": [

@@ -3,7 +3,8 @@
   "label": "RHEL AI",
   "origin": {
     "image": "quay.io/kvalin/instructlab-training",
-    "tag": "latest-jul10"
+    "tag": "latest-jul10",
+    "build-policy": "ifnewer"
   },
   "properties": {
     "platform": [

@@ -3,7 +3,8 @@
     "label": "Fedora 39",
     "origin": {
       "image": "registry.fedoraproject.org/fedora",
-      "tag": "39"
+      "tag": "39",
+      "build-policy": "missing"
     },
     "properties": {
       "platform": [
