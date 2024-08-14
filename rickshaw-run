@@ -753,51 +753,7 @@ sub build_reqs {
     # that does not exist, we want to match an imagewith as many requirements
     # as possible and add only what we need.
 
-    # The most common requirement is expected to be source built bash
-    # -- this provides a common bash feature set across all userenvs
-    my $bash_req_file = $config_dir . "/bash-req.json";
-    my %bash_req = (
-                    'workshop' => {
-                        'schema' => {
-                            'version' => '2020.03.02'
-                        }
-                    },
-                    'userenvs' => [
-                        {
-                            'name' => 'default',
-                            'requirements' => [
-                                'bash_src'
-                            ]
-                        }
-                    ],
-                    'requirements' => [
-                        {
-                            'name' => 'bash_src',
-                            'type' => 'source',
-                            'source_info' => {
-                                'url' => 'https://mirrors.ibiblio.org/gnu/bash/bash-5.2.21.tar.gz',
-                                'filename' => 'bash.tar.gz',
-                                'commands' => {
-                                    'unpack' => 'tar -xzf bash.tar.gz',
-                                    'get_dir' => 'tar -tzf bash.tar.gz | head -n 1',
-                                    'commands' => [
-                                        './configure --prefix=/usr/local',
-                                        'make',
-                                        'make install',
-                                        '/usr/local/bin/bash --version'
-                                    ]
-                                }
-                            }
-                        }
-                    ]
-                );
-    if (put_json_file($bash_req_file, \%bash_req) > 0) {
-        printf "build_container_image(): put_json_file() failed\n";
-        exit 1;
-    }
-    push (@$req_ref, "--requirement " . $bash_req_file);
-
-    # The next most common requirment is expected to be the toolbox.
+    # The most common requirment is expected to be the toolbox.
     my $tb_req_file = $config_dir . "/toolbox-req.json";
     my %tb_req = (
                     'workshop' => {
