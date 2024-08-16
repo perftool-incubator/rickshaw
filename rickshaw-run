@@ -956,6 +956,9 @@ sub source_container_image {
             @$userenv_ref{'requirements'} = \@reqs;
             $$userenv_ref{'userenv'}{'origin'}{'image'} = $run{'dest-image-url'};
             $$userenv_ref{'userenv'}{'origin'}{'tag'} = $tag;
+            if (defined $$userenv_ref{'userenv'}{'origin'}{'build-policy'}) {
+                delete $$userenv_ref{'userenv'}{'origin'}{'build-policy'};
+            }
             my $userenv_file = $config_dir . "/userenv-" . $tag . ".json";
             put_json_file($userenv_file, $userenv_ref);
             $userenv_arg = " --userenv " . $userenv_file;

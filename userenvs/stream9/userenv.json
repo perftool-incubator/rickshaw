@@ -3,7 +3,8 @@
     "label": "CentOS Stream 9",
     "origin": {
       "image": "quay.io/centos/centos",
-      "tag": "stream9"
+      "tag": "stream9",
+      "build-policy": "missing"
     },
     "properties": {
       "platform": [

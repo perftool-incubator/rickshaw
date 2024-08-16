@@ -3,7 +3,8 @@
     "label": "Red Hat UBI 9",
     "origin": {
       "image": "registry.access.redhat.com/ubi9/ubi",
-      "tag": "latest"
+      "tag": "latest",
+      "build-policy": "missing"
     },
     "properties": {
       "platform": [
