@@ -8,8 +8,7 @@
                     {
                         "name": "common-params",
                         "params": [
-                            { "arg": "duration", "vals": [ "10" ], "role": "client" },
-                            { "arg": "rtprio", "vals": [ "1", "2" ], "role": "client" }
+                            { "arg": "duration", "vals": [ "10", "15" ], "role": "client" }
                         ]
                     }
                 ],
