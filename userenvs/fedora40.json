@@ -5,11 +5,11 @@
     }
   },
   "userenv": {
-    "name": "fedora38",
-    "label": "Fedora 38",
+    "name": "fedora40",
+    "label": "Fedora 40",
     "origin": {
       "image": "registry.fedoraproject.org/fedora",
-      "tag": "38",
+      "tag": "40",
       "build-policy": "missing"
     },
     "properties": {
