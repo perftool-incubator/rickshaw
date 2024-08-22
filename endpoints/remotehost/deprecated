@@ -1,0 +1,3 @@
+           The remotehost endpoint is being replaced by the remotehosts endpoint.
+           Please migrate to remotehosts as soon as possible since the remotehost
+           endpoint will be removed at the end of 2024.
