@@ -1926,10 +1926,20 @@ sub validate_endpoints() {
     my $job_queue = new Thread::Queue;
     my %endpoint_outputs : shared;
     my $collectors_present = 0;
+    my %deprecated_endpoints;
     printf "Confirming the endpoints will satisfy the benchmark requirements:\n";
 
     # enqueue one validation job per endpoint
     foreach my $endpoint (@endpoints) {
+        debug_log(sprintf "Checking %s endpoint for deprecation\n", $$endpoint{'type'});
+        my $deprecation_file = $rickshaw_project_dir . "/endpoints/" . $$endpoint{'type'} . "/deprecated";
+        if (-e $deprecation_file) {
+            debug_log(sprintf "The %s endpoint is deprecated\n", $$endpoint{'type'});
+            if (! exists $deprecated_endpoints{$$endpoint{'type'}}) {
+                debug_log(sprintf "The %s endpoint has not previously been queued for deprecation announcement so doing so\n", $$endpoint{'type'});
+                $deprecated_endpoints{$$endpoint{'type'}} = $deprecation_file;
+            }
+        }
         my %job = ( 'endpoint'    => $$endpoint{'label'},
                     'command'     => $rickshaw_project_dir . "/endpoints/" . $$endpoint{'type'} .
                                      "/" . $$endpoint{'type'} .
@@ -1947,6 +1957,22 @@ sub validate_endpoints() {
             $job{'command'} .= " --endpoint-opts=" . $$endpoint{'opts'};
         }
         $job_queue->enqueue(\%job);
+    }
+
+    if ((keys %deprecated_endpoints) > 0) {
+        print "#################################################################################\n";
+        foreach my $key (keys %deprecated_endpoints) {
+            printf "ATTENTION: The %s endpoint is deprecated.  The endpoint's deprecation message is:\n", $key;
+            if (open(DEPRECATION, "<", $deprecated_endpoints{$key})) {
+                while (<DEPRECATION>) {
+                    print $_;
+                }
+            } else {
+                printf "ERROR: Failed to open deprecation message file '%s' for endpoint '%s'!\n", $deprecated_endpoints{$key}, $key;
+                exit 1;
+            }
+        }
+        print "#################################################################################\n";
     }
 
     my $num_threads = $available_cpus;
