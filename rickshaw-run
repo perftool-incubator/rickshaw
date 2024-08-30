@@ -898,9 +898,10 @@ sub source_container_image {
     my @workshop_args;
     my $userenv_arg;
     my $count = 0;
-    (my $rc, my $userenv_ref) = get_json_file($rickshaw_project_dir . "/userenvs/" . $userenv . ".json");
+    my $userenv_file = $rickshaw_project_dir . "/userenvs/" . $userenv . "/userenv.json";
+    (my $rc, my $userenv_ref) = get_json_file($userenv_file);
     if ($rc != 0) {
-        die "ERROR: Could not load userenv JSON file for '" . $userenv . "' due to non-zero return code " . $rc . ".  Are you sure this is a supported userenv?\n";
+        die "ERROR: Could not load userenv JSON file for '" . $userenv_file . "' due to non-zero return code " . $rc . ".  Are you sure this is a supported userenv?\n";
     }
     my $userenv_image = $$userenv_ref{'userenv'}{'origin'}{'image'} . ":" . $$userenv_ref{'userenv'}{'origin'}{'tag'};
     while (scalar @requirements > 0) {
