@@ -1163,7 +1163,7 @@ function load_json_setting() {
 
     echo "load_json_setting():"
 
-    value=$(${TOOLBOX_HOME}/bin/get-json-settings.pl --settings ${json_settings_file} --query ${query})
+    value=$(${TOOLBOX_HOME}/bin/get-json-settings.py --settings-file ${json_settings_file} --query ${query})
     if [ $? != 0 ]; then
         echo "available json settings:"
         xzcat ${json_settings_file}
