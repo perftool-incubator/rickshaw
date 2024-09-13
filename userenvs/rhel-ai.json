@@ -65,15 +65,6 @@
       }
     },
     {
-      "name": "core-perl",
-      "type": "distro",
-      "distro_info": {
-        "packages": [
-          "perl-App-cpanminus"
-        ]
-      }
-    },
-    {
       "name": "core-node",
       "type": "distro",
       "distro_info": {
