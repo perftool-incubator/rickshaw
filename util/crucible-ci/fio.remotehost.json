@@ -37,6 +37,15 @@
         },
         {
             "tool": "procstat"
+        },
+        {
+            "tool": "kernel",
+            "params": [
+                {
+                    "arg": "subtools",
+                    "val": "turbostat"
+                }
+            ]
         }
     ],
     "tags": {
