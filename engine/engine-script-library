@@ -305,14 +305,25 @@ function validate_core_env() {
     if [ -z "$cs_label" ]; then
         exit_error "The client/server label (--cs-label) was not defined"
     fi
-    # profiler-remotehost-1-sysstat-1
-    regex1='^profiler-\w+-\d+-\w+-\d+$'
-    # client-1
-    regex2='^\w+-\d+$'
-    if echo $cs_label | grep -q -P $regex1; then
-        export tool_name=`echo $cs_label | awk -F- '{print $4}'`
-        echo "engine-label \"$cs_label\" is valid and runs this tool:  $tool_name"
-    elif echo $cs_label | grep -q -P $regex2; then
+
+    # (rfolco): regex 101
+    #     ^profiler- ensures the string starts with profiler-
+    #     ([a-zA-Z0-9]+) captures one or more lowercase/uppercase letters or numbers like k8s
+    #     ([0-9]+) captures one or more digits for the third part
+    #     ([a-zA-Z-]+) captures one or more lowercase/uppercase letters or dashes for the fourth part
+    #     ([0-9]+)$ ensures the string ends with a number after the last part
+
+    # e.g. profiler-remotehost-1-sysstat-1,
+    #      profiler-remotehost-1-rt-trace-bpf-1 or profiler-k8s-sysstat-1
+    regex1='^profiler-([a-zA-Z0-9]+)-([0-9]+)-([a-zA-Z_-]+)-([0-9]+)$'
+
+    # client-1, server-1, or k8s-1
+    regex2='^([a-zA-Z0-9]+)-([a-zA-Z0-9]+)$'
+
+    if [[ $cs_label =~ $regex1 ]]; then
+        export tool_name=$(echo $cs_label | sed -E 's/^[^-]+-[^-]+-[0-9]+-(.+)-[0-9]+$/\1/')
+        echo "engine-label \"$cs_label\" is valid and runs this tool: [$tool_name]"
+    elif [[ $cs_label =~ $regex2 ]]; then
         echo "engine-label \"$cs_label\" is valid"
     else
         exit_error 'cs_label "'$cs_label'" is not valid'
