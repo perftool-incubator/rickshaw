@@ -372,6 +372,7 @@ sub index_metrics {
     my $benchmark = shift; # optional, for reporting earliest-begin and latest-end from all
     my $primary_metric = shift; # optional, for reporting earliest-begin and latest-end from all
                                 # metrics processed with type matching $primary_metric
+    my $primary_metric_found = 0;
     my $num_metric_docs_submitted = 0;
     my $earliest_begin;
     my $latest_end;
@@ -448,6 +449,7 @@ sub index_metrics {
         printf "Could not find %s, exiting\n", $metr_csv_file;
         exit 1;
     }
+    print "About to open $metr_json_file\n";
     ($file_rc, my $metr_ref) = get_json_file($metr_json_file);
     if ($file_rc > 0 or ! defined $metr_ref) {
         print "Could not open the metric data  file\n";
@@ -545,6 +547,7 @@ sub index_metrics {
             }
             if (defined $primary_metric) {
                 if ($type{$idx} eq $primary_metric and $source{$idx} eq $benchmark) {
+                    $primary_metric_found = 1;
                     if (not defined $earliest_begin or $earliest_begin > $metr_data_doc{'metric_data'}{'begin'}) {
                         $earliest_begin = $metr_data_doc{'metric_data'}{'begin'};
                     }
@@ -571,8 +574,13 @@ sub index_metrics {
         push(@queued_terms, values %uuid);
     }
 
-    if (defined $primary_metric) {
-        return ($num_metric_docs_submitted, $earliest_begin, $latest_end);
+    if (defined $primary_metric and $primary_metric_found == 1) {
+        if (defined $earliest_begin and defined $latest_end) {
+            return ($num_metric_docs_submitted, $earliest_begin, $latest_end);
+        } else {
+            printf "ERROR: index_metrics() primary_metric found, but undefined earliest_begin and/or undefined latest_end, exiting\n";
+            exit 1;
+        }
     } else {
         return $num_metric_docs_submitted;
     }
@@ -1060,6 +1068,7 @@ if (exists $result{'iterations'}) {
                                                     my $earliest_begin;
                                                     my $latest_end;
                                                     my $base_metric_doc_ref = create_es_doc("metric_desc", $iter_idx, $sample_idx, $period_idx);
+                                                    print "period: $$this_sample{'periods'}[$period_idx]{'name'}\n";
                                                     for (my $j = 0; $j < scalar(@{ $data{'periods'}[$k]{'metric-files'} }); $j++) {
                                                         # Metric data is still in other file(s).  For each member in 'metric-files' array,
                                                         # there should be a 2 files with the same prefix
@@ -1067,9 +1076,10 @@ if (exists $result{'iterations'}) {
                                                         my $metric_dir = $run_dir . "/" . $cs_id_dir;
                                                         my $this_begin;
                                                         my $this_end;
-                                                        # index_metric() to return the easliest-begin and latest-end for metric types matching the primary-metric
+                                                        # index_metric() to return the earliest-begin and latest-end for metric types matching the primary-metric
                                                         (my $num_metric_docs_submitted, $this_begin, $this_end) = index_metrics('queue', $metric_dir, $metric_file_prefix, $cs_name, $cs_id, $base_metric_doc_ref, $data{'benchmark'}, $data{'primary-metric'});
                                                         # From processing all metric files, get the very-earliest-begin and very-latest-end
+                                                        # This is to ensure we get the biggest time range for a *specific* client
                                                         if (defined $this_begin and defined $this_end) {
                                                             if (not defined $earliest_begin or $earliest_begin > $this_begin) {
                                                                 $earliest_begin = $this_begin;
@@ -1077,28 +1087,31 @@ if (exists $result{'iterations'}) {
                                                             if (not defined $latest_end or $latest_end < $this_end) {
                                                                 $latest_end = $this_end;
                                                             }
-                                                        } else {
-                                                            printf "ERROR: index_metrics() returned undefined this_begin and/or undefined this_end, exiting\n";
-                                                            exit 1;
                                                         }
                                                     }
-                                                    # Now if this client/server's earliest_begin is *later* than a defined begin for the consolidated period, 
-                                                    # we need to adjust the begin for the consolidated period to match this client/server's earliest_begin.
-                                                    # This ensures the consolidated period always has samples from every single client/server for the entire
-                                                    # period.
-                                                    if (not defined $$this_sample{'periods'}[$period_idx]{'begin'} or $$this_sample{'periods'}[$period_idx]{'begin'} < $earliest_begin) {
-                                                        $$this_sample{'periods'}[$period_idx]{'begin'} = $earliest_begin;
-                                                        debug_log(sprintf "client/server's ID %d begin is after current sample begin, so assigning sample begin to %d\n", $cs_id, $earliest_begin);
-                                                    }
-                                                    if (not defined $$this_sample{'periods'}[$period_idx]{'end'} or $$this_sample{'periods'}[$period_idx]{'end'} > $latest_end) {
-                                                        $$this_sample{'periods'}[$period_idx]{'end'} = $latest_end;
-                                                        debug_log(sprintf "client/server's ID %d end is before current sample end, so assigning sample begin to %d\n", $cs_id, $latest_end);
-                                                    }
-                                                    if (! defined $result{'run.begin'} or $result{'begin'} > $$this_sample{'periods'}[$period_idx]{'begin'}) {
-                                                        $result{'begin'} = $$this_sample{'periods'}[$period_idx]{'begin'};
-                                                    }
-                                                    if (! defined $result{'end'} or $result{'end'} < $$this_sample{'periods'}[$period_idx]{'end'}) {
-                                                        $result{'end'} = $$this_sample{'periods'}[$period_idx]{'end'};
+                                                    if ($$this_sample{'periods'}[$period_idx]{'name'} eq $data{'primary-period'}) {
+                                                        if (not defined $earliest_begin or not defined $latest_end) {
+                                                            print "Either earliest_begin and/or latest_end were not defined, exiting";
+                                                            exit 1;
+                                                        }
+                                                        # Now if this client/server's earliest_begin is *later* than a defined begin for the consolidated period, 
+                                                        # we need to adjust the begin for the consolidated period to match this client/server's earliest_begin.
+                                                        # This ensures the consolidated period always has samples from every single client/server for the entire
+                                                        # period.
+                                                        if (not defined $$this_sample{'periods'}[$period_idx]{'begin'} or $$this_sample{'periods'}[$period_idx]{'begin'} < $earliest_begin) {
+                                                            $$this_sample{'periods'}[$period_idx]{'begin'} = $earliest_begin;
+                                                            debug_log(sprintf "client/server's ID %d begin is after current sample begin, so assigning sample begin to %d\n", $cs_id, $earliest_begin);
+                                                        }
+                                                        if (not defined $$this_sample{'periods'}[$period_idx]{'end'} or $$this_sample{'periods'}[$period_idx]{'end'} > $latest_end) {
+                                                            $$this_sample{'periods'}[$period_idx]{'end'} = $latest_end;
+                                                            debug_log(sprintf "client/server's ID %d end is before current sample end, so assigning sample begin to %d\n", $cs_id, $latest_end);
+                                                        }
+                                                        if (! defined $result{'run.begin'} or $result{'begin'} > $$this_sample{'periods'}[$period_idx]{'begin'}) {
+                                                            $result{'begin'} = $$this_sample{'periods'}[$period_idx]{'begin'};
+                                                        }
+                                                        if (! defined $result{'end'} or $result{'end'} < $$this_sample{'periods'}[$period_idx]{'end'}) {
+                                                            $result{'end'} = $$this_sample{'periods'}[$period_idx]{'end'};
+                                                        }
                                                     }
                                                     queue_es_doc("period", $run_dir . "/" . $this_samp_dir, $iter_idx, $sample_idx, $period_idx);
                                                 }
