@@ -1459,10 +1459,12 @@ def launch_engines_worker_thread(thread_id, work_queue, threads_rcs):
 
                     match osruntime:
                         case "podman":
+                            podman_settings = {}
                             cpu_partitioning = None
                             if engine["role"] == "profiler":
                                 cpu_partitioning = 0
                             else:
+                                podman_settings = remote["config"]["settings"]["podman-settings"]
                                 if remote["config"]["settings"]["cpu-partitioning"]:
                                     cpu_partitioning = 1
                                 else:
@@ -1474,7 +1476,7 @@ def launch_engines_worker_thread(thread_id, work_queue, threads_rcs):
                                 numa_node = remote["config"]["settings"]["numa-node"]
                             thread_logger(thread_name, "numa-node is '%s'" % (str(numa_node)), remote_name = remote_name, engine_name = engine_name)
 
-                            create_podman(thread_name, remote_name, engine_name, container_name, con, remote["config"]["host"], remote["config"]["settings"]["controller-ip-address"], engine["role"], image, cpu_partitioning, numa_node, remote["config"]["settings"]["host-mounts"], remote["config"]["settings"]["podman-settings"])
+                            create_podman(thread_name, remote_name, engine_name, container_name, con, remote["config"]["host"], remote["config"]["settings"]["controller-ip-address"], engine["role"], image, cpu_partitioning, numa_node, remote["config"]["settings"]["host-mounts"], podman_settings)
                         case "chroot":
                             if not "chroots" in remote:
                                 remote["chroots"] = dict()
