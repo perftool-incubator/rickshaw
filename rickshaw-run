@@ -157,6 +157,7 @@ $SIG{'INT'} = sub {
 
 sub usage {
     print "\nusage:\n\n";
+    print "--registries-json       Path to a JSON file containing container registry information\n";
     print "--json-validator        Path to json schema validation utility\n";
     print "--engine-dir            Directory where the engine project exists\n";
     print "--workshop-dir          Directory where workshop project exists\n";
@@ -1518,6 +1519,7 @@ sub process_cmdline() {
                  $arg =~ /^run-id$|^id$|^bench-params$|^tool-params$|^bench-params$|^max-rb-attempts$/ or
                  $arg =~ /^test-order$|^tool-group$|^num-samples$|^max-sample-failures$|^name$|^bench-ids$/ or
                  $arg =~ /^reg-(auth|repo)$/ or
+                 $arg =~ /^registries-json$/ or
                  $arg =~ /^email$|^desc$/) {
             debug_log(sprintf "argument: [%s]\n", $arg);
             $run{$arg} = $val;

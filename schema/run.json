@@ -63,6 +63,9 @@
       "type": "string",
       "pattern": "^.+$"
     },
+    "registries-json": {
+      "type": "string"
+    },
     "reg-auth": {
       "type": "string",
       "pattern": "^.+$"
