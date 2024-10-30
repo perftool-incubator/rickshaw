@@ -843,7 +843,7 @@ sub get_image_urls {
         } elsif (defined $run{'reg-host'} and !defined $run{'reg-proj'}) {
             $run{'reg-proj'} = $run{'reg-host'};
         } elsif (!defined $run{'reg-host'} and !defined $run{'reg-proj'}) {
-            die "At least one of the host or the project must be present in --reg-repo / REG_REPO";
+            die "At least one of the host or the project must be present in $run{'reg-repo'}";
         }
         $run{'source-image-url'} = $run{'reg-host'} . "/" . $run{'reg-proj'};
         if (defined $run{'reg-host-port'}) {
@@ -862,10 +862,10 @@ sub get_image_urls {
             $run{'dest-image-url'} .= "/" . $run{'reg-label'};
             debug_log(sprintf "dest-image-url: [%s]\n", $run{'dest-image-url'});
         } else {
-            print "The label/repo was not defined in --reg-repo or RS_REG_REPO: [%s]\n", $run{'reg-repo'};
+            print "The label/repo was not defined in \$run{'reg-repo'}: [%s]\n", $run{'reg-repo'};
         }
     } else {
-        die "The --reg-repo or RS_REG_REPO does not match the pattern [protocol:][host[:port]][/<project>]/<repo>: " . $run{'reg-repo'};
+        die "The \$run{'reg-repo'} does not match the pattern [protocol:][host[:port]][/<project>]/<repo>: " . $run{'reg-repo'};
     }
 }
 
@@ -1563,13 +1563,13 @@ sub validate_controller_env() {
     if (defined $run{'workshop-dir'} and -e $run{'workshop-dir'} . "/workshop.pl") {
         $use_workshop = 1;
         if ( ! exists $run{'reg-repo'} ) {
-            die "You must define a container repository (--reg-repo or RS_REG_REPO = \"<fqdn>/<project>/<repo>\") to use rickshaw with workshop"
+            die "You must define a container repository (\$run{'reg-repo'} = \"<fqdn>/<project>/<repo>\") to use rickshaw with workshop"
         }
         if ( ! exists $run{'reg-auth'} ) {
-            die "You must define a path to a authorizaton file (--reg-auth or RS_REG_AUTH) to use rickshaw with workshop"
+            die "You must define a path to a authorizaton file (\$run{'reg-auth'}) to use rickshaw with workshop"
         }
         if (!$run{'reg-repo'} =~ /^(\w+:\/){0,1}([^\/]+\/){0,1}([^\/]+\/){0,1}([^\/]+)$/) {
-            die "The --reg-repo or RS_REG_REPO does not match the pattern [protocol:][host[:port]][/<project>]/<repo>: " . $run{'reg-repo'};
+            die "The \$run{'reg-repo'} does not match the pattern [protocol:][host[:port]][/<project>]/<repo>: " . $run{'reg-repo'};
         }
         if (! exists $run{'reg-tls-verify'}) {
             $run{'reg-tls-verify'} = "true";
