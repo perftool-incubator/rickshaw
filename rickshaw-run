@@ -54,6 +54,7 @@ my %defaults = ( "num-samples" => 1, "tool-group" => "default", "test-order" => 
 my @utilities = ( "packrat" );
 
 my $jsonsettings;
+my $registries_settings;
 my $use_workshop = 0;
 my %bench_configs;
 my %bench_dirs;
@@ -1803,10 +1804,27 @@ sub make_run_dirs() {
 }
 
 sub load_settings_info() {
-    (my $rc, $jsonsettings) = load_json_settings($rickshaw_project_dir . "/rickshaw-settings.json");
+    my $rickshaw_settings_filename = $rickshaw_project_dir . "/rickshaw-settings.json";
+    (my $rc, $jsonsettings) = load_json_settings($rickshaw_settings_filename);
     if ($rc != 0) {
-        print "load_settings_info(): load_json_settings() failed\n";
+        printf "load_settings_info(): load_json_settings() failed for %s\n", $rickshaw_settings_filename;
         exit 1;
+    }
+
+    my $regisitries_migration_needed = 0;
+    if (exists $run{'registries-json'}) {
+        ($rc, $registries_settings) = load_json_settings($run{'registries-json'});
+        if ($rc != 0) {
+            printf "load_settings_info(): load_json_settings() failed for %s\n", $run{'registries-json'};
+            exit 1;
+        }
+
+        my $tmp_load;
+        ($rc, $tmp_load) = get_json_setting("engines.public.quay.expiration-length", $registries_settings);
+        if ($rc == 1) {
+            print "load_settings_info(): Enabling registries settings migration\n";
+            $regisitries_migration_needed = 1;
+        }
     }
 
     ($rc, $default_rb_timeout) = get_json_setting("roadblock.timeouts.default", $jsonsettings);
@@ -1845,7 +1863,16 @@ sub load_settings_info() {
         exit 1;
     }
 
-    ($rc, $quay_refresh_expiration_token_file) = get_json_setting("quay.refresh-expiration.token-file", $jsonsettings);
+    if ($regisitries_migration_needed) {
+        ($rc, $quay_refresh_expiration_token_file) = get_json_setting("quay.refresh-expiration.token-file", $jsonsettings);
+
+        if ($rc == 0) {
+            print "load_settings_info(): migrating quay.refresh-expiration.token-file\n";
+            $$registries_settings{'engines'}{'public'}{'quay'}{'refresh-expiration'}{'token-file'} = $quay_refresh_expiration_token_file;
+        }
+    } else {
+        ($rc, $quay_refresh_expiration_token_file) = get_json_setting("engines.public.quay.refresh-expiration.token-file", $registries_settings);
+    }
     if ($rc != 0) {
         print "load_settings_info(): failed to load workshop refresh-expiration token-file\n";
         exit 1;
@@ -1864,7 +1891,16 @@ sub load_settings_info() {
         }
     }
 
-    ($rc, $quay_refresh_expiration_api_url) = get_json_setting("quay.refresh-expiration.api-url", $jsonsettings);
+    if ($regisitries_migration_needed) {
+        ($rc, $quay_refresh_expiration_api_url) = get_json_setting("quay.refresh-expiration.api-url", $jsonsettings);
+
+        if ($rc == 0) {
+            print "load_settings_info(): migrating quay.refresh-expiration.api-url\n";
+            $$registries_settings{'engines'}{'public'}{'quay'}{'refresh-expiration'}{'api-url'} = $quay_refresh_expiration_api_url;
+        }
+    } else {
+        ($rc, $quay_refresh_expiration_api_url) = get_json_setting("engines.public.quay.refresh-expiration.api-url", $registries_settings);
+    }
     if ($rc != 0) {
         print "load_settings_info(): failed to load workshop refresh-expiration api-url\n";
         exit 1;
@@ -1880,10 +1916,69 @@ sub load_settings_info() {
         exit 1;
     }
 
-    ($rc, $quay_image_expiration) = get_json_setting("quay.image-expiration", $jsonsettings);
+    if ($regisitries_migration_needed) {
+        ($rc, $quay_image_expiration) = get_json_setting("quay.image-expiration", $jsonsettings);
+
+        if ($rc == 0) {
+            print "load_settings_info(): migrating quay.image-expiration\n";
+            $$registries_settings{'engines'}{'public'}{'quay'}{'expiration-length'} = $quay_image_expiration;
+        }
+    } else {
+        ($rc, $quay_image_expiration) = get_json_setting("engines.public.quay.expiration-length", $registries_settings);
+    }
     if ($rc != 0) {
         print "load_settings_info(): failed to load quay image-expiration\n";
         exit 1;
+    }
+
+    if ($regisitries_migration_needed) {
+        printf "load_settings_info(): modifying %s\n", $run{'registries-json'};
+
+        my $json_coder = JSON::XS->new;
+
+        my $registries_settings_json = $json_coder->encode($registries_settings);
+        if (! defined $registries_settings_json) {
+            print "load_settings_info(): failed to encode registries settings json\n";
+            exit 1;
+        }
+
+        my $registries_json_fh;
+        # use jq to format the json so that we can be consistent with
+        # how it is handled in crucible
+        if (open($registries_json_fh, "|-", "jq --indent 4 . > " . $run{'registries-json'})) {
+            print $registries_json_fh $registries_settings_json;
+
+            close $registries_json_fh;
+        } else {
+            printf "load_settings_info(): failed to open %s for writing after migrating quay data\n", $run{'registries-json'};
+            exit 1;
+        }
+
+        printf "load_settings_json(): resetting quay values in %s\n", $rickshaw_settings_filename;
+
+        # use "native" jq to prevent the JSON from being reordered
+        my $jq_cmd = "jq --indent 4 --argjson token_file null --argjson api_url null --arg expiration_length '2w'" .
+            " '.quay.\"refresh-expiration\".\"token-file\" = \$token_file | " .
+              ".quay.\"refresh-expiration\".\"api-url\" = \$api_url | " .
+              ".quay.\"image-expiration\" = \$expiration_length'" .
+            " " . $rickshaw_settings_filename;
+
+        (my $cmd, my $output, $rc) = run_cmd($jq_cmd);
+        if ($rc != 0) {
+            print "load_settings_json(): failed to generate updated rickshaw settings json:\n";
+            print $output;
+            exit 1;
+        }
+
+        my $rickshaw_json_fh;
+        if (open($rickshaw_json_fh, ">", $rickshaw_settings_filename)) {
+            print $rickshaw_json_fh $output;
+
+            close $rickshaw_json_fh;
+        } else {
+            printf "load_settings_info(): failed to open %s for writing after migrating quay data\n", $rickshaw_settings_filename;
+            exit 1;
+        }
     }
 
     printf "Finished loading json settings\n";
