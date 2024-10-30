@@ -1831,36 +1831,48 @@ sub load_settings_info() {
     if ($rc != 0) {
         print "load_settings_info(): failed to load default roadblock timeout\n";
         exit 1;
+    } else {
+        printf "load_settings_info(): loaded default roadblock timeout: %d\n", $default_rb_timeout;
     }
 
     ($rc, $endpoint_deploy_timeout) = get_json_setting("roadblock.timeouts.endpoint-deploy", $jsonsettings);
     if ($rc != 0) {
         print "load_settings_info(): failed to load endpoint-deploy roadblock timeout\n";
         exit 1;
+    } else {
+        printf "load_settings_info(): loaded endpoint-deploy roadblock timeout: %d\n", $endpoint_deploy_timeout;
     }
 
     ($rc, $collect_sysinfo_timeout) = get_json_setting("roadblock.timeouts.collect-sysinfo", $jsonsettings);
     if ($rc != 0) {
         print "load_settings_info(): failed to load collect-sysinfo roadblock timeout\n";
         exit 1;
+    } else {
+        printf "load_settings_info(): loaded collect-sysinfo roadblock timeout: %d\n", $collect_sysinfo_timeout;
     }
 
     ($rc, $engine_script_start_timeout) = get_json_setting("roadblock.timeouts.engine-start", $jsonsettings);
     if ($rc != 0) {
         print "load_settings_info(): failed to load engine-start roadblock timeout\n";
         exit 1;
+    } else {
+        printf "load_settings_info(): loaded engine script-start roadblock timeout: %d\n", $engine_script_start_timeout;
     }
 
     ($rc, $endpoint_move_data_rb_timeout) = get_json_setting("roadblock.timeouts.move-data", $jsonsettings);
     if ($rc != 0 ) {
         print "load_settings_info(): failed to load move-data roadblock timeout\n";
         exit 1;
+    } else {
+        printf "load_settings_info(): loaded endpoint move-data roadblock timeout: %d\n", $endpoint_move_data_rb_timeout;
     }
 
     ($rc, $workshop_force_builds) = get_json_setting("workshop.force-builds", $jsonsettings);
     if ($rc != 0) {
         print "load_settings_info(): failed to load workshop force\n";
         exit 1;
+    } else {
+        printf "load_settings_info(): loaded workshop force builds: %s\n", $workshop_force_builds;
     }
 
     if ($regisitries_migration_needed) {
@@ -1914,6 +1926,8 @@ sub load_settings_info() {
     if ($rc != 0) {
         print "load_settings_info(): failed to load workshop force\n";
         exit 1;
+    } else {
+        printf "load_settings_info(): loaded default tool userenv: %s\n", $default_tool_userenv;
     }
 
     if ($regisitries_migration_needed) {
@@ -1929,6 +1943,8 @@ sub load_settings_info() {
     if ($rc != 0) {
         print "load_settings_info(): failed to load quay image-expiration\n";
         exit 1;
+    } else {
+        printf "load_settings_info(): loaded quay image expiration length: %s\n", $quay_image_expiration;
     }
 
     if ($regisitries_migration_needed) {
@@ -1979,6 +1995,31 @@ sub load_settings_info() {
             printf "load_settings_info(): failed to open %s for writing after migrating quay data\n", $rickshaw_settings_filename;
             exit 1;
         }
+    }
+
+    my $tmp_settings_value;
+    ($rc, $tmp_settings_value) = get_json_setting("engines.public.url", $registries_settings);
+    if ($rc != 0) {
+        print "load_settings_info(): failed to load public engines repo url\n";
+        exit 1;
+    } else {
+        $run{'reg-repo'} = $tmp_settings_value;
+        printf "load_settings_info(): loaded registry repository: %s\n", $run{'reg-repo'};
+    }
+
+    ($rc, $tmp_settings_value) = get_json_setting("engines.public.push-token", $registries_settings);
+    if ($rc != 0) {
+        print "load_settings_info(): failed to load public engines push-token\n";
+        exit 1;
+    } else {
+        $run{'reg-auth'} = $tmp_settings_value;
+        printf "load_settings_info(): loaded registry authorization token: %s\n", $run{'reg-auth'};
+    }
+
+    ($rc, $tmp_settings_value) = get_json_setting("engines.public.tls-verify", $registries_settings);
+    if (($rc == 0) && (defined $tmp_settings_value)) {
+        $run{'reg-tls-verify'} = $tmp_settings_value;
+        printf "load_settings_info(): loaded registry tls-verify: %s\n", $run{'reg-tls-verify'};
     }
 
     printf "Finished loading json settings\n";
@@ -3086,7 +3127,7 @@ sub remove_followers {
 ################################################################################
 
 # Apply envinronment variables
-foreach my $e (qw(RS_NAME RS_EMAIL RS_TAGS RS_DESC RS_REG_AUTH RS_REG_REPO RS_REG_TLS_VERIFY)) {
+foreach my $e (qw(RS_NAME RS_EMAIL RS_TAGS RS_DESC)) {
     if (exists $ENV{$e}) {
         my $var = $e;
         $var =~ s/^RS_//;
@@ -3098,10 +3139,10 @@ foreach my $e (qw(RS_NAME RS_EMAIL RS_TAGS RS_DESC RS_REG_AUTH RS_REG_REPO RS_RE
 }
 
 process_cmdline();
+load_settings_info();
 load_bench_params();
 validate_controller_env();
 make_run_dirs();
-load_settings_info();
 save_config_info();
 validate_endpoints();
 load_tool_params();
