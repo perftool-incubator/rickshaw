@@ -376,6 +376,8 @@ sub index_metrics {
     my $num_metric_docs_submitted = 0;
     my $earliest_begin;
     my $latest_end;
+    my $pri_earliest_begin;
+    my $pri_latest_end;
     my $coder = JSON::XS->new->canonical;
 
     my $dir =  pushd($metr_dir);
@@ -545,15 +547,21 @@ sub index_metrics {
                 $ndjson = "";
                 $count = 0;
             }
-            if (defined $primary_metric) {
-                if ($type{$idx} eq $primary_metric and $source{$idx} eq $benchmark) {
-                    $primary_metric_found = 1;
-                    if (not defined $earliest_begin or $earliest_begin > $metr_data_doc{'metric_data'}{'begin'}) {
-                        $earliest_begin = $metr_data_doc{'metric_data'}{'begin'};
-                    }
-                    if (not defined $latest_end or $latest_end < $metr_data_doc{'metric_data'}{'end'}) {
-                        $latest_end = $metr_data_doc{'metric_data'}{'end'};
-                    }
+
+            if (defined $primary_metric and $type{$idx} eq $primary_metric and $source{$idx} eq $benchmark) {
+                $primary_metric_found = 1;
+                if (not defined $pri_earliest_begin or $pri_earliest_begin > $metr_data_doc{'metric_data'}{'begin'}) {
+                    $pri_earliest_begin = $metr_data_doc{'metric_data'}{'begin'};
+                }
+                if (not defined $pri_latest_end or $pri_latest_end < $metr_data_doc{'metric_data'}{'end'}) {
+                    $pri_latest_end = $metr_data_doc{'metric_data'}{'end'};
+                }
+            } else {
+                if (not defined $earliest_begin or $earliest_begin > $metr_data_doc{'metric_data'}{'begin'}) {
+                    $earliest_begin = $metr_data_doc{'metric_data'}{'begin'};
+                }
+                if (not defined $latest_end or $latest_end < $metr_data_doc{'metric_data'}{'end'}) {
+                    $latest_end = $metr_data_doc{'metric_data'}{'end'};
                 }
             }
         }
@@ -575,14 +583,14 @@ sub index_metrics {
     }
 
     if (defined $primary_metric and $primary_metric_found == 1) {
-        if (defined $earliest_begin and defined $latest_end) {
-            return ($num_metric_docs_submitted, $earliest_begin, $latest_end);
+        if (defined $pri_earliest_begin and defined $pri_latest_end) {
+            return ($num_metric_docs_submitted, 1, $pri_earliest_begin, $pri_latest_end);
         } else {
             printf "ERROR: index_metrics() primary_metric found, but undefined earliest_begin and/or undefined latest_end, exiting\n";
             exit 1;
         }
     } else {
-        return $num_metric_docs_submitted;
+        return ($num_metric_docs_submitted, 0, $earliest_begin, $latest_end);
     }
 }
 
@@ -1067,8 +1075,11 @@ if (exists $result{'iterations'}) {
                                                     # while indexing the metrics.
                                                     my $earliest_begin;
                                                     my $latest_end;
+                                                    my $pm_earliest_begin;
+                                                    my $pm_latest_end;
                                                     my $base_metric_doc_ref = create_es_doc("metric_desc", $iter_idx, $sample_idx, $period_idx);
                                                     print "period: $$this_sample{'periods'}[$period_idx]{'name'}\n";
+                                                    my $primary_metric_found = 0;
                                                     for (my $j = 0; $j < scalar(@{ $data{'periods'}[$k]{'metric-files'} }); $j++) {
                                                         # Metric data is still in other file(s).  For each member in 'metric-files' array,
                                                         # there should be a 2 files with the same prefix
@@ -1076,11 +1087,41 @@ if (exists $result{'iterations'}) {
                                                         my $metric_dir = $run_dir . "/" . $cs_id_dir;
                                                         my $this_begin;
                                                         my $this_end;
-                                                        # index_metric() to return the earliest-begin and latest-end for metric types matching the primary-metric
-                                                        (my $num_metric_docs_submitted, $this_begin, $this_end) = index_metrics('queue', $metric_dir, $metric_file_prefix, $cs_name, $cs_id, $base_metric_doc_ref, $data{'benchmark'}, $data{'primary-metric'});
-                                                        # From processing all metric files, get the very-earliest-begin and very-latest-end
-                                                        # This is to ensure we get the biggest time range for a *specific* client
-                                                        if (defined $this_begin and defined $this_end) {
+                                                        my $this_pm_found;
+                                                        # index_metric(): Note that if a primary metric is found on this data,
+                                                        # it returns the earliest begin and latest end for only metric data from the
+                                                        # primary metric.  If the primary metric is not found, then it returns the
+                                                        # earliest begin and latest end for all metric data found.
+                                                        #
+                                                        # Given that there can be multiple metric data files to process, and it's
+                                                        # possible that one data file could contain primary metric data, but another
+                                                        # file could contain no primary metric data, we have to be prepared to later use
+                                                        # the begin/end from either all the metric data or just the primary metric data.
+                                                        #
+                                                        # After all files are processed, if there is no data for the primary metric found,
+                                                        # then the earliest begin and latest end from *all* metric data can be used.
+                                                        # However, if at least one metric data file does contains primary metric data,
+                                                        # then only the earliest begin and latest end for the primary metric can be used.
+                                                        #
+                                                        # What exactly are these earliest begin and latest end used for?  To determine the
+                                                        # period's begin and end, including facotring for multiple clients, further below.
+
+                                                        (my $num_metric_docs_submitted, $this_pm_found, $this_begin, $this_end) =
+                                                            index_metrics('queue', $metric_dir, $metric_file_prefix,
+                                                                          $cs_name, $cs_id, $base_metric_doc_ref,
+                                                                          $data{'benchmark'}, $data{'primary-metric'});
+                                                        # From processing all metric files (for this-client in this-priod),
+                                                        # get the very-earliest begin and very-latest end
+
+                                                        if ($this_pm_found) {
+                                                            $primary_metric_found = 1;
+                                                            if (not defined $pm_earliest_begin or $pm_earliest_begin > $this_begin) {
+                                                                $pm_earliest_begin = $this_begin;
+                                                            }
+                                                            if (not defined $pm_latest_end or $pm_latest_end < $this_end) {
+                                                                $pm_latest_end = $this_end;
+                                                            }
+                                                        } else {
                                                             if (not defined $earliest_begin or $earliest_begin > $this_begin) {
                                                                 $earliest_begin = $this_begin;
                                                             }
@@ -1089,30 +1130,38 @@ if (exists $result{'iterations'}) {
                                                             }
                                                         }
                                                     }
-                                                    if ($$this_sample{'periods'}[$period_idx]{'name'} eq $data{'primary-period'}) {
-                                                        if (not defined $earliest_begin or not defined $latest_end) {
+                                                    if ($primary_metric_found) {
+                                                        if (not defined $pm_earliest_begin or not defined $pm_latest_end) {
                                                             print "Either earliest_begin and/or latest_end were not defined, exiting";
                                                             exit 1;
-                                                        }
-                                                        # Now if this client/server's earliest_begin is *later* than a defined begin for the consolidated period, 
-                                                        # we need to adjust the begin for the consolidated period to match this client/server's earliest_begin.
-                                                        # This ensures the consolidated period always has samples from every single client/server for the entire
-                                                        # period.
-                                                        if (not defined $$this_sample{'periods'}[$period_idx]{'begin'} or $$this_sample{'periods'}[$period_idx]{'begin'} < $earliest_begin) {
-                                                            $$this_sample{'periods'}[$period_idx]{'begin'} = $earliest_begin;
-                                                            debug_log(sprintf "client/server's ID %d begin is after current sample begin, so assigning sample begin to %d\n", $cs_id, $earliest_begin);
-                                                        }
-                                                        if (not defined $$this_sample{'periods'}[$period_idx]{'end'} or $$this_sample{'periods'}[$period_idx]{'end'} > $latest_end) {
-                                                            $$this_sample{'periods'}[$period_idx]{'end'} = $latest_end;
-                                                            debug_log(sprintf "client/server's ID %d end is before current sample end, so assigning sample begin to %d\n", $cs_id, $latest_end);
-                                                        }
-                                                        if (! defined $result{'run.begin'} or $result{'begin'} > $$this_sample{'periods'}[$period_idx]{'begin'}) {
-                                                            $result{'begin'} = $$this_sample{'periods'}[$period_idx]{'begin'};
-                                                        }
-                                                        if (! defined $result{'end'} or $result{'end'} < $$this_sample{'periods'}[$period_idx]{'end'}) {
-                                                            $result{'end'} = $$this_sample{'periods'}[$period_idx]{'end'};
+                                                        } else {
+                                                            $earliest_begin = $pm_earliest_begin;
+                                                            $latest_end = $pm_latest_end;
                                                         }
                                                     }
+                                                    if (not defined $earliest_begin or not defined $latest_end) {
+                                                        print "Either earliest_begin and/or latest_end were not defined, exiting";
+                                                        exit 1;
+                                                    }
+                                                    # Now if this client/server's earliest_begin is *later* than a defined begin for the consolidated period,
+                                                    # we need to adjust the begin for the consolidated period to match this client/server's earliest_begin.
+                                                    # This ensures the consolidated period always has samples from every single client/server for the entire
+                                                    # period.
+                                                    if (not defined $$this_sample{'periods'}[$period_idx]{'begin'} or $$this_sample{'periods'}[$period_idx]{'begin'} < $earliest_begin) {
+                                                        $$this_sample{'periods'}[$period_idx]{'begin'} = $earliest_begin;
+                                                        debug_log(sprintf "client/server's ID %d begin is after current sample begin, so assigning sample begin to %d\n", $cs_id, $earliest_begin);
+                                                    }
+                                                    if (not defined $$this_sample{'periods'}[$period_idx]{'end'} or $$this_sample{'periods'}[$period_idx]{'end'} > $latest_end) {
+                                                        $$this_sample{'periods'}[$period_idx]{'end'} = $latest_end;
+                                                        debug_log(sprintf "client/server's ID %d end is before current sample end, so assigning sample begin to %d\n", $cs_id, $latest_end);
+                                                    }
+                                                    if (! defined $result{'run.begin'} or $result{'begin'} > $$this_sample{'periods'}[$period_idx]{'begin'}) {
+                                                        $result{'begin'} = $$this_sample{'periods'}[$period_idx]{'begin'};
+                                                    }
+                                                    if (! defined $result{'end'} or $result{'end'} < $$this_sample{'periods'}[$period_idx]{'end'}) {
+                                                        $result{'end'} = $$this_sample{'periods'}[$period_idx]{'end'};
+                                                    }
+
                                                     queue_es_doc("period", $run_dir . "/" . $this_samp_dir, $iter_idx, $sample_idx, $period_idx);
                                                 }
                                             }
