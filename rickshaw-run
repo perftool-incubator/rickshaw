@@ -1885,22 +1885,17 @@ sub load_settings_info() {
     } else {
         ($rc, $quay_refresh_expiration_token_file) = get_json_setting("engines.public.quay.refresh-expiration.token-file", $registries_settings);
     }
-    if ($rc != 0) {
-        print "load_settings_info(): failed to load workshop refresh-expiration token-file\n";
-        exit 1;
-    } else {
-        if (defined $quay_refresh_expiration_token_file) {
-            if (open(TOKEN, "<", $quay_refresh_expiration_token_file)) {
-                $quay_refresh_expiration_token = <TOKEN>;
-                chomp($quay_refresh_expiration_token);
-                close TOKEN;
-            } else {
-                printf "load_settings_file(): failed to load token from workshop refresh-expiration token-file\n";
-                exit 1;
-            }
-
-            printf "load_settings_info(): loaded workshop refresh-expiration token-file: %s\n", $quay_refresh_expiration_token_file;
+    if (defined $quay_refresh_expiration_token_file) {
+        if (open(TOKEN, "<", $quay_refresh_expiration_token_file)) {
+            $quay_refresh_expiration_token = <TOKEN>;
+            chomp($quay_refresh_expiration_token);
+            close TOKEN;
+        } else {
+            printf "load_settings_file(): failed to load token from workshop refresh-expiration token-file\n";
+            exit 1;
         }
+
+        printf "load_settings_info(): loaded workshop refresh-expiration token-file: %s\n", $quay_refresh_expiration_token_file;
     }
 
     if ($regisitries_migration_needed) {
@@ -1913,13 +1908,8 @@ sub load_settings_info() {
     } else {
         ($rc, $quay_refresh_expiration_api_url) = get_json_setting("engines.public.quay.refresh-expiration.api-url", $registries_settings);
     }
-    if ($rc != 0) {
-        print "load_settings_info(): failed to load workshop refresh-expiration api-url\n";
-        exit 1;
-    } else {
-        if (defined $quay_refresh_expiration_api_url) {
-            printf "load_settings_info(): loaded workshop refresh-expiration api-url: %s\n", $quay_refresh_expiration_api_url;
-        }
+    if (defined $quay_refresh_expiration_api_url) {
+        printf "load_settings_info(): loaded workshop refresh-expiration api-url: %s\n", $quay_refresh_expiration_api_url;
     }
 
     ($rc, $default_tool_userenv) = get_json_setting("userenvs.default.tools", $jsonsettings);
