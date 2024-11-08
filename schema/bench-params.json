@@ -27,6 +27,9 @@
             "all"
           ]
         },
+        "uuid": {
+          "type": "string"
+        },
         "id": {
           "type": "string"
         }
