@@ -805,6 +805,7 @@ if (not grep(/^$cdm{'ver'}$/, @suported_cdm_vers)) {
     printf "The version of CDM used in OpenSearch [%s] is not one that is supported by rickshaw-index: [%s]\n",
            $cdm{'ver'}, join(" ",  @suported_cdm_vers);
     printf "Either use an older version of CDM or (ideally) find a newer version of rickshaw which supports %s\n", $cdm{'ver'};
+    exit 1;
 }
 printf "Exporting from %s to OpenSearch documents and POSTing to localhost:9200\n", $result_file;
 
