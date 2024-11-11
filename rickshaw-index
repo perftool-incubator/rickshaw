@@ -87,6 +87,10 @@ sub add_persistent_uuid {
         # V7 uses the older field name, 'id'
         if (exists $$doc_ref{$old_field_name}) {
             # Already exists, nothing to do
+            if (not defined $$doc_ref{$old_field_name}) {
+                print "WHY is this null?" . Dumper $doc_ref;
+                exit 1;
+            }
         } else {
             $$doc_ref{$old_field_name} = Data::UUID->new->create_str();
             $$update_var_ref++;
@@ -178,9 +182,6 @@ sub create_es_doc {
     my $iter_idx = shift;
     my $sample_idx = shift;
     my $period_idx = shift;
-
-
-
 
     my %es_doc = ( 'cdm' => \%cdm );
     for my $field ($run_id_field, qw(harness host email name source begin end benchmark)) {
@@ -792,53 +793,6 @@ if ($fixup_status != 0) {
     exit $fixup_status;
 }
 
-# start processing rickshaw-run.json "for real"
-debug_log(sprintf "Opening %s for normal processing\n", $run_file);
-($file_rc, my $result_ref) = get_json_file($run_file, $result_schema_file);
-if ($file_rc > 0 or ! defined $result_ref) {
-    print "Could not open the rickshaw-run  file\n";
-    exit 1;
-}
-if (defined $result_ref) {
-    %result = %{ $result_ref };
-} else {
-    printf "Could not find or load rickshaw-run.json in %s, exiting\n", $run_dir;
-    exit 1;
-}
-
-# add persistent IDs to the result data if it doesn't already exist
-if (exists $result{'iterations'}) {
-
-    debug_log(sprintf "Making sure %s has persistent IDs\n", $run_file);
-    for my $iteration (@{ $result{'iterations'} }) {
-        add_persistent_uuid($iteration, "iteration", \$update_run_json);
-        #if (! exists $$iteration{'id'}) {
-            #$$iteration{'id'} = Data::UUID->new->create_str();
-            #debug_log(sprintf "Adding persistent iteration ID %s\n", $$iteration{'id'});
-            #$update_run_json++;
-        #}
-
-        for my $parameter (@{ $$iteration{'params'} }) {
-            add_persistent_uuid($parameter, "param", \$update_run_json);
-            #if (! exists $$parameter{'id'}) {
-                #$$parameter{'id'} = Data::UUID->new->create_str();
-                #debug_log(sprintf "Adding persistent parameter ID %s\n", $$parameter{'id'});
-                #$update_run_json++;
-            #}
-        }
-    }
-
-    if ($update_run_json > 0) {
-        debug_log(sprintf "Added %d persistent IDs to %s\n", $update_run_json, $run_file);
-        debug_log(sprintf "Overwriting %s after persistent ID update\n", $run_file);
-        my $update_rc = put_json_file($run_file, \%result, $result_schema_file);
-        if ($update_rc > 0) {
-            print "Could not add persistent IDs to rickshaw-run file\n";
-            exit 1;
-        }
-    }
-}
-
 # Find the newest CDM version and verify all the required indices are present
 my $idx_resp_ref = http_request("GET", "localhost:9200", "_cat/indices?format=json", '');
 my $latest_ver;
@@ -911,6 +865,44 @@ if ($cdm{'ver'} eq 'v7dev') {
     $metric_id_field = 'metric_desc-uuid';
 }
 
+# start processing rickshaw-run.json "for real"
+debug_log(sprintf "Opening %s for normal processing\n", $run_file);
+($file_rc, my $result_ref) = get_json_file($run_file, $result_schema_file);
+if ($file_rc > 0 or ! defined $result_ref) {
+    print "Could not open the rickshaw-run  file\n";
+    exit 1;
+}
+if (defined $result_ref) {
+    %result = %{ $result_ref };
+} else {
+    printf "Could not find or load rickshaw-run.json in %s, exiting\n", $run_dir;
+    exit 1;
+}
+
+# add persistent IDs to the result data if it doesn't already exist
+if (exists $result{'iterations'}) {
+
+    debug_log(sprintf "Making sure %s has persistent IDs\n", $run_file);
+    for my $iteration (@{ $result{'iterations'} }) {
+        add_persistent_uuid($iteration, "iteration", \$update_run_json);
+
+        for my $parameter (@{ $$iteration{'params'} }) {
+            add_persistent_uuid($parameter, "param", \$update_run_json);
+        }
+    }
+
+    if ($update_run_json > 0) {
+        debug_log(sprintf "Added %d persistent IDs to %s\n", $update_run_json, $run_file);
+        debug_log(sprintf "Overwriting %s after persistent ID update\n", $run_file);
+        my $update_rc = put_json_file($run_file, \%result, $result_schema_file);
+        if ($update_rc > 0) {
+            print "Could not add persistent IDs to rickshaw-run file\n";
+            exit 1;
+        }
+    }
+}
+
+
 printf "Exporting from %s to OpenSearch documents and POSTing to localhost:9200\n", $run_file;
 
 if (exists $result{'run-id'} and defined $result{'run-id'}) {
@@ -920,9 +912,6 @@ if (exists $result{'run-id'} and defined $result{'run-id'}) {
 }
 
 add_persistent_uuid(\%result, "run", \$update_run_json);
-#if (not exists $result{'id'} or not defined $result{'id'}) {
-    #$result{'id'} = Data::UUID->new->create_str();
-#}
 
 printf "run-uuid: %s\n", $result{$run_id_field};
 
@@ -1156,15 +1145,17 @@ if (exists $result{'iterations'}) {
                                                         foreach my $period_id (@{ $$samp_persist_ids_ref{'periods'} }) {
                                                             if ($period{'name'} eq $$period_id{'name'}) {
                                                                 debug_log(sprintf "Found persistent ID %s for period name %s\n", $$period_id{'id'}, $period{'name'});
-                                                                $period{'id'} = $$period_id{'id'};
+                                                                # The id field from $samp_persist_ids_ref is always 'id' because we can't
+                                                                # have a 'rewquired-field' in the json-schema be [id|period-uuid];
+                                                                $period{$period_id_field} = $$period_id{'id'};
                                                                 last;
                                                             }
                                                         }
-                                                        if (! defined $period{'period-uuid'}) {
-                                                            my %period_id = ( 'name' => $period{'name'}, 'period-uuid' => Data::UUID->new->create_str() );
-                                                            debug_log(sprintf "Creating persistent ID %s for period %s\n", $period_id{'period-uuid'}, $period_id{'name'});
+                                                        if (! defined $period{$period_id_field}) {
+                                                            my %period_id = ( 'name' => $period{'name'}, 'id' => Data::UUID->new->create_str() );
+                                                            debug_log(sprintf "Creating persistent ID %s for period %s\n", $period_id{'id'}, $period_id{'name'});
                                                             push @{ $$samp_persist_ids_ref{'periods'} }, \%period_id;
-                                                            $period{'period-uuid'} = $period_id{'period-uuid'};
+                                                            $period{$period_id_field} = $period_id{'id'};
                                                             $update_samp_persist_ids_file++;
                                                         }
 
