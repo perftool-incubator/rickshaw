@@ -404,7 +404,7 @@ sub write_queued_es_docs {
 sub wait_for_metric_descs {
     my @terms = @_;
     my $attempts = 1;
-    my $max_attempts = 8;
+    my $max_attempts = 20;
     my $submitted_metric_descs = scalar @terms;
     my $found_metric_descs = 0;
 
@@ -539,11 +539,6 @@ sub index_metrics {
     debug_log(sprintf "Making sure %s has persistent IDs\n", $metr_json_file);
     my $update_metric_file = 0;
     for my $this_metr ( @$metr_ref ) {
-        #if (! exists $$this_metr{'id'}) {
-            #$$this_metr{'id'} = Data::UUID->new->create_str();
-            #debug_log(sprintf "Adding persistent metric ID %s\n", $$this_metr{'id'});
-            #$update_metric_file++;
-        #}
         add_persistent_uuid($this_metr, "metric_desc", \$update_metric_file);
     }
     if ($update_metric_file > 0) {
@@ -623,7 +618,8 @@ sub index_metrics {
             $ndjson .= sprintf "%s\n", '{ "index": {} }';
             $ndjson .= sprintf "%s\n", $metr_data_doc_json;
             $count++;
-            if ($count >= 200) {
+            # Limit the batch size to avoid a http error with too large of a request
+            if ($count >= 1000) {
                 if ($index_or_queue eq "index") {
                     # OpenSearch docs type metric_data do not contain other sections run, iteration, sample, period, metric_desc,
                     # as this would take up sunstantially more space for potentially millions of documents.
