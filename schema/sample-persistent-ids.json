@@ -31,11 +31,12 @@
         "id":  {
           "type": "string",
           "pattern": "^.+$"
+        },
+        "sample-uuid":  {
+          "type": "string",
+          "pattern": "^.+$"
         }
       },
-      "required": [
-        "id"
-      ],
      "additionalProperties": false
     },
     "periods": {
@@ -47,15 +48,15 @@
             "type": "string",
             "pattern": "^.+$"
           },
+          "period-uuid": {
+            "type": "string",
+            "pattern": "^.+$"
+          },
           "name": {
             "type": "string",
             "pattern": "^.+$"
           }
         },
-        "required": [
-          "id",
-          "name"
-        ],
         "additionalProperties": false
       },
       "additionalItems": false

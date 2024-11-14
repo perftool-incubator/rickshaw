@@ -129,6 +129,10 @@
       "items": {
         "type": "object",
         "properties": {
+          "iteration-uuid": {
+            "type": "string",
+            "pattern": "^.+$"
+          },
           "id": {
             "type": "string",
             "pattern": "^.+$"
@@ -138,6 +142,10 @@
             "items": {
               "type": "object",
               "properties": {
+                "param-uuid": {
+                  "type": "string",
+                  "pattern": "^.+$"
+                },
                 "id": {
                   "type": "string",
                   "pattern": "^.+$"
@@ -202,6 +210,10 @@
       "pattern": "^.+$"
     },
     "name": {
+      "type": "string",
+      "pattern": "^.+$"
+    },
+    "run-uuid": {
       "type": "string",
       "pattern": "^.+$"
     },
