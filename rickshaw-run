@@ -120,10 +120,7 @@ my $abort_via_roadblock = 0;
 my $workshop_base_cmd;
 my $workshop_force_builds;
 my %workshop_built_tags;
-my $quay_refresh_expiration_token_file;
-my $quay_refresh_expiration_token;
-my $quay_refresh_expiration_api_url;
-my $quay_image_expiration;
+my %quay_refresh_expiration_tokens;
 my $cs_conf_file;
 my %cs_conf;
 
@@ -131,7 +128,6 @@ my @tests;
 my %clients_servers;
 my @rb_cs_ids; # unique IDs for roadblock
 my $abort_test_id;
-my $skip_registry_auth;
 my @active_followers;
 
 (my $detect_arch_cmd, my $arch, my $detect_arch_cmd_rc) = run_cmd('uname -m');
@@ -543,11 +539,12 @@ sub calc_image_md5 {
 
 sub remote_image_found {
     my $image = shift;
+    my $registry_type = shift;
     my $full_url;
     if ($image =~ /:/) {
         $full_url = $image;
     } else {
-        $full_url = $run{'dest-image-url'} . ":" . $image;
+        $full_url = $run{'registries'}{$registry_type}{'url-details'}{'dest-image-url'} . ":" . $image;
     }
     debug_log(sprintf "Checking for remote workshop image: %s...\n", $full_url);
     my $skopeo_url;
@@ -556,7 +553,11 @@ sub remote_image_found {
     } else {
         $skopeo_url = "docker://" . $full_url;
     }
-    my $cmd = "skopeo inspect " . "--tls-verify=" . $run{'reg-tls-verify'} . " " . $skopeo_url . " 2>&1";
+    my $skopeo_auth = "";
+    if ($registry_type eq "private") {
+        $skopeo_auth = "--authfile=" . $run{'registries'}{$registry_type}{'pull-token'};
+    }
+    my $cmd = "skopeo inspect " . $skopeo_auth . " --tls-verify=" . $run{'registries'}{$registry_type}{'tls-verify'} . " " . $skopeo_url . " 2>&1";
     debug_log(sprintf "running: %s\n", $cmd);
     ($cmd, my $output, my $cmd_rc) = run_cmd($cmd);
     if ($cmd_rc == 0) {
@@ -570,11 +571,12 @@ sub remote_image_found {
 
 sub local_image_found {
     my $image = shift;
+    my $registry_type = shift;
     my $full_url;
     if ($image =~ /:/) {
         $full_url = $image;
     } else {
-        $full_url = $run{'source-image-url'} . ":" . $image;
+        $full_url = $run{'registries'}{$registry_type}{'url-details'}{'source-image-url'} . ":" . $image;
     }
     debug_log(sprintf "Checking for local workshop image: %s...\n", $full_url);
     my $cmd = "buildah images " . $full_url;
@@ -596,6 +598,7 @@ sub local_image_found {
 
 sub workshop_build_image {
     my $userenv = shift;
+    my $registry_type = shift;
     my $bench_or_tool = shift;
     my $workshop_base_cmd = shift;
     my $stage = shift;
@@ -609,17 +612,17 @@ sub workshop_build_image {
         $skip_update = "false";
     }
     my $proj;
-    if (defined $run{'reg-proj'}) {
-        $proj = $run{'reg-host'} . "/" . $run{'reg-proj'};
+    if (defined $run{'registries'}{$registry_type}{'url-details'}{'project'}) {
+        $proj = $run{'registries'}{$registry_type}{'url-details'}{'host'} . "/" . $run{'registries'}{$registry_type}{'url-details'}{'project'};
     } else {
-        $proj = $run{'reg-host'};
+        $proj = $run{'registries'}{$registry_type}{'url-details'}{'host'};
     }
     my $workshop_build_cmd = $workshop_base_cmd
                              . " --skip-update " . $skip_update
                              . " " . $userenv_arg
                              . " " . $req_args
                              . " --proj " . $proj
-                             . " --label " . $run{'reg-label'}
+                             . " --label " . $run{'registries'}{$registry_type}{'url-details'}{'label'}
                              . " --tag " . $tag;
     debug_log(sprintf "Going to generate a new engine container image with this workshop cmd:\n\n %s\n", $workshop_build_cmd);
     ($workshop_build_cmd, my $workshop_output, my $workshop_rc) = run_cmd($workshop_build_cmd);
@@ -653,13 +656,14 @@ sub workshop_build_image {
 
 sub delete_local_image {
     my $image = shift;
+    my $registry_type = shift;
     my $full_url;
     if ($image =~ /:/) {
         $full_url = $image;
     } else {
-        $full_url = $run{'source-image-url'} . ":" . $image;
+        $full_url = $run{'registries'}{$registry_type}{'url-details'}{'source-image-url'} . ":" . $image;
     }
-    if (!local_image_found($image)) {
+    if (!local_image_found($image, $registry_type)) {
         printf "ERROR: delete_local_image(): could not find local image [%s] before delete\n", $full_url;
         printf "imgae: [%s]\n", $image;
         printf "full_url: [%s]\n", $full_url;
@@ -679,8 +683,9 @@ sub delete_local_image {
 
 sub push_local_image {
     my $image_tag = shift;
-    my $full_src_url = $run{'source-image-url'} . ":" . $image_tag;
-    my $full_dest_url = $run{'dest-image-url'} . ":" . $image_tag;
+    my $registry_type = shift;
+    my $full_src_url = $run{'registries'}{$registry_type}{'url-details'}{'source-image-url'} . ":" . $image_tag;
+    my $full_dest_url = $run{'registries'}{$registry_type}{'url-details'}{'dest-image-url'} . ":" . $image_tag;
     if ($full_dest_url =~ /^dir:/) {
         $full_dest_url =~ /^dir:(.*)/;
         my $image_dir = $1;
@@ -695,27 +700,27 @@ sub push_local_image {
             }
         }
     }
-    if (!local_image_found($image_tag)) {
+    if (!local_image_found($image_tag, $registry_type)) {
         die "ERROR: push_local_image(): could not find local image before push ($image_tag)";
     }
     my $cmd = "buildah";
-    if (! $skip_registry_auth) {
-        $cmd .= " --authfile " . $run{'reg-auth'};
+    if (exists $run{'registries'}{$registry_type}{'push-token'}) {
+        $cmd .= " --authfile " . $run{'registries'}{$registry_type}{'push-token'};
     }
-    $cmd .= " push --tls-verify=" . $run{'reg-tls-verify'} . " " . $full_src_url . " " . $full_dest_url;
+    $cmd .= " push --tls-verify=" . $run{'registries'}{$registry_type}{'tls-verify'} . " " . $full_src_url . " " . $full_dest_url;
     ($cmd, my $output, my $cmd_rc) = run_cmd($cmd);
     if ($cmd_rc != 0) {
         printf "ERROR: push_local_image(): push command [%s] failed with %d\nOutput:\n%s\n\n",
                $cmd, $cmd_rc, $output;
         exit 1;
     }
-    if (!remote_image_found($image_tag)) {
+    if (!remote_image_found($image_tag, $registry_type)) {
         printf "WARNING: push_local_image(): failed to find remote image after push...retrying!\n";
         my $found_it = 0;
         for (my $i=1; $i<=20; $i++) {
             sleep 3;
 
-            if (remote_image_found($image_tag)) {
+            if (remote_image_found($image_tag, $registry_type)) {
                 $found_it = 1;
                 last;
                 printf "NOTICE: push_local_image(): found image on retry attempt number %d\n", $i;
@@ -811,61 +816,87 @@ sub build_reqs {
 }
 
 sub get_image_urls {
-    if ($run{'reg-repo'} =~ /^(\w+:\/){0,1}([^\/]+\/){0,1}([^\/]+\/){0,1}([^\/]+)$/) {
+    my $registry_type = shift;
+
+    if (exists $run{'registries'}{$registry_type}{'url-details'}) {
+        printf "%s registry repository URL (%s) details have already been decoded\n", $registry_type, $run{'registries'}{$registry_type}{'repo'};
+        return;
+    } else {
+        printf "Decoding %s registry repository URL (%s) details\n", $registry_type, $run{'registries'}{$registry_type}{'repo'};
+    }
+
+    $run{'registries'}{$registry_type}{'url-details'} = ();
+
+    if ($run{'registries'}{$registry_type}{'repo'} =~ /^(\w+:\/){0,1}([^\/]+\/){0,1}([^\/]+\/){0,1}([^\/]+)$/) {
         if (defined($1)) {
-            $run{'reg-proto'} = $1;
-            printf "reg-proto:     [%s]\n", $run{'reg-proto'};
+            $run{'registries'}{$registry_type}{'url-details'}{'protocol'} = $1;
+            debug_log(sprintf "protocol:      [%s]\n", $run{'registries'}{$registry_type}{'url-details'}{'protocol'});
         } else {
-            $run{'reg-proto'} = '';
+            $run{'registries'}{$registry_type}{'url-details'}{'protocol'} = '';
         }
         if (defined($2)) {
-            $run{'reg-host'} = $2;
-            if ($run{'reg-host'} =~ /(\w+)(:\d+)/) {
-                $run{'reg-host'} = $1;
-                $run{'reg-host-port'} = $2;
-                debug_log(sprintf "reg-host:      [%s]\n", $run{'reg-host'});
-                debug_log(sprintf "reg-host-port: [%s]\n", $run{'reg-host-port'});
+            $run{'registries'}{$registry_type}{'url-details'}{'host'} = $2;
+            if ($run{'registries'}{$registry_type}{'url-details'}{'host'} =~ /(\w+)(:\d+)/) {
+                $run{'registries'}{$registry_type}{'url-details'}{'host'} = $1;
+                $run{'registries'}{$registry_type}{'url-details'}{'host-port'} = $2;
+                debug_log(sprintf "host:          [%s]\n", $run{'registries'}{$registry_type}{'url-details'}{'host'});
+                debug_log(sprintf "host-port:     [%s]\n", $run{'registries'}{$registry_type}{'url-details'}{'host-port'});
             } else {
-                $run{'reg-host'} =~ s/\/$//;
-                $run{'reg-host-port'} = '';
-                debug_log(sprintf "reg-host:      [%s]\n", $run{'reg-host'});
+                $run{'registries'}{$registry_type}{'url-details'}{'host'} =~ s/\/$//;
+                $run{'registries'}{$registry_type}{'url-details'}{'host-port'} = '';
+                debug_log(sprintf "host:          [%s]\n", $run{'registries'}{$registry_type}{'url-details'}{'host'});
             }
         } else {
-            $run{'reg-host'} = '';
+            $run{'registries'}{$registry_type}{'url-details'}{'host'} = '';
         }
         if (defined($3)) {
-            $run{'reg-proj'} = $3;
-            $run{'reg-proj'} =~ s/\/$//;
-            debug_log(sprintf "reg-proj:      [%s]\n", $run{'reg-proj'});
+            $run{'registries'}{$registry_type}{'url-details'}{'project'} = $3;
+            $run{'registries'}{$registry_type}{'url-details'}{'project'} =~ s/\/$//;
+            debug_log(sprintf "project:       [%s]\n", $run{'registries'}{$registry_type}{'url-details'}{'project'});
         }
-        if (!defined $run{'reg-host'} and defined $run{'reg-proj'}) {
-            $run{'reg-host'} = $run{'reg-proj'};
-        } elsif (defined $run{'reg-host'} and !defined $run{'reg-proj'}) {
-            $run{'reg-proj'} = $run{'reg-host'};
-        } elsif (!defined $run{'reg-host'} and !defined $run{'reg-proj'}) {
-            die "At least one of the host or the project must be present in $run{'reg-repo'}";
+        if (! defined $run{'registries'}{$registry_type}{'url-details'}{'host'} and defined $run{'registries'}{$registry_type}{'url-details'}{'project'}) {
+            $run{'registries'}{$registry_type}{'url-details'}{'host'} = $run{'registries'}{$registry_type}{'url-details'}{'project'};
+            debug_log(sprintf "host:          [%s]\n", $run{'registries'}{$registry_type}{'url-details'}{'host'});
+        } elsif (defined $run{'registries'}{$registry_type}{'url-details'}{'host'} and ! defined $run{'registries'}{$registry_type}{'url-details'}{'project'}) {
+            $run{'registries'}{$registry_type}{'url-details'}{'project'} = $run{'registries'}{$registry_type}{'url-details'}{'host'};
+            debug_log(sprintf "project:       [%s]\n", $run{'registries'}{$registry_type}{'url-details'}{'project'});
+        } elsif (! defined $run{'registries'}{$registry_type}{'url-details'}{'host'} and ! defined $run{'registries'}{$registry_type}{'url-details'}{'project'}) {
+            die "At least one of the host or the project must be present in $run{'registries'}{$registry_type}{'repo'}";
         }
-        $run{'source-image-url'} = $run{'reg-host'} . "/" . $run{'reg-proj'};
-        if (defined $run{'reg-host-port'}) {
-            $run{'dest-image-url'} = $run{'reg-host'} . $run{'reg-host-port'} . "/" . $run{'reg-proj'};
+        $run{'registries'}{$registry_type}{'url-details'}{'source-image-url'} = 
+            $run{'registries'}{$registry_type}{'url-details'}{'host'} . "/" . $run{'registries'}{$registry_type}{'url-details'}{'project'};
+        debug_log(sprintf "source-image-url: [%s]\n", $run{'registries'}{$registry_type}{'url-details'}{'source-image-url'});
+        if (defined $run{'registries'}{$registry_type}{'url-details'}{'host-port'}) {
+            $run{'registries'}{$registry_type}{'url-details'}{'dest-image-url'} =
+                $run{'registries'}{$registry_type}{'url-details'}{'host'} .
+                $run{'registries'}{$registry_type}{'url-details'}{'host-port'} . "/" .
+                $run{'registries'}{$registry_type}{'url-details'}{'project'};
         } else {
-            $run{'dest-image-url'} = $run{'reg-host'} . "/" . $run{'reg-proj'};
+            $run{'registries'}{$registry_type}{'url-details'}{'dest-image-url'} =
+                $run{'registries'}{$registry_type}{'url-details'}{'host'} . "/" .
+                $run{'registries'}{$registry_type}{'url-details'}{'project'};
         }
-        if (defined $run{'reg-proto'}) {
-            $run{'dest-image-url'} = $run{'reg-proto'} . $run{'dest-image-url'};
+        debug_log(sprintf "dest-image-url: [%s]\n", $run{'registries'}{$registry_type}{'url-details'}{'dest-image-url'});
+        if (defined $run{'registries'}{$registry_type}{'url-details'}{'protocol'}) {
+            $run{'registries'}{$registry_type}{'url-details'}{'dest-image-url'} =
+                $run{'registries'}{$registry_type}{'url-details'}{'protocol'} .
+                $run{'registries'}{$registry_type}{'url-details'}{'dest-image-url'};
+            debug_log(sprintf "dest-image-url: [%s]\n", $run{'registries'}{$registry_type}{'url-details'}{'dest-image-url'});
         }
         if (defined($4)) {
-            $run{'reg-label'} = $4;
-            debug_log(sprintf "reg-label:     [%s]\n", $run{'reg-label'});
-            $run{'source-image-url'} .= "/" . $run{'reg-label'};
-            debug_log(sprintf "source-image-url: [%s]\n", $run{'source-image-url'});
-            $run{'dest-image-url'} .= "/" . $run{'reg-label'};
-            debug_log(sprintf "dest-image-url: [%s]\n", $run{'dest-image-url'});
+            $run{'registries'}{$registry_type}{'url-details'}{'label'} = $4;
+            debug_log(sprintf "label:         [%s]\n", $run{'registries'}{$registry_type}{'url-details'}{'label'});
+            $run{'registries'}{$registry_type}{'url-details'}{'source-image-url'} .= "/" .
+                $run{'registries'}{$registry_type}{'url-details'}{'label'};
+            debug_log(sprintf "source-image-url: [%s]\n", $run{'registries'}{$registry_type}{'url-details'}{'source-image-url'});
+            $run{'registries'}{$registry_type}{'url-details'}{'dest-image-url'} .= "/" .
+                $run{'registries'}{$registry_type}{'url-details'}{'label'};
+            debug_log(sprintf "dest-image-url: [%s]\n", $run{'registries'}{$registry_type}{'url-details'}{'dest-image-url'});
         } else {
-            print "The label/repo was not defined in \$run{'reg-repo'}: [%s]\n", $run{'reg-repo'};
+            print "The label/repo was not defined in \$run{'registries'}{$registry_type}{'repo'}: [%s]\n", $run{'registries'}{$registry_type}{'repo'};
         }
     } else {
-        die "The \$run{'reg-repo'} does not match the pattern [protocol:][host[:port]][/<project>]/<repo>: " . $run{'reg-repo'};
+        die "The \$run{'registries'}{$registry_type}{'repo'} does not match the pattern [protocol:][host[:port]][/<project>]/<repo>: " . $run{'registries'}{$registry_type}{'repo'};
     }
 }
 
@@ -878,6 +909,29 @@ sub source_container_image {
     my $image; # What gets returned
     my @local_images;
 
+    # load the userenv as early as possible so we can determine if it
+    # is a public or private image
+    (my $rc, my $userenv_ref) = get_json_file($rickshaw_project_dir . "/userenvs/" . $userenv . ".json");
+    if ($rc != 0) {
+        die "ERROR: Could not load userenv JSON file for '" . $userenv . "' due to non-zero return code " . $rc . ".  Are you sure this is a supported userenv?\n";
+    }
+
+    my $registry_type = "public";
+    if (exists $$userenv_ref{'userenv'}{'origin'}{'requires-pull-token'}) {
+        if ($$userenv_ref{'userenv'}{'origin'}{'requires-pull-token'} eq "true") {
+            $registry_type = "private";
+        }
+    }
+    if ($registry_type eq "public") {
+        printf "Userenv %s does not require a pull token so it comes from a public registry repo.\n", $userenv;
+    } elsif ($registry_type eq "private") {
+        printf "Userenv %s does require a pull token so it comes from a private registry repo.\n", $userenv;
+    }
+
+    if (! exists $run{'registries'}{$registry_type}) {
+        die "ERROR: The requested userenv is a " . $registry_type . " image but there is not a defined " . $registry_type . " engine registry!\n";
+    }
+
     $workshop_base_cmd =
     $run{'workshop-dir'} . "/workshop.pl" .
     " --log-level verbose " .
@@ -885,11 +939,12 @@ sub source_container_image {
     " --param %bench-dir%=" . $bench_dirs{$benchmark} .
     " --param %engine-dir%=" . $rickshaw_project_dir . "/engine/" .
     " --param %rickshaw-dir%=" . $rickshaw_project_dir .
-    " --reg-tls-verify=" . $run{'reg-tls-verify'} .
+    " --reg-tls-verify=" . $run{'registries'}{$registry_type}{'tls-verify'} .
+    " --registries-json=" . $run{'registries-json'} .
     " 2>&1";
 
-    get_image_urls;
-    printf "Sourcing container image for userenv '%s' and benchmark/tool '%s'; this may take a few minutes\n", $userenv, $benchmark;
+    get_image_urls($registry_type);
+    printf "Sourcing container image for userenv '%s' (%s) and benchmark/tool '%s'; this may take a few minutes\n", $userenv, $registry_type, $benchmark;
 
     my @requirements;
     build_reqs(\@requirements, $userenv, $benchmark);
@@ -900,10 +955,6 @@ sub source_container_image {
     my @workshop_args;
     my $userenv_arg;
     my $count = 0;
-    (my $rc, my $userenv_ref) = get_json_file($rickshaw_project_dir . "/userenvs/" . $userenv . ".json");
-    if ($rc != 0) {
-        die "ERROR: Could not load userenv JSON file for '" . $userenv . "' due to non-zero return code " . $rc . ".  Are you sure this is a supported userenv?\n";
-    }
     my $userenv_image = $$userenv_ref{'userenv'}{'origin'}{'image'} . ":" . $$userenv_ref{'userenv'}{'origin'}{'tag'};
     while (scalar @requirements > 0) {
         my $req_arg;
@@ -936,7 +987,7 @@ sub source_container_image {
             exit 1;
         }
         my $tag = calc_image_md5($workshop_base_cmd, $userenv_arg, $req_arg, $container_arch, $userenv, $benchmark, scalar(@workshop_args) + 1);
-        $cs_conf{'config'}{'labels'} = [ 'quay.expires-after=' . $quay_image_expiration ];
+        $cs_conf{'config'}{'labels'} = [ 'quay.expires-after=' . $run{'registries'}{'public'}{'quay-expiration-length'} ];
         if (put_json_file($cs_conf_file, \%cs_conf) > 0) {
             printf "put_json_file(): update %s: failed\n", $cs_conf_file;
             exit 1;
@@ -957,7 +1008,7 @@ sub source_container_image {
             delete $$userenv_ref{'requirements'};
             my @reqs = ();
             @$userenv_ref{'requirements'} = \@reqs;
-            $$userenv_ref{'userenv'}{'origin'}{'image'} = $run{'dest-image-url'};
+            $$userenv_ref{'userenv'}{'origin'}{'image'} = $run{'registries'}{$registry_type}{'url-details'}{'dest-image-url'};
             $$userenv_ref{'userenv'}{'origin'}{'tag'} = $tag;
             if (defined $$userenv_ref{'userenv'}{'origin'}{'build-policy'}) {
                 delete $$userenv_ref{'userenv'}{'origin'}{'build-policy'};
@@ -979,12 +1030,12 @@ sub source_container_image {
         $i = $num_images - 1;
         while ($i >= 0) {
             debug_log(sprintf "Checking for stage number %d (of %d)\n", $i + 1, $num_images);
-            if (!remote_image_found($workshop_args[$i]{'tag'})) {
-                if (!local_image_found($workshop_args[$i]{'tag'})) {
+            if (!remote_image_found($workshop_args[$i]{'tag'}, $registry_type)) {
+                if (!local_image_found($workshop_args[$i]{'tag'}, $registry_type)) {
                     $i--;
                     next;
                 } else {
-                    push_local_image($workshop_args[$i]{'tag'});
+                    push_local_image($workshop_args[$i]{'tag'}, $registry_type);
                     last;
                 }
             } else {
@@ -1007,12 +1058,12 @@ sub source_container_image {
         while ($i >= 0) {
             debug_log(sprintf "Checking for stage number %d (of %d)\n", $i + 1, $num_images);
             if (exists $workshop_built_tags{$workshop_args[$i]{'tag'}}) {
-                if (!remote_image_found($workshop_args[$i]{'tag'})) {
-                    if (!local_image_found($workshop_args[$i]{'tag'})) {
+                if (!remote_image_found($workshop_args[$i]{'tag'}, $registry_type)) {
+                    if (!local_image_found($workshop_args[$i]{'tag'}, $registry_type)) {
                         printf "ERROR: Cannot find the image I was previously forced to build (%s)", $workshop_args[$i]{'tag'};
                         exit 1;
                     } else {
-                        push_local_image($workshop_args[$i]{'tag'});
+                        push_local_image($workshop_args[$i]{'tag'}, $registry_type);
                         last;
                     }
                 } else {
@@ -1034,7 +1085,7 @@ sub source_container_image {
             exit 1;
         }
     }
-    $image = $run{'dest-image-url'} . ":" . $workshop_args[$i]{'tag'};
+    $image = $run{'registries'}{$registry_type}{'url-details'}{'dest-image-url'} . ":" . $workshop_args[$i]{'tag'};
     # After finding the most complete image, build any "more" complete images until "most"
     # complete is built.
     $i++;
@@ -1045,8 +1096,8 @@ sub source_container_image {
     }
     my $x = 0;
     my $refresh_expiration;
-    if (defined $quay_refresh_expiration_token && defined $quay_refresh_expiration_api_url) {
-        if ($quay_image_expiration =~ m/([0-9]+)w/) {
+    if (defined $quay_refresh_expiration_tokens{$registry_type} && defined $run{'registries'}{$registry_type}{'quay-refresh-expiration-api-url'}) {
+        if ($run{'registries'}{$registry_type}{'quay-expiration-length'} =~ m/([0-9]+)w/) {
             #                               weeks   days/week   hours/day   min/hour   seconds/min
             $refresh_expiration = time() + ($1    * 7         * 24        * 60       * 60);
 
@@ -1059,14 +1110,14 @@ sub source_container_image {
     }
     while ($x < $i) {
         printf "Processing stage %d (%s)...\n", $x + 1, $workshop_args[$x]{'tag'};
-        if (defined $quay_refresh_expiration_token && defined $quay_refresh_expiration_api_url) {
-            if (remote_image_found($workshop_args[$x]{'tag'})) {
+        if (defined $quay_refresh_expiration_tokens{$registry_type} && defined $run{'registries'}{$registry_type}{'quay-refresh-expiration-api-url'}) {
+            if (remote_image_found($workshop_args[$x]{'tag'}, $registry_type)) {
                 my $max_refresh_attempts = 3;
                 my $refresh_attempts;
 
                 my $query_cmd   = 'curl --silent' .
-                                  ' -X GET -H "Authorization: Bearer ' . $quay_refresh_expiration_token . '"' .
-                                  ' "' . $quay_refresh_expiration_api_url .
+                                  ' -X GET -H "Authorization: Bearer ' . $quay_refresh_expiration_tokens{$registry_type} . '"' .
+                                  ' "' . $run{'registries'}{$registry_type}{'quay-refresh-expiration-api-url'} .
                                   '/tag/?onlyActiveTags=true&specificTag=' . $workshop_args[$x]{'tag'} . '"';
 
                 my $current_expiration;
@@ -1104,9 +1155,9 @@ sub source_container_image {
                     printf "\tThe current expiration (%d) is greater than or equal to the refresh expiration so not refreshing\n", $current_expiration;
                 } else {
                     my $refresh_cmd = 'curl --silent' .
-                                      ' -X PUT -H "Authorization: Bearer ' . $quay_refresh_expiration_token . '"' .
+                                      ' -X PUT -H "Authorization: Bearer ' . $quay_refresh_expiration_tokens{$registry_type} . '"' .
                                       ' -H "Content-type: application/json" -d \'{ "expiration": ' . $refresh_expiration . ' }\'' .
-                                      ' ' . $quay_refresh_expiration_api_url . '/tag/' . $workshop_args[$x]{'tag'};
+                                      ' ' . $run{'registries'}{$registry_type}{'quay-refresh-expiration-api-url'} . '/tag/' . $workshop_args[$x]{'tag'};
 
                     $refresh_attempts = 1;
                     while ($refresh_attempts <= $max_refresh_attempts) {
@@ -1138,26 +1189,29 @@ sub source_container_image {
     while ($i <= $num_images - 1) {
         printf "Processing stage %d (%s)...\n", $i + 1, $workshop_args[$i]{'tag'};
         my $begin = time();
-        workshop_build_image($userenv, $benchmark, $workshop_base_cmd, $i + 1, $workshop_args[$i]{'userenv'}, $workshop_args[$i]{'reqs'}, $workshop_args[$i]{'tag'}, $workshop_args[$i]{'skip-update'});
+        workshop_build_image($userenv, $registry_type, $benchmark, $workshop_base_cmd, $i + 1, $workshop_args[$i]{'userenv'}, $workshop_args[$i]{'reqs'}, $workshop_args[$i]{'tag'}, $workshop_args[$i]{'skip-update'});
         my $end = time();
         printf "\tBuilding took %d seconds\n", $end - $begin;
         $begin = time();
-        push_local_image($workshop_args[$i]{'tag'});
+        push_local_image($workshop_args[$i]{'tag'}, $registry_type);
         $end = time();
         printf "\tPushing took %d seconds\n", $end - $begin;
         $workshop_built_tags{$workshop_args[$i]{'tag'}} = 1;
         push(@local_images, $workshop_args[$i]{'tag'});
-        $image = $run{'dest-image-url'} . ":" . $workshop_args[$i]{'tag'};
+        $image = $run{'registries'}{$registry_type}{'url-details'}{'dest-image-url'} . ":" . $workshop_args[$i]{'tag'};
         $i++;
     }
     my $num_local_images = scalar @local_images;
     if ($num_local_images > 0) {
         printf "Deleting %d local images\n", $num_local_images;
         while (scalar @local_images) {
-            delete_local_image(pop(@local_images));
+            delete_local_image(pop(@local_images), $registry_type);
         }
     }
-    printf "Finished sourcing container image for userenv '%s' and benchmark/tool '%s'\n", $userenv, $benchmark;
+    printf "Finished sourcing container image for userenv '%s' (%s) and benchmark/tool '%s'\n", $userenv, $registry_type, $benchmark;
+    if ($registry_type eq "private") {
+        $image .= "::" . $run{'registries'}{$registry_type}{'pull-token'};
+    }
     return $image;
 }
 
@@ -1519,7 +1573,6 @@ sub process_cmdline() {
         } elsif ($arg =~ /^base-run-dir$|^workshop-dir$|^packrat-dir$|^bench-dir$|^roadblock-dir$|^tools-dir$|^engine-dir$/ or
                  $arg =~ /^run-id$|^id$|^bench-params$|^tool-params$|^bench-params$|^max-rb-attempts$/ or
                  $arg =~ /^test-order$|^tool-group$|^num-samples$|^max-sample-failures$|^name$|^bench-ids$/ or
-                 $arg =~ /^reg-(auth|repo)$/ or
                  $arg =~ /^registries-json$/ or
                  $arg =~ /^email$|^desc$/) {
             debug_log(sprintf "argument: [%s]\n", $arg);
@@ -1562,20 +1615,14 @@ sub validate_controller_env() {
     }
     if (defined $run{'workshop-dir'} and -e $run{'workshop-dir'} . "/workshop.pl") {
         $use_workshop = 1;
-        if ( ! exists $run{'reg-repo'} ) {
-            die "You must define a container repository (\$run{'reg-repo'} = \"<fqdn>/<project>/<repo>\") to use rickshaw with workshop"
+        if ( ! exists $run{'registries'}{'public'}{'repo'} ) {
+            die "You must define a container repository (\$run{'registries'}{'public'}{'repo'} = \"<fqdn>/<project>/<repo>\") to use rickshaw with workshop"
         }
-        if ( ! exists $run{'reg-auth'} ) {
-            die "You must define a path to a authorizaton file (\$run{'reg-auth'}) to use rickshaw with workshop"
+        if ( ! exists $run{'registries'}{'public'}{'push-token'} ) {
+            die "You must define a path to a public registry token file (\$run{'registries'}{'public'}{'push-token'}) to use rickshaw with workshop"
         }
-        if (!$run{'reg-repo'} =~ /^(\w+:\/){0,1}([^\/]+\/){0,1}([^\/]+\/){0,1}([^\/]+)$/) {
-            die "The \$run{'reg-repo'} does not match the pattern [protocol:][host[:port]][/<project>]/<repo>: " . $run{'reg-repo'};
-        }
-        if (! exists $run{'reg-tls-verify'}) {
-            $run{'reg-tls-verify'} = "true";
-        } elsif ($run{'reg-tls-verify'} ne "true" && $run{'reg-tls-verify'} ne "false") {
-            printf "WARNING: Invalid value found for reg-tls-verify, defaulting to 'true'\n";
-            $run{'reg-tls-verify'} = "true";
+        if (!$run{'registries'}{'public'}{'repo'} =~ /^(\w+:\/){0,1}([^\/]+\/){0,1}([^\/]+\/){0,1}([^\/]+)$/) {
+            die "The \$run{'registries'}{'public'}{'repo'} does not match the pattern [protocol:][host[:port]][/<project>]/<repo>: " . $run{'registries'}{'public'}{'repo'};
         }
     }
     exists $run{'tools-dir'} || die "[ERROR]You must use " .
@@ -1876,40 +1923,18 @@ sub load_settings_info() {
     }
 
     if ($regisitries_migration_needed) {
-        ($rc, $quay_refresh_expiration_token_file) = get_json_setting("quay.refresh-expiration.token-file", $jsonsettings);
-
+        my $tmp_quay_refresh_expiration;
+        ($rc, $tmp_quay_refresh_expiration) = get_json_setting("quay.refresh-expiration.token-file", $jsonsettings);
         if ($rc == 0) {
             print "load_settings_info(): migrating quay.refresh-expiration.token-file\n";
-            $$registries_settings{'engines'}{'public'}{'quay'}{'refresh-expiration'}{'token-file'} = $quay_refresh_expiration_token_file;
-        }
-    } else {
-        ($rc, $quay_refresh_expiration_token_file) = get_json_setting("engines.public.quay.refresh-expiration.token-file", $registries_settings);
-    }
-    if (defined $quay_refresh_expiration_token_file) {
-        if (open(TOKEN, "<", $quay_refresh_expiration_token_file)) {
-            $quay_refresh_expiration_token = <TOKEN>;
-            chomp($quay_refresh_expiration_token);
-            close TOKEN;
-        } else {
-            printf "load_settings_file(): failed to load token from workshop refresh-expiration token-file\n";
-            exit 1;
+            $$registries_settings{'engines'}{'public'}{'quay'}{'refresh-expiration'}{'token-file'} = $tmp_quay_refresh_expiration;
         }
 
-        printf "load_settings_info(): loaded workshop refresh-expiration token-file: %s\n", $quay_refresh_expiration_token_file;
-    }
-
-    if ($regisitries_migration_needed) {
-        ($rc, $quay_refresh_expiration_api_url) = get_json_setting("quay.refresh-expiration.api-url", $jsonsettings);
-
+        ($rc, $tmp_quay_refresh_expiration) = get_json_setting("quay.refresh-expiration.api-url", $jsonsettings);
         if ($rc == 0) {
             print "load_settings_info(): migrating quay.refresh-expiration.api-url\n";
-            $$registries_settings{'engines'}{'public'}{'quay'}{'refresh-expiration'}{'api-url'} = $quay_refresh_expiration_api_url;
+            $$registries_settings{'engines'}{'public'}{'quay'}{'refresh-expiration'}{'api-url'} = $tmp_quay_refresh_expiration;
         }
-    } else {
-        ($rc, $quay_refresh_expiration_api_url) = get_json_setting("engines.public.quay.refresh-expiration.api-url", $registries_settings);
-    }
-    if (defined $quay_refresh_expiration_api_url) {
-        printf "load_settings_info(): loaded workshop refresh-expiration api-url: %s\n", $quay_refresh_expiration_api_url;
     }
 
     ($rc, $default_tool_userenv) = get_json_setting("userenvs.default.tools", $jsonsettings);
@@ -1921,23 +1946,18 @@ sub load_settings_info() {
     }
 
     if ($regisitries_migration_needed) {
-        ($rc, $quay_image_expiration) = get_json_setting("quay.image-expiration", $jsonsettings);
+        my $tmp_quay_image_expiration;
+        ($rc, $tmp_quay_image_expiration) = get_json_setting("quay.image-expiration", $jsonsettings);
 
         if ($rc == 0) {
             print "load_settings_info(): migrating quay.image-expiration\n";
-            $$registries_settings{'engines'}{'public'}{'quay'}{'expiration-length'} = $quay_image_expiration;
+            $$registries_settings{'engines'}{'public'}{'quay'}{'expiration-length'} = $tmp_quay_image_expiration;
         }
-    } else {
-        ($rc, $quay_image_expiration) = get_json_setting("engines.public.quay.expiration-length", $registries_settings);
-    }
-    if ($rc != 0) {
-        print "load_settings_info(): failed to load quay image-expiration\n";
-        exit 1;
-    } else {
-        printf "load_settings_info(): loaded quay image expiration length: %s\n", $quay_image_expiration;
     }
 
     if ($regisitries_migration_needed) {
+        # perform the registries migration
+
         printf "load_settings_info(): modifying %s\n", $run{'registries-json'};
 
         my $json_coder = JSON::XS->new;
@@ -1987,31 +2007,143 @@ sub load_settings_info() {
         }
     }
 
+    $run{'registries'} = ();
+    $run{'registries'}{'public'} = ();
+
     my $tmp_settings_value;
     ($rc, $tmp_settings_value) = get_json_setting("engines.public.url", $registries_settings);
     if ($rc != 0) {
         print "load_settings_info(): failed to load public engines repo url\n";
         exit 1;
     } else {
-        $run{'reg-repo'} = $tmp_settings_value;
-        printf "load_settings_info(): loaded registry repository: %s\n", $run{'reg-repo'};
+        $run{'registries'}{'public'}{'repo'} = $tmp_settings_value;
+        printf "load_settings_info(): loaded public registry repository: %s\n", $run{'registries'}{'public'}{'repo'};
+    }
+
+    ($rc, $tmp_settings_value) = get_json_setting("engines.private.url", $registries_settings);
+    if ($rc != 0) {
+        print "load_settings_info(): no private engine registry defined\n";
+    } else {
+        $run{'registries'}{'private'} = ();
+        $run{'registries'}{'private'}{'repo'} = $tmp_settings_value;
+        printf "load_settings_info(): loaded private registry repository: %s\n", $run{'registries'}{'private'}{'repo'};
     }
 
     ($rc, $tmp_settings_value) = get_json_setting("engines.public.push-token", $registries_settings);
     if ($rc != 0) {
-        print "load_settings_info(): failed to load public engines push-token\n";
+        print "load_settings_info(): failed to load public engines push token\n";
         exit 1;
     } else {
-        $run{'reg-auth'} = $tmp_settings_value;
-        printf "load_settings_info(): loaded registry authorization token: %s\n", $run{'reg-auth'};
+        $run{'registries'}{'public'}{'push-token'} = $tmp_settings_value;
+        printf "load_settings_info(): loaded public registry push token: %s\n", $run{'registries'}{'public'}{'push-token'};
+    }
+
+    if (exists $run{'registries'}{'private'}) {
+        ($rc, $tmp_settings_value) = get_json_setting("engines.private.tokens.push", $registries_settings);
+        if ($rc != 0) {
+            print "load_settings_info(): failed to load private engines push token\n";
+            exit 1;
+        } else {
+            $run{'registries'}{'private'}{'push-token'} = $tmp_settings_value;
+            printf "load_settings_info(): loaded private registry push token: %s\n", $run{'registries'}{'private'}{'push-token'};
+        }
+
+        ($rc, $tmp_settings_value) = get_json_setting("engines.private.tokens.pull", $registries_settings);
+        if ($rc != 0) {
+            print "load_settings_info(): failed to load private engines pull token\n";
+            exit 1;
+        } else {
+            $run{'registries'}{'private'}{'pull-token'} = $tmp_settings_value;
+            printf "load_settings_info(): loaded private registry pull token: %s\n", $run{'registries'}{'private'}{'pull-token'};
+        }
     }
 
     ($rc, $tmp_settings_value) = get_json_setting("engines.public.tls-verify", $registries_settings);
     if (($rc == 0) && (defined $tmp_settings_value)) {
-        $run{'reg-tls-verify'} = $tmp_settings_value;
-        printf "load_settings_info(): loaded registry tls-verify: %s\n", $run{'reg-tls-verify'};
+        $run{'registries'}{'public'}{'tls-verify'} = $tmp_settings_value;
+        printf "load_settings_info(): loaded public registry tls-verify: %s\n", $run{'registries'}{'public'}{'tls-verify'};
+    } else {
+        $run{'registries'}{'public'}{'tls-verify'} = "true";
     }
 
+    if (exists $run{'registries'}{'private'}) {
+        ($rc, $tmp_settings_value) = get_json_setting("engines.private.tls-verify", $registries_settings);
+        if (($rc == 0) && (defined $tmp_settings_value)) {
+            $run{'registries'}{'private'}{'tls-verify'} = $tmp_settings_value;
+            printf "load_settings_info(): loaded private registry tls-verify: %s\n", $run{'registries'}{'private'}{'tls-verify'};
+        } else {
+            $run{'registries'}{'private'}{'tls-verify'} = "true";
+        }
+    }
+
+    my $default_quay_expiration_length = "2w";
+
+    ($rc, $tmp_settings_value) = get_json_setting("engines.public.quay.expiration-length", $registries_settings);
+    if (($rc == 0) && (defined $tmp_settings_value)) {
+        $run{'registries'}{'public'}{'quay-expiration-length'} = $tmp_settings_value;
+        printf "load_settings_info(): loaded public registry quay expiration length: %s\n", $run{'registries'}{'public'}{'quay-expiration-length'};
+    } else {
+        $run{'registries'}{'public'}{'quay-expiration-length'} = $default_quay_expiration_length;
+    }
+
+    if (exists $run{'registries'}{'private'}) {
+        ($rc, $tmp_settings_value) = get_json_setting("engines.private.quay.expiration-length", $registries_settings);
+        if (($rc == 0) && (defined $tmp_settings_value)) {
+            $run{'registries'}{'private'}{'quay-expiration-length'} = $tmp_settings_value;
+            printf "load_settings_info(): loaded private registry quay expiration length: %s\n", $run{'registries'}{'private'}{'quay-expiration-length'};
+        } else {
+            $run{'registries'}{'private'}{'quay-expiration-length'} = $default_quay_expiration_length;
+        }
+    }
+
+    ($rc, $tmp_settings_value) = get_json_setting("engines.public.quay.refresh-expiration.token-file", $registries_settings);
+    if (($rc == 0) && (defined $tmp_settings_value)) {
+        $run{'registries'}{'public'}{'quay-refresh-expiration-token-file'} = $tmp_settings_value;
+        printf "load_settings_info(): loaded public registry quay refresh expiration token file: %s\n", $run{'registries'}{'public'}{'quay-refresh-expiration-token-file'};
+
+        if (open(TOKEN, "<", $run{'registries'}{'public'}{'quay-refresh-expiration-token-file'})) {
+            $quay_refresh_expiration_tokens{'public'} = <TOKEN>;
+            chomp($quay_refresh_expiration_tokens{'public'});
+            close TOKEN;
+            print "load_settings_file(): loaded public registry quay refresh expiration token\n";
+        } else {
+            printf "load_settings_file(): failed to load public registry quay refresh expiration token!\n";
+            exit 1;
+        }
+    }
+
+    if (exists $run{'registries'}{'private'}) {
+        ($rc, $tmp_settings_value) = get_json_setting("engines.private.quay.refresh-expiration.token-file", $registries_settings);
+        if (($rc == 0) && (defined $tmp_settings_value)) {
+            $run{'registries'}{'private'}{'quay-refresh-expiration-token-file'} = $tmp_settings_value;
+            printf "load_settings_info(): loaded private registry quay refresh expiration token file: %s\n", $run{'registries'}{'private'}{'quay-refresh-expiration-token-file'};
+
+            if (open(TOKEN, "<", $run{'registries'}{'private'}{'quay-refresh-expiration-token-file'})) {
+                $quay_refresh_expiration_tokens{'private'} = <TOKEN>;
+                chomp($quay_refresh_expiration_tokens{'private'});
+                close TOKEN;
+                print "load_settings_file(): loaded private registry quay refresh expiration token\n";
+            } else {
+                printf "load_settings_file(): failed to load private registry quay refresh expiration token!\n";
+                exit 1;
+            }
+        }
+    }
+
+    ($rc, $tmp_settings_value) = get_json_setting("engines.public.quay.refresh-expiration.api-url", $registries_settings);
+    if (($rc == 0) && (defined $tmp_settings_value)) {
+        $run{'registries'}{'public'}{'quay-refresh-expiration-api-url'} = $tmp_settings_value;
+        printf "load_settings_info(): loaded public registry quay refresh expiration api url: %s\n", $run{'registries'}{'public'}{'quay-refresh-expiration-api-url'};
+    }
+
+    if (exists $run{'registries'}{'private'}) {
+        ($rc, $tmp_settings_value) = get_json_setting("engines.private.quay.refresh-expiration.api-url", $registries_settings);
+        if (($rc == 0) && (defined $tmp_settings_value)) {
+            $run{'registries'}{'private'}{'quay-refresh-expiration-api-url'} = $tmp_settings_value;
+            printf "load_settings_info(): loaded private registry quay refresh expiration api url: %s\n", $run{'registries'}{'private'}{'quay-refresh-expiration-api-url'};
+        }
+    }
+    
     printf "Finished loading json settings\n";
 }
 
@@ -3137,10 +3269,6 @@ save_config_info();
 validate_endpoints();
 load_tool_params();
 load_utility_params();
-if ($run{'reg-auth'} eq "") {
-    printf "Disabling registry authorization due to empty 'reg-auth' variable\n";
-    $skip_registry_auth = 1;
-}
 build_test_order();
 prepare_bench_tool_engines();
 $cs_conf_file = $config_dir . "/cs-conf.json";
