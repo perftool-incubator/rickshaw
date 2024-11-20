@@ -46,6 +46,9 @@
       "type": "string",
       "pattern": "^.+$"
     },
+    "external-userenvs-dir": {
+      "type": "string"
+    },
     "max-rb-attempts": {
       "type": "integer"
     },

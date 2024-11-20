@@ -155,6 +155,7 @@ $SIG{'INT'} = sub {
 sub usage {
     print "\nusage:\n\n";
     print "--registries-json       Path to a JSON file containing container registry information\n";
+    print "--external-userenvs-dir Path to look for userenv definitions in that are provided by external sources\n";
     print "--json-validator        Path to json schema validation utility\n";
     print "--engine-dir            Directory where the engine project exists\n";
     print "--workshop-dir          Directory where workshop project exists\n";
@@ -911,7 +912,58 @@ sub source_container_image {
 
     # load the userenv as early as possible so we can determine if it
     # is a public or private image
-    (my $rc, my $userenv_ref) = get_json_file($rickshaw_project_dir . "/userenvs/" . $userenv . ".json");
+
+    # first we need to find where it is -- is it internal (to
+    # rickshaw) or is it provided by an external userenv library.
+    my $userenv_file_path;
+
+    # let's look externally first in case somebody has tried to
+    # override an internal version
+    if (exists $run{'external-userenvs-dir'}) {
+        if (opendir(TOP_USERENV_DIR_DH, $run{'external-userenvs-dir'})) {
+            my @top_userenvs_dir_entries = readdir(TOP_USERENV_DIR_DH);
+            close(TOP_USERENV_DIR_DH);
+
+            foreach my $userenv_dir (@top_userenvs_dir_entries) {
+                if (($userenv_dir eq ".") || ($userenv_dir eq "..")) {
+                    next;
+                }
+                $userenv_dir = $run{'external-userenvs-dir'} . "/" . $userenv_dir;
+                if (-d $userenv_dir) {
+                    if (opendir(BOTTOM_USERENV_DIR_DH, $userenv_dir)) {
+                        my @bottom_userenvs_dir_entries = readdir(BOTTOM_USERENV_DIR_DH);
+                        close(BOTTOM_USERENV_DIR_DH);
+
+                        foreach my $userenv_dir_entry (@bottom_userenvs_dir_entries) {
+                            if (($userenv_dir_entry eq ".") || ($userenv_dir_entry eq "..")) {
+                                next;
+                            }
+                            if ($userenv_dir_entry eq ($userenv . ".json")) {
+                                $userenv_file_path = $userenv_dir . "/" . $userenv_dir_entry;
+                                printf "Found userenv %s in external userenv directory at %s\n", $userenv, $userenv_file_path;
+                            }
+                        }
+                    } else {
+                        die "ERROR: Could not open directory in the external userenvs directory: " . $userenv_dir . "\n";
+                    }
+                }
+            }
+        } else {
+            die "ERROR: Could not open external userenvs directory: " . $run{'external-userenvs-dir'} . "\n";
+        }
+    }
+
+    my $internal_userenv_file_path = $rickshaw_project_dir . "/userenvs/" . $userenv . ".json";
+    if (! defined $userenv_file_path && -e $internal_userenv_file_path) {
+        $userenv_file_path = $internal_userenv_file_path;
+        printf "Found userenv %s in rickshaw directory at %s\n", $userenv, $userenv_file_path;
+    }
+
+    if (! defined $userenv_file_path) {
+        die "ERROR: Could not locate the requested userenv: " . $userenv . "\n";
+    }
+
+    (my $rc, my $userenv_ref) = get_json_file($userenv_file_path);
     if ($rc != 0) {
         die "ERROR: Could not load userenv JSON file for '" . $userenv . "' due to non-zero return code " . $rc . ".  Are you sure this is a supported userenv?\n";
     }
@@ -959,7 +1011,7 @@ sub source_container_image {
         my $req_arg;
         my $skip_update;
         if ($count == 0) {
-            $userenv_arg = " --userenv " . $rickshaw_project_dir . "/userenvs/" . $userenv . ".json";
+            $userenv_arg = " --userenv " . $userenv_file_path;
             $req_arg = "";
             $skip_update = "false";
         } else {
@@ -1572,7 +1624,7 @@ sub process_cmdline() {
         } elsif ($arg =~ /^base-run-dir$|^workshop-dir$|^packrat-dir$|^bench-dir$|^roadblock-dir$|^tools-dir$|^engine-dir$/ or
                  $arg =~ /^run-id$|^id$|^bench-params$|^tool-params$|^bench-params$|^max-rb-attempts$/ or
                  $arg =~ /^test-order$|^tool-group$|^num-samples$|^max-sample-failures$|^name$|^bench-ids$/ or
-                 $arg =~ /^registries-json$/ or
+                 $arg =~ /^registries-json$|^external-userenvs-dir$/ or
                  $arg =~ /^email$|^desc$/) {
             debug_log(sprintf "argument: [%s]\n", $arg);
             $run{$arg} = $val;
