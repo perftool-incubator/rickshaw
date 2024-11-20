@@ -815,7 +815,7 @@ sub build_reqs {
     push (@$req_ref, "--requirement " . $bench_dirs{$benchmark} . "/workshop.json");
 }
 
-sub get_image_urls {
+sub decode_repo_urls {
     my $registry_type = shift;
 
     if (exists $run{'registries'}{$registry_type}{'url-details'}) {
@@ -943,7 +943,6 @@ sub source_container_image {
     " --registries-json=" . $run{'registries-json'} .
     " 2>&1";
 
-    get_image_urls($registry_type);
     printf "Sourcing container image for userenv '%s' (%s) and benchmark/tool '%s'; this may take a few minutes\n", $userenv, $registry_type, $benchmark;
 
     my @requirements;
@@ -2018,6 +2017,7 @@ sub load_settings_info() {
     } else {
         $run{'registries'}{'public'}{'repo'} = $tmp_settings_value;
         printf "load_settings_info(): loaded public registry repository: %s\n", $run{'registries'}{'public'}{'repo'};
+        decode_repo_urls("public");
     }
 
     ($rc, $tmp_settings_value) = get_json_setting("engines.private.url", $registries_settings);
@@ -2027,6 +2027,7 @@ sub load_settings_info() {
         $run{'registries'}{'private'} = ();
         $run{'registries'}{'private'}{'repo'} = $tmp_settings_value;
         printf "load_settings_info(): loaded private registry repository: %s\n", $run{'registries'}{'private'}{'repo'};
+        decode_repo_urls("private");
     }
 
     ($rc, $tmp_settings_value) = get_json_setting("engines.public.push-token", $registries_settings);
