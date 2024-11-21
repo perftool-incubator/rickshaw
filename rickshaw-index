@@ -609,11 +609,14 @@ sub index_metrics {
             my $end = $3;
             my $value = $4;
             my %data = ( 'begin' => $begin, 'end' => $end, 'value' => $value, 'duration' => $end - $begin + 1 );
-            #my %desc = ( 'metric_desc-uuid' => $uuid{$idx} );
             my %desc = ( $metric_id_field => $uuid{$idx} );
             $metr_data_doc{'metric_desc'} = \%desc;
             $metr_data_doc{'metric_data'} = \%data;
-            #print Dumper \%metr_data_doc;
+            # cdmv8 includes a very small verison of the run doc info, just the run-uuid, to make deleting metric_data docs much easier
+            if ($cdm{'ver'} = 'v8dev') {
+                my %micro_run_doc = ($run_id_field => $result{$run_id_field});
+                $metr_data_doc{'run'} = \%micro_run_doc;
+            }
             my $metr_data_doc_json = $coder->encode(\%metr_data_doc);
             $ndjson .= sprintf "%s\n", '{ "index": {} }';
             $ndjson .= sprintf "%s\n", $metr_data_doc_json;
