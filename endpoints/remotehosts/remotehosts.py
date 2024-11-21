@@ -240,7 +240,7 @@ def init_settings():
     settings["misc"]["image-map"] = dict()
     images = args.images.split(",")
     for image in images:
-        image_split = image.split("::")
+        image_split = image.split("::", maxsplit=1)
         settings["misc"]["image-map"][image_split[0]] = image_split[1]
 
     log_settings(mode = "misc")
@@ -725,19 +725,34 @@ def image_pull_worker_thread(thread_id, work_queue, threads_rcs):
         thread_logger(thread_name, "Remote user is %s" % (my_run_file_remote["config"]["settings"]["remote-user"]), remote_name = remote)
 
         with endpoints.remote_connection(remote, my_run_file_remote["config"]["settings"]["remote-user"]) as c:
-            for image in my_unique_remote["images"]:
-                result = endpoints.run_remote(c, "podman pull " + image)
+            for image_info in my_unique_remote["images"]:
+                auth_arg = ""
+                remote_auth_file = settings["dirs"]["remote"]["run"] + "/pull-token.json"
+                if "pull-token" in image_info:
+                    thread_logger(thread_name, "Image %s requires pull token %s" % (image_info["image"], image_info["pull-token"]), remote_name = remote)
+                    result = c.put(image_info["pull-token"], remote_auth_file)
+                    thread_logger(thread_name, "Copied %s to %s:%s" % (image_info["pull-token"], remote, remote_auth_file), remote_name = remote)
+                    auth_arg = "--authfile=" + remote_auth_file
+
+                result = endpoints.run_remote(c, "podman pull " + auth_arg + " " + image_info["image"])
                 loglevel = "info"
                 if result.exited != 0:
                     loglevel = "error"
-                thread_logger(thread_name, "Attempted to pull %s with return code %d:\nstdout:\n%sstderr:\n%s" % (image, result.exited, result.stdout, result.stderr), log_level = loglevel, remote_name = remote)
+                thread_logger(thread_name, "Attempted to pull %s with return code %d:\nstdout:\n%sstderr:\n%s" % (image_info["image"], result.exited, result.stdout, result.stderr), log_level = loglevel, remote_name = remote)
                 rc += result.exited
 
-                result = endpoints.run_remote(c, "echo '" + image + " " + str(int(time.time())) + " " + args.run_id + "' >> " + settings["dirs"]["remote"]["base"] + "/remotehosts-container-image-census")
+                if "pull-token" in image_info:
+                    result = endpoints.run_remote(c, "rm -v " + remote_auth_file)
+                    log_level = "info"
+                    if result.exited != 0:
+                        loglevel = "error"
+                    thread_logger(thread_name, "Attempted to remove %s with return code %d:\nstdout:\n%sstderr:\n%s" % (remote_auth_file, result.exited, result.stdout, result.stderr), log_level = loglevel, remote_name = remote)
+
+                result = endpoints.run_remote(c, "echo '" + image_info["image"] + " " + str(int(time.time())) + " " + args.run_id + "' >> " + settings["dirs"]["remote"]["base"] + "/remotehosts-container-image-census")
                 loglevel = "info"
                 if result.exited != 0:
                     loglevel = "error"
-                thread_logger(thread_name, "Recorded usage for %s in the census with return code %d:\nstdout:\n%sstderr:\n%s" % (image, result.exited, result.stdout, result.stderr), log_level = loglevel, remote_name = remote)
+                thread_logger(thread_name, "Recorded usage for %s in the census with return code %d:\nstdout:\n%sstderr:\n%s" % (image_info["image"], result.exited, result.stdout, result.stderr), log_level = loglevel, remote_name = remote)
                 rc += result.exited
 
         thread_logger(thread_name, "Notifying work queue that job processing is complete", remote_name = remote)
@@ -894,8 +909,8 @@ def remotes_pull_images():
     """
     log.info("Determining which images to pull to which remotes")
     for remote in settings["engines"]["remotes"].keys():
-        if not "images" in settings["engines"]["remotes"][remote]:
-            settings["engines"]["remotes"][remote]["images"] = []
+        if not "raw-images" in settings["engines"]["remotes"][remote]:
+            settings["engines"]["remotes"][remote]["raw-images"] = []
 
         for role in settings["engines"]["remotes"][remote]["roles"].keys():
             for id in settings["engines"]["remotes"][remote]["roles"][role]["ids"]:
@@ -903,9 +918,18 @@ def remotes_pull_images():
                 if image is None:
                     log.error("Could not find image for remote %s with role %s and id %d" % (remote, role, str(id)))
                 else:
-                    settings["engines"]["remotes"][remote]["images"].append(image)
+                    settings["engines"]["remotes"][remote]["raw-images"].append(image)
 
-        settings["engines"]["remotes"][remote]["images"] = list(set(settings["engines"]["remotes"][remote]["images"]))
+        settings["engines"]["remotes"][remote]["raw-images"] = list(set(settings["engines"]["remotes"][remote]["raw-images"]))
+        settings["engines"]["remotes"][remote]["images"] = []
+        for image in settings["engines"]["remotes"][remote]["raw-images"]:
+            image_info = dict()
+            image_split = image.split("::")
+            image_info["image"] = image_split[0]
+            if len(image_split) > 1:
+                log.info("Found image %s with pull token %s" % (image_split[0], image_split[1]))
+                image_info["pull-token"] = image_split[1]
+            settings["engines"]["remotes"][remote]["images"].append(image_info)
 
     log_settings(mode = "engines")
 
@@ -1434,6 +1458,8 @@ def launch_engines_worker_thread(thread_id, work_queue, threads_rcs):
                         thread_logger(thread_name, "Could not determine image", log_level = "error", remote_name = remote_name, engine_name = engine_name)
                         continue
                     else:
+                        image_split = image.split("::")
+                        image = image_split[0]
                         thread_logger(thread_name, "Image is '%s'" % (image), remote_name = remote_name, engine_name = engine_name)
 
                     osruntime = None

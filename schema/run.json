@@ -42,13 +42,12 @@
       "type": "string",
       "pattern": "^.+$"
     },
-    "dest-image-url": {
-      "type": "string",
-      "pattern": "^.+$"
-    },
     "engine-dir": {
       "type": "string",
       "pattern": "^.+$"
+    },
+    "external-userenvs-dir": {
+      "type": "string"
     },
     "max-rb-attempts": {
       "type": "integer"
@@ -63,44 +62,22 @@
       "type": "string",
       "pattern": "^.+$"
     },
+    "registries": {
+      "type": "object",
+      "properties": {
+        "private": {
+          "$ref": "#/definitions/registry-properties"
+        },
+        "public": {
+          "$ref": "#/definitions/registry-properties"
+        }
+      },
+      "additionalProperties": false
+    },
     "registries-json": {
       "type": "string"
     },
-    "reg-auth": {
-      "type": "string",
-      "pattern": "^.+$"
-    },
-    "reg-host": {
-      "type": "string",
-      "pattern": "^.+$"
-    },
-    "reg-host-port": {
-      "type": "string"
-    },
-    "reg-label": {
-      "type": "string",
-      "pattern": "^.+$"
-    },
-    "reg-proj": {
-      "type": "string",
-      "pattern": "^.+$"
-    },
-    "reg-proto": {
-      "type": "string"
-    },
-    "reg-repo": {
-      "type": "string",
-      "pattern": "^.+$"
-    },
-    "reg-tls-verify": {
-      "type": "string",
-      "pattern": "^.+$"
-    },
     "roadblock-dir": {
-      "type": "string",
-      "pattern": "^.+$"
-    },
-    "source-image-url": {
       "type": "string",
       "pattern": "^.+$"
     },
@@ -264,5 +241,73 @@
     "benchmark",
     "rickshaw-run"
   ],
-  "additionalProperties": false
+  "additionalProperties": false,
+  "definitions": {
+    "registry-properties": {
+      "type": "object",
+      "properties": {
+        "pull-token": {
+          "type": "string"
+        },
+        "push-token": {
+          "type": "string"
+        },
+        "quay-expiration-length": {
+          "type": "string"
+        },
+        "quay-refresh-expiration-api-url": {
+          "type": "string"
+        },
+        "quay-refresh-expiration-token-file": {
+          "type": "string"
+        },
+        "repo": {
+          "type": "string"
+        },
+        "tls-verify": {
+          "type": "string",
+          "enum": [
+            "false",
+            "true"
+          ]
+        },
+        "url-details": {
+          "type": "object",
+          "properties": {
+            "dest-image-url": {
+              "type": "string"
+            },
+            "host": {
+              "type": "string"
+            },
+            "host-port": {
+              "type": "string"
+            },
+            "label": {
+              "type": "string"
+            },
+            "project": {
+              "type": "string"
+            },
+            "protocol": {
+              "type": "string"
+            },
+            "source-image-url": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "protocol"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "push-token",
+        "repo",
+        "url-details"
+      ]
+    }
+  }
 }
