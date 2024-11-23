@@ -459,7 +459,7 @@ sub index_metrics {
 
     my $dir =  pushd($metr_dir);
     my %eng_env_vars;
-    if ($cdm{'ver'} eq 'v7dev') {
+    if ($cdm{'ver'} eq 'v7dev' or $cdm{'ver'} eq 'v8dev') {
         # engine-type and engine-id replace cstype and csid, but cstype/id to be removed later
         $eng_env_vars{'engine-type'} = $cstype;
         $eng_env_vars{'engine-id'} = $csid;
@@ -912,15 +912,15 @@ if (exists $result{'run-id'} and defined $result{'run-id'}) {
 
 add_persistent_uuid(\%result, "run", \$update_run_json);
 
-printf "run-uuid: %s\n", $result{$run_id_field};
+printf "%s: %s\n", $run_id_field, $result{$run_id_field};
 
 my $host = `hostname`;
 chomp $host;
 $result{'source'} = $host . "/" . $base_run_dir;
-printf "Run ID: %s\n", $result{'id'};
+printf "Run ID: %s\n", $result{$run_id_field};
 
 if (indexed_doc_count("run") > 0) {
-    printf "Run ID %s already exists, so will not POST to OpenSearch\n", $result{'id'};
+    printf "Run ID %s already exists, so will not POST to OpenSearch\n", $result{$run_id_field};
     print "Either delete existing run from OpenSearch or regenerate rickshaw-result.json\n";
     exit 1;
 }
