@@ -42,6 +42,9 @@
       "type": "string",
       "pattern": "^.+$"
     },
+    "dest-image-url": {
+      "type": "string"
+    },
     "engine-dir": {
       "type": "string",
       "pattern": "^.+$"
@@ -62,6 +65,30 @@
       "type": "string",
       "pattern": "^.+$"
     },
+    "reg-auth": {
+      "type": "string"
+    },
+    "reg-host": {
+      "type": "string"
+    },
+    "reg-host-port": {
+      "type": "string"
+    },
+    "reg-label": {
+      "type": "string"
+    },
+    "reg-proj": {
+      "type": "string"
+    },
+    "reg-proto": {
+       "type": "string"
+    },
+    "reg-repo": {
+      "type": "string"
+    },
+    "reg-tls-verify": {
+      "type": "string"
+    },
     "registries": {
       "type": "object",
       "properties": {
@@ -80,6 +107,9 @@
     "roadblock-dir": {
       "type": "string",
       "pattern": "^.+$"
+    },
+    "source-image-url": {
+      "type": "string"
     },
     "tool-group": {
       "type": "string",
