@@ -78,6 +78,7 @@
                 "enum": [
                   "osp",
                   "remotehost",
+                  "remotehosts",
                   "k8s"
                 ]
               },
@@ -114,6 +115,7 @@
                 "enum": [
                   "osp",
                   "remotehost",
+                  "remotehosts",
                   "k8s"
                 ]
               },
