@@ -2946,20 +2946,6 @@ sub deploy_endpoints() {
         if (defined $run{'bench-ids'}) {
             $bench_ids_opt = " --bench-ids=$run{'bench-ids'}";
         }
-        if ($type eq "remotehost") {
-            # Get the host so we can detect multiple endpoints with the same host and enable tools on only the first one
-            # example opts: host:remote_host1,user:root,client:1,osruntime:podman,userenv:userenv1
-            foreach my $opt (split(",", $opts)) {
-                if ($opt =~ /^host:(.*)$/) {
-                    if (exists $remote_hosts{$1}) {
-                        # This host has already been used, disable tools for the next remotehost command
-                        $opts .= ",disable-tools:1"
-                    } else {
-                        $remote_hosts{$1} = 1;
-                    }
-                }
-            }
-        }
 
         my $this_endpoint_run_dir = $base_endpoint_run_dir . "/" . $label;
         mkdir($this_endpoint_run_dir);

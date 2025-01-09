@@ -115,22 +115,22 @@
                 }
             ]
         },
-        {
-            "type": "remotehost",
-            "host": "ENDPOINT_HOST",
-            "user": "ENDPOINT_USER",
-            "server": 0,
-            "client": "1+5",
-            "config": [
-                {
-                    "targets": [
-                        { "role": "client", "ids": "1+5" }
-                    ],
-                    "settings": {
-                    }
-                }
-            ]
-        }
+	{
+	    "type": "remotehosts",
+	    "settings": {
+		"user": "ENDPOINT_USER"
+	    },
+	    "remotes": [
+		{
+		    "engines": [
+			{ "role": "client", "ids": [ 1, 5 ] }
+		    ],
+		    "config": {
+			"host": "ENDPOINT_HOST"
+		    }
+		}
+	    ]
+	}
     ],
     "run-params": {
 	"num-samples": 1,

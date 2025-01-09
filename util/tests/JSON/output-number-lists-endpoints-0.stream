@@ -1,1 +1,1 @@
-remotehost,host:ENDPOINT_HOST_1,user:root,userenv:rhubi9,server:1-10+31-40,client:11-20+21-29+30,profiler:1,osruntime:server-1-10+31-40:chroot,osruntime:profiler-1:chroot,osruntime:client-11-20+21-29+30:podman
+k8s,controller-ip:K8S_CONTROLLER_IP,host:K8S_ENDPOINT_HOST_1,user:K8S_ENDPOINT_USER_1,userenv:rhubi9,unique-project:1,kubeconfig:0,server:1-10+31-40,client:11-20+21-29+30
