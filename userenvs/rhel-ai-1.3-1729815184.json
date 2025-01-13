@@ -1,0 +1,97 @@
+{
+  "workshop": {
+    "schema": {
+      "version": "2023.02.16"
+    }
+  },
+  "userenv": {
+    "name": "rhel-ai-1.3-1729815184",
+    "label": "RHEL AI",
+    "origin": {
+      "image": "images.paas.redhat.com/crucible/tmp-userenvs",
+      "tag": "instructlab-nvidia-rhel9-1.3-1729815184",
+      "build-policy": "ifnewer"
+    },
+    "properties": {
+      "platform": [
+        {
+          "architecture": "x86_64"
+        },
+        {
+          "architecture": "aarch64"
+        }
+      ],
+      "packages": {
+        "type": "rpm",
+        "manager": "dnf"
+      }
+    }
+  },
+  "requirements": [
+    {
+      "name": "python3",
+      "type": "distro",
+      "distro_info": {
+        "packages": [
+          "python3",
+          "python3-pip",
+          "python3-devel"
+        ]
+      }
+    },
+    {
+      "name": "utils",
+      "type": "distro",
+      "distro_info": {
+        "packages": [
+          "bc",
+          "curl",
+          "tar",
+          "cpio",
+          "gzip",
+          "jq",
+          "git",
+          "cpio",
+          "findutils",
+          "hostname",
+          "iputils",
+          "iproute",
+          "elfutils-libelf",
+          "openssl",
+          "xz",
+          "libcap",
+          "libzstd",
+          "numactl"
+        ]
+      }
+    },
+    {
+      "name": "core-compiling",
+      "type": "distro",
+      "distro_info": {
+        "packages": [
+          "diffutils",
+          "gcc",
+          "libtool",
+          "autoconf",
+          "automake",
+          "make",
+          "clang",
+          "libbabeltrace",
+          "openssl-devel",
+          "xz-devel",
+          "libcap-devel"
+        ]
+      }
+    },
+    {
+      "name": "core-node",
+      "type": "distro",
+      "distro_info": {
+        "packages": [
+          "nodejs"
+        ]
+      }
+    }
+  ]
+}
