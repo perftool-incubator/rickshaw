@@ -63,25 +63,28 @@
     "tool-params": [],
     "endpoints": [
 	{
-	    "type": "remotehost",
-	    "host": "ENDPOINT_HOST_1",
-	    "user": "root",
+	    "type": "k8s",
+	    "controller-ip": "K8S_CONTROLLER_IP",
+	    "host": "K8S_ENDPOINT_HOST_1",
+	    "user": "K8S_ENDPOINT_USER_1",
 	    "userenv": "rhubi9",
+	    "unique-project": 1,
+	    "kubeconfig": 0,
 	    "server": "1-10+31-40",
 	    "client": [
 		"11-20",
 		"21-29",
 		30
 	    ],
-	    "profiler": 1,
 	    "config": [
 		{
 		    "targets": [
-			{ "role": "server", "ids": "1-10+31-40" },
-			{ "role": "profiler", "ids": 1 }
+			{ "role": "server", "ids": "1-10+31-40" }
 		    ],
 		    "settings": {
-			"osruntime": "chroot"
+			"nodeSelector": {
+                            "kubernetes.io/hostname": "worker-001"
+                        }
 		    }
 		},
 		{
@@ -89,31 +92,36 @@
 			{ "role": "client", "ids": [ "11-20", "21-29", 30 ] }
 		    ],
 		    "settings": {
-			"osruntime": "podman"
+			"nodeSelector": {
+                            "kubernetes.io/hostname": "worker-002"
+                        }
 		    }
 		}
 	    ]
 	},
 	{
-	    "type": "remotehost",
-	    "host": "ENDPOINT_HOST_2",
-	    "user": "root",
-	    "userenv": "rhubi8",
+	    "type": "k8s",
+	    "controller-ip": "K8S_CONTROLLER_IP",
+	    "host": "K8S_ENDPOINT_HOST_2",
+	    "user": "K8S_ENDPOINT_USER_2",
+	    "userenv": "rhubi9",
+	    "unique-project": 1,
+	    "kubeconfig": 0,
 	    "server": [
 		11,
 		"12-20",
 		"21-30"
 	    ],
 	    "client": "1-10+31-40",
-	    "profiler": 2,
 	    "config": [
 		{
 		    "targets": [
-			{ "role": "server", "ids": [ 11, "12-20", "21-30" ] },
-			{ "role": "profiler", "ids": 2 }
+			{ "role": "server", "ids": [ 11, "12-20", "21-30" ] }
 		    ],
 		    "settings": {
-			"osruntime": "chroot"
+			"nodeSelector": {
+                            "kubernetes.io/hostname": "worker-003"
+                        }
 		    }
 		},
 		{
@@ -121,7 +129,9 @@
 			{ "role": "client", "ids": "1-10+31-40" }
 		    ],
 		    "settings": {
-			"osruntime": "podman"
+			"nodeSelector": {
+                            "kubernetes.io/hostname": "worker-004"
+                        }
 		    }
 		}
 	    ]

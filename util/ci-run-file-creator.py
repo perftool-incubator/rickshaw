@@ -58,7 +58,7 @@ def process_options():
                         dest = "endpoint",
                         help = "The endpoint to return a run-file for",
                         required = True,
-                        choices = [ "k8s", "remotehost", "remotehosts" ],
+                        choices = [ "k8s", "remotehosts" ],
                         type = str)
 
     parser.add_argument("--endpoint-sub-type",
@@ -159,7 +159,7 @@ def update_endpoint_sub_type():
     run_file["tags"]["endpoint-sub-type"] = args.endpoint_sub_type
 
     match args.endpoint:
-        case "remotehost"|"remotehosts":
+        case "remotehosts":
             if args.endpoint_sub_type != "NONE":
                 msg = "%s endpoint expected sub-type of 'NONE' (not '%s')" % (args.endpoint, args.endpoint_sub_type)
                 log.error(msg)
@@ -207,7 +207,7 @@ def update_userenvs():
     run_file["tags"]["userenv"] = args.userenv
 
     match args.endpoint:
-        case "k8s"|"remotehost":
+        case "k8s":
             for endpoint_idx,endpoint in enumerate(run_file["endpoints"]):
                 if "userenv" in endpoint:
                     if args.userenv == "default":
@@ -276,7 +276,7 @@ def update_controller_ip():
     run_file["tags"]["controller-ip"] = args.controller_ip
 
     match args.endpoint:
-        case "k8s"|"remotehost":
+        case "k8s":
             for endpoint_idx,endpoint in enumerate(run_file["endpoints"]):
                 if "controller-ip" in endpoint:
                     log.info("Updating existing %s controller-ip for endpoint %d" % (args.endpoint, endpoint_idx))
@@ -326,7 +326,7 @@ def update_host():
     run_file["tags"]["host"] = args.host
 
     match args.endpoint:
-        case "k8s"|"remotehost":
+        case "k8s":
             for endpoint_idx,endpoint in enumerate(run_file["endpoints"]):
                 if "host" in endpoint:
                     log.info("Updating existing %s host for endpoint %d" % (args.endpoint, endpoint_idx))
@@ -367,7 +367,7 @@ def update_user():
     run_file["tags"]["user"] = args.user
 
     match args.endpoint:
-        case "k8s"|"remotehost":
+        case "k8s":
             for endpoint_idx,endpoint in enumerate(run_file["endpoints"]):
                 if "user" in endpoint:
                     log.info("Updating existing %s user for endpoint %d" % (args.endpoint, endpoint_idx))
