@@ -148,6 +148,9 @@
                             "type": "string",
                             "minLength": 1
                         },
+			"pids-limit": {
+			    "type": "integer"
+			},
                         "shm-size": {
                             "type": "string",
                             "minLength": 1
