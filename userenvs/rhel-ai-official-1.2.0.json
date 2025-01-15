@@ -5,12 +5,13 @@
     }
   },
   "userenv": {
-    "name": "rhel-ai",
-    "label": "RHEL AI",
+    "name": "rhel-ai-official-1.2.0",
+    "label": "RHEL AI Official 1.2.0",
     "origin": {
-      "image": "quay.io/kvalin/instructlab-training",
-      "tag": "latest-jul10",
-      "build-policy": "ifnewer"
+      "image": "registry.redhat.io/rhelai1/instructlab-nvidia-rhel9",
+      "tag": "1.2.0",
+      "build-policy": "ifnewer",
+      "requires-pull-token": "true"
     },
     "properties": {
       "platform": [
@@ -60,7 +61,27 @@
           "xz",
           "libcap",
           "libzstd",
-          "numactl"
+          "numactl",
+          "bc"
+        ]
+      }
+    },
+    {
+      "name": "core-compiling",
+      "type": "distro",
+      "distro_info": {
+        "packages": [
+          "diffutils",
+          "gcc",
+          "libtool",
+          "autoconf",
+          "automake",
+          "make",
+          "clang",
+          "libbabeltrace",
+          "openssl-devel",
+          "xz-devel",
+          "libcap-devel"
         ]
       }
     },
