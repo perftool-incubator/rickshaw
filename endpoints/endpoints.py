@@ -571,8 +571,8 @@ def do_roadblock(roadblock_id = None, label = None, timeout = None, messages = N
         log.info("[%s] Going to run this wait-for command: %s" % (label, wait_For))
         log.info("[%s] Going to log wait-for to this file: %s" % (label, wait_for_log))
 
-    if not abort is None:
-        log.info("[%s] Going to send an abort")
+    if not abort is None and not abort is False:
+        log.info("[%s] Going to send an abort" % (label))
 
     msgs_log_file = msgs_dir + "/" + label + ".json"
     log.info("[%s] Logging messages to: %s" % (label, msgs_log_file))
@@ -876,7 +876,7 @@ def setup_logger(log_level):
 
     return logging.getLogger(__file__)
 
-def process_roadblocks(callbacks = None, roadblock_id = None, endpoint_label = None, endpoint_deploy_timeout = None, max_roadblock_attempts = None, roadblock_password = None, new_followers = None, roadblock_messages_dir = None, roadblock_timeouts = None, max_sample_failures = None, engine_commands_dir = None, endpoint_dir = None):
+def process_roadblocks(callbacks = None, roadblock_id = None, endpoint_label = None, endpoint_deploy_timeout = None, max_roadblock_attempts = None, roadblock_password = None, new_followers = None, roadblock_messages_dir = None, roadblock_timeouts = None, max_sample_failures = None, engine_commands_dir = None, endpoint_dir = None, early_abort = False):
     """
     Process the beginning and ending roadblocks associated with synchronizing a test
 
@@ -898,6 +898,7 @@ def process_roadblocks(callbacks = None, roadblock_id = None, endpoint_label = N
         max_sample_failures (int): The maximum number of times a sample can fail before the iteration is considered a failure
         engine_commands_dir (str): Directory where the engine commands can be found
         endpoint_dir (str): The base endpoint directory for storing endpoint specific information
+        early_abort (bool): Abort the run as early as possible due to an error early in initialization
 
     Globals:
         None
@@ -933,7 +934,8 @@ def process_roadblocks(callbacks = None, roadblock_id = None, endpoint_label = N
                       timeout = endpoint_deploy_timeout,
                       max_attempts = max_roadblock_attempts,
                       redis_password = roadblock_password,
-                      msgs_dir = roadblock_messages_dir)
+                      msgs_dir = roadblock_messages_dir,
+                      abort = early_abort)
     if rc != 0:
         return rc
 

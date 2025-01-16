@@ -846,7 +846,7 @@ def create_thread_pool(description, acronym, work, worker_threads_count, worker_
         endpoint_defaults (dict): the endpoint defaults
 
     Returns:
-        None
+        rc (int): an aggregated return code value from all the launched worker threads
     """
     thread_logger("MAIN", "Creating thread pool")
     thread_logger("MAIN", "Thread pool description: %s" % (description))
@@ -891,7 +891,12 @@ def create_thread_pool(description, acronym, work, worker_threads_count, worker_
 
     thread_logger("MAIN", "Return codes for each %s:\n%s" % (acronym, endpoints.dump_json(worker_threads_rcs)))
 
-    return
+    rc = 0
+    for thread_rc in worker_threads_rcs:
+        rc += thread_rc
+    thread_logger("MAIN", "Aggregate return code for %s: %d" % (acronym, rc))
+
+    return rc
 
 def remotes_pull_images():
     """
@@ -905,7 +910,7 @@ def remotes_pull_images():
         settings (dict): the one data structure to rule then all
 
     Returns:
-        0
+        rc (int): defines if the image pull was successfull (0) or not (!=0)
     """
     log.info("Determining which images to pull to which remotes")
     for remote in settings["engines"]["remotes"].keys():
@@ -938,9 +943,9 @@ def remotes_pull_images():
         image_pull_work.put(remote)
     worker_threads_count = len(settings["engines"]["remotes"])
 
-    create_thread_pool("Image Pull Worker Threads", "IPWT", image_pull_work, worker_threads_count, image_pull_worker_thread)
+    rc = create_thread_pool("Image Pull Worker Threads", "IPWT", image_pull_work, worker_threads_count, image_pull_worker_thread)
 
-    return 0
+    return rc
 
 def remote_mkdirs_worker_thread(thread_id, work_queue, threads_rcs):
     """
@@ -2595,6 +2600,7 @@ def main():
     global args
     global log
     global settings
+    early_abort = False
 
     threading.excepthook = thread_exception_hook
 
@@ -2614,9 +2620,13 @@ def main():
         return 1
     create_local_dirs()
     create_remote_dirs()
-    remotes_pull_images()
-    set_total_cpu_partitions()
-    launch_engines()
+    remote_image_pull_rc = remotes_pull_images()
+    if remote_image_pull_rc == 0:
+        set_total_cpu_partitions()
+        launch_engines()
+    else:
+        log.error("Skipping engine launch and signaling for job exit/abort due to fatal error during image pull");
+        early_abort = True
 
     remotehosts_callbacks = {
         "engine-init": engine_init,
@@ -2636,7 +2646,8 @@ def main():
                                       roadblock_timeouts = settings["rickshaw"]["roadblock"]["timeouts"],
                                       max_sample_failures = args.max_sample_failures,
                                       engine_commands_dir = settings["dirs"]["local"]["engine-cmds"],
-                                      endpoint_dir = settings["dirs"]["local"]["endpoint"])
+                                      endpoint_dir = settings["dirs"]["local"]["endpoint"],
+                                      early_abort = early_abort)
 
     log.info("Logging 'final' settings data structure")
     log_settings(mode = "settings")
