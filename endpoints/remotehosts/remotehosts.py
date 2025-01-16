@@ -1139,6 +1139,9 @@ def create_podman(thread_name, remote_name, engine_name, container_name, connect
     else:
         create_cmd.append("--ipc=host") # only works when not using shm
 
+    if "pids-limit" in podman_settings:
+        create_cmd.append("--pids-limit " + podman_settings["pids-limit"])
+
     for mount in mandatory_mounts + host_mounts:
         if not "dest" in mount:
             mount["dest"] = mount["src"]
