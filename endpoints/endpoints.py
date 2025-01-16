@@ -571,8 +571,8 @@ def do_roadblock(roadblock_id = None, label = None, timeout = None, messages = N
         log.info("[%s] Going to run this wait-for command: %s" % (label, wait_For))
         log.info("[%s] Going to log wait-for to this file: %s" % (label, wait_for_log))
 
-    if not abort is None:
-        log.info("[%s] Going to send an abort")
+    if not abort is None and not abort is False:
+        log.info("[%s] Going to send an abort" % (label))
 
     msgs_log_file = msgs_dir + "/" + label + ".json"
     log.info("[%s] Logging messages to: %s" % (label, msgs_log_file))
