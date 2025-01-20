@@ -45,7 +45,6 @@ def process_options():
                         dest = "benchmark",
                         help = "The benchmark to return a run-file for",
                         required = True,
-                        choices = [ "cyclictest", "fio", "iperf", "multi", "oslat", "uperf" ],
                         type = str)
 
     parser.add_argument("--controller-ip",
