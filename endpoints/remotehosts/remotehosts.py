@@ -1137,7 +1137,11 @@ def create_podman(thread_name, remote_name, engine_name, container_name, connect
                    "--security-opt=label=disable" ]
 
     if "device" in podman_settings:
-        create_cmd.append("--device " + podman_settings["device"])
+        if isinstance(podman_settings["device"], list):
+            for podman_device in podman_settings["device"]:
+                create_cmd.append("--device " + podman_device)
+        else:
+            create_cmd.append("--device " + podman_settings["device"])
 
     if "shm-size" in podman_settings:
         create_cmd.append("--shm-size " + podman_settings["shm-size"])
