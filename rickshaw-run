@@ -1013,7 +1013,11 @@ sub source_container_image {
         if ($count == 0) {
             $userenv_arg = " --userenv " . $userenv_file_path;
             $req_arg = "";
-            $skip_update = "false";
+            if (exists $$userenv_ref{'userenv'}{'origin'}{'update-policy'} and $$userenv_ref{'userenv'}{'origin'}{'update-policy'} eq 'never') {
+                $skip_update = "true";
+            } else {
+                $skip_update = "false";
+            }
         } else {
             $req_arg = shift(@requirements);
             $skip_update = "true";
