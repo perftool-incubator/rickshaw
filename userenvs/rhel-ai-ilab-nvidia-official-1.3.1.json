@@ -5,12 +5,13 @@
     }
   },
   "userenv": {
-    "name": "rhel-ai-official-1.3.1",
-    "label": "RHEL AI Official 1.3.1",
+    "name": "rhel-ai-ilab-official-1.3.1",
+    "label": "RHEL AI Instructlab Official 1.3.1",
     "origin": {
       "image": "registry.redhat.io/rhelai1/instructlab-nvidia-rhel9",
       "tag": "1.3.1",
       "build-policy": "ifnewer",
+      "update-policy": "never",
       "requires-pull-token": "true"
     },
     "properties": {

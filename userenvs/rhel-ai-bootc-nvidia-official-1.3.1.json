@@ -5,12 +5,14 @@
     }
   },
   "userenv": {
-    "name": "rhel-ai-1.3-1729815184",
-    "label": "RHEL AI",
+    "name": "rhel-ai-bootc-official-rhel9-1.3.1",
+    "label": "RHEL AI BaseOS official 1.3.1",
     "origin": {
-      "image": "images.paas.redhat.com/crucible/tmp-userenvs",
-      "tag": "instructlab-nvidia-rhel9-1.3-1729815184",
-      "build-policy": "ifnewer"
+      "image": "registry.redhat.io/rhelai1/bootc-nvidia-rhel9",
+      "tag": "1.3.1",
+      "build-policy": "ifnewer",
+      "update-policy": "never",
+      "requires-pull-token": "true"
     },
     "properties": {
       "platform": [
@@ -29,6 +31,13 @@
   },
   "requirements": [
     {
+          "name": "rm-rhel-ai-repo",
+        "type": "manual",
+      "manual_info": {
+        "commands": [ "/bin/rm -f /etc/yum.repos.d/rhelai.repo" ]
+      }
+    },
+    {
       "name": "python3",
       "type": "distro",
       "distro_info": {
@@ -44,7 +53,6 @@
       "type": "distro",
       "distro_info": {
         "packages": [
-          "bc",
           "curl",
           "tar",
           "cpio",
@@ -61,7 +69,8 @@
           "xz",
           "libcap",
           "libzstd",
-          "numactl"
+          "numactl",
+          "bc"
         ]
       }
     },

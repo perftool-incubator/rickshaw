@@ -1,7 +1,10 @@
 stream8-flexran
-rhel-ai-official-1.1.0
-rhel-ai-official-1.2.0
-rhel-ai-official-1.3.0
-rhel-ai-official-1.3.1
-rhel-ai-1.3-1729815184
-rhel-ai-stage-1.4-1736428410
+rhel-ai-bootc-nvidia-official-1.3.1
+rhel-ai-bootc-nvidia-stage-1.4
+rhel-ai-ilab-amd-1.4-1738249294
+rhel-ai-ilab-nvidia-official-1.2.0
+rhel-ai-ilab-nvidia-official-1.3.0
+rhel-ai-ilab-nvidia-official-1.3.1
+rhel-ai-ilab-nvidia-stage-1.3.2-1735032759
+rhel-ai-ilab-nvidia-stage-1.4-1736428410
+rhel-ai-ilab-nvidia-stage-1.4-1738138775
