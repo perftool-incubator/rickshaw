@@ -31,6 +31,13 @@
   },
   "requirements": [
     {
+      "name": "rm-rhel-ai-repo",
+      "type": "manual",
+      "manual_info": {
+        "commands": [ "/bin/rm -f /etc/yum.repos.d/rhelai.repo" ]
+      }
+    },
+    {
       "name": "python3",
       "type": "distro",
       "distro_info": {
