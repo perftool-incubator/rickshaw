@@ -5,12 +5,13 @@
     }
   },
   "userenv": {
-    "name": "rhel-ai-official-1.1.0",
-    "label": "RHEL AI Official 1.1.0",
+    "name": "rhel-ai-bootc-stage-rhel9-1.4",
+    "label": "RHEL AI BootC stage 1.4",
     "origin": {
-      "image": "registry.redhat.io/rhelai1/instructlab-nvidia-rhel9",
-      "tag": "1.1.0",
+      "image": "registry.stage.redhat.io/rhelai1/bootc-nvidia-rhel9",
+      "tag": "1.4",
       "build-policy": "ifnewer",
+      "update-policy": "never",
       "requires-pull-token": "true"
     },
     "properties": {
