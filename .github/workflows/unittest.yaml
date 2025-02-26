@@ -6,6 +6,7 @@ on:
     paths-ignore:
       - LICENSE
       - '**.md'
+      - '.github/rulesets/**'
       - .github/workflows/run-crucible-tracking.yaml
       - .github/workflows/crucible-merged.yaml
       - .github/workflows/faux-unittest.yaml
@@ -13,6 +14,7 @@ on:
       - 'docs/**'
       - engine/engine-script-library.py
       - engine/engine-script.py
+      - 'userenvs/rhel-ai-*.json'
 
   workflow_dispatch:
 

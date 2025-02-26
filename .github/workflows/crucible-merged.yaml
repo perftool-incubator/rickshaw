@@ -7,12 +7,14 @@ on:
     paths-ignore:
     - LICENSE
     - '**.md'
+    - '.github/rulesets/**'
     - .github/workflows/run-crucible-tracking.yaml
     - .github/workflows/faux-unittest.yaml
     - .github/workflows/faux-crucible-ci.yaml
     - 'docs/**'
     - engine/engine-script-library.py
     - engine/engine-script.py
+    - 'userenvs/rhel-ai-*.json'
   workflow_dispatch:
 
 jobs:
