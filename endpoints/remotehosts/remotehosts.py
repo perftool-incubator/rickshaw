@@ -1124,6 +1124,9 @@ def create_podman(thread_name, remote_name, engine_name, container_name, connect
         },
         {
             "src": "/usr/src"
+        },
+        {
+            "src": "/var/run"
         }
     ]
 
