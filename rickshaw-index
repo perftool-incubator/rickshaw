@@ -21,6 +21,7 @@ use JSON::XS;
 use JSON::Validator;
 use Data::Dumper;
 use REST::Client;
+use MIME::Base64;
 
 BEGIN {
     if (!(exists $ENV{'TOOLBOX_HOME'} && -d "$ENV{'TOOLBOX_HOME'}/perl")) {
@@ -49,7 +50,7 @@ $toolbox::logging::debug = 0;
 
 my @pids;
 my $index_tools = 1;
-my @suported_cdm_vers = ('v7dev', 'v8dev');
+my @supported_cdm_vers = ('v7dev', 'v8dev', 'v9dev');
 my %result;
 my $base_run_dir;
 my %cdm = ( 'ver' => '' );
@@ -62,18 +63,62 @@ my @queued_docs;
 my @queued_ndjson;
 my @queued_terms;
 my %num_docs_submitted = ('run' => 0, 'iteration' => 0, 'param' => 0, 'tag' => 0, 'sample' => 0, 'period' => 0);
-my $max_jobs = 20;
+my $max_jobs = 8;
 my $update_run_json = 0;
 my $run_id_field;
 my $iter_id_field;
 my $samp_id_field;
 my $period_id_field;
 my $metric_id_field;
+my %all_metric_desc_uuid;
+my %instance = (
+    'host' => 'localhost:9200',
+    'ver' => '',
+    'header' => {
+        "Content-Type" => "application/json",
+        # Below is necessary because some web servers
+        # reject perl as the user agent.  How rude!!
+        "User-agent" => "curl/7.76.1"
+    },
+    'indices' => ()
+);
 
 sub usage {
     print "\nusage:\n\n";
     print "--base-run-dir <dir>  (this is a result-file in json that rickshaw-post-process generates)\n";
     print "--max-jobs <num>  (maximum number of background jobs for indexing)\n";
+    print "--host <hostname[:port]>  (opensearch hostname and optional port)\n";
+    print "--userpass <user:password>  (username and password for preceding --host)\n";
+    print "--ver <v7dev|v8dev|v9dev>  (common data model version for preceding --host)\n";
+}
+
+sub get_index_base_name {
+  if ($instance{'ver'} =~ /^v[7|8]dev$/) {
+    return 'cdm' . $instance{'ver'} . '-';
+  } elsif ($instance{'ver'} =~ /^v9dev$/) {
+    return 'cdm-v9dev-';
+  } else {
+    printf "This cdm version [%s] is not supported, exiting\n", $instance{'ver'};
+    exit 1;
+  }
+}
+
+sub get_index_name {
+  my $doctype = shift;
+  if ($instance{'ver'} =~ /^v[7|8]dev$/) {
+    return $doctype;
+  } elsif ($instance{'ver'} =~ /^v9dev$/) {
+    #TODO: return correct year.month(s)
+    return $doctype . '@2025.02';
+  } else {
+    printf "This cdm version [%s] is not supported, exiting\n", $instance{'ver'};
+    exit 1;
+  }
+}
+
+sub get_index_full_name {
+  my $doctype = shift;
+  return get_index_base_name() . get_index_name($doctype);
 }
 
 sub add_persistent_uuid {
@@ -137,14 +182,15 @@ sub add_persistent_uuid {
 
 sub http_request {
     my $method = shift;
-    my $host = shift;
-    my $req = shift;
+    my $req= shift;
     my $body = shift;
     my $client = REST::Client->new();
-    $client->setHost($host);
-    my %req_header = ("Content-Type" => "application/json");
-    debug_log(sprintf "Request: http://%s/%s\nbody: %s\n\n", $host, $req, $body);
-    $client->request($method, $req, $body, \%req_header);
+    debug_log(sprintf "host: %s\n", $instance{'host'});
+    debug_log(sprintf "header: " . Dumper $instance{'header'});
+    $client->setHost($instance{'host'});
+    $client->getUseragent()->ssl_opts(verify_hostname => 0); # --insecure
+    debug_log(sprintf "Request: %s/%s\nbody: %s\n\n", $instance{'host'}, $req, $body);
+    $client->request($method, $req, $body, $instance{'header'});
     my $response = $client->responseContent();
     debug_log(sprintf "Response:\n%s\n\n", $response);
     my $resp_ref = $coder->decode($response);
@@ -161,14 +207,12 @@ sub http_request {
 
 sub http_ndjson_request {
     my $method = shift;
-    my $host = shift;
     my $req = shift;
     my $body = shift;
     my $client = REST::Client->new();
-    $client->setHost($host);
-    my %req_header = ("Content-Type" => "application/x-ndjson");
-    debug_log(sprintf "Request: http://%s/%s\nbody: %s\n\n", $host, $req, $body);
-    $client->request($method, $req, $body, \%req_header);
+    $client->setHost($instance{'host'});
+    debug_log(sprintf "Request: %s/%s\nbody: %s\n\n", $instance{'host'}, $req, $body);
+    $client->request($method, $req, $body, $instance{'header'});
     my $response = $client->responseContent();
     my $resp_ref = $coder->decode($response);
     if (defined $resp_ref and ref $resp_ref eq ref {} and exists $$resp_ref{'errors'} and $$resp_ref{'errors'} != 0) {
@@ -336,7 +380,7 @@ sub index_es_doc {
     my $period = shift;
     my $es_doc_ref = create_es_doc($doc_type, $iter, $sample, $period);
     my $es_doc_json = $coder->encode($es_doc_ref);
-    my $resp_ref = http_request("POST", "localhost:9200", "cdm" . $cdm{'ver'} . "-" . $doc_type . "/_doc/", $es_doc_json);
+    my $resp_ref = http_request("POST", get_index_full_name($doc_type) . "/_doc/", $es_doc_json);
     $num_docs_submitted{$doc_type}++;
     if ($$resp_ref{'result'} ne "created") {
         printf "Request to index failed:\n%s\n", $coder->encode($resp_ref);
@@ -415,21 +459,27 @@ sub wait_for_metric_descs {
         }
         sleep 5;
         my $request_body;
-        my $request_path = "/cdm" . $cdm{'ver'} . "-metric_desc/_count/";
-        if ($cdm{'ver'} eq 'v7dev') {
+        my $request_path = get_index_full_name('metric_desc') . "/_count/";
+        if ($instance{'ver'} eq 'v7dev') {
             $request_body = '{"query":{"terms":{"metric_desc.id": ' . $coder->encode(\@terms) . '}}}';
         } else { # later than cdmv7
             $request_body = '{"query":{"terms":{"metric_desc.metric_desc-uuid": ' . $coder->encode(\@terms) . '}}}';
         }
-        #printf "submitting request_path:\n%s\n", $request_path;
-        #printf "submitting request_body:\n%s\n", $request_body;
 
-        my $resp_ref = http_request("POST", "localhost:9200", $request_path, $request_body);
-        #print "\nrequest completed\nresponse:\n";
-        #print Dumper $resp_ref;
+        debug_log(sprintf "number of terms: %d\n", scalar @terms);
+        debug_log(sprintf "request path: %s\n", $request_path);
+        debug_log(sprintf "request body: %s\n", $request_body);
+        my $resp_ref = http_request("POST", $request_path, $request_body);
+        debug_log(sprintf "\nrequest completed\nresponse:\n");
+        debug_log(sprintf Dumper $resp_ref);
         $found_metric_descs = $$resp_ref{'count'};
         if ($found_metric_descs > $submitted_metric_descs) {
             printf "Something went wrong, the number of metrics found (%d) in OpenSearch is greater than the number submitted (%d)\n", $found_metric_descs, $submitted_metric_descs;
+            $request_path = get_index_full_name('metric_desc') . "/_search/";
+            my $resp_ref = http_request("POST", $request_path, $request_body);
+            print Dumper $resp_ref;
+        } else {
+            printf "Attempt (%d) waiting for metric_descs seemed to work\n", $attempts;
         }
         $attempts++;
     }
@@ -449,6 +499,10 @@ sub index_metrics {
     my $benchmark = shift; # optional, for reporting earliest-begin and latest-end from all
     my $primary_metric = shift; # optional, for reporting earliest-begin and latest-end from all
                                 # metrics processed with type matching $primary_metric
+    printf "index_metrics():\n";
+    printf "  -metr_dir: [%s]\n", $metr_dir;
+    printf "  -metr_file [%s]\n", $metr_file;
+    printf "  -index_or_queue: [%s]\n", $index_or_queue;
     my $primary_metric_found = 0;
     my $num_metric_docs_submitted = 0;
     my $earliest_begin;
@@ -459,7 +513,7 @@ sub index_metrics {
 
     my $dir =  pushd($metr_dir);
     my %eng_env_vars;
-    if ($cdm{'ver'} eq 'v7dev' or $cdm{'ver'} eq 'v8dev') {
+    if ($instance{'ver'} eq 'v7dev' or $instance{'ver'} eq 'v8dev' or $instance{'ver'} eq 'v9dev') {
         # engine-type and engine-id replace cstype and csid, but cstype/id to be removed later
         $eng_env_vars{'engine-type'} = $cstype;
         $eng_env_vars{'engine-id'} = $csid;
@@ -480,7 +534,8 @@ sub index_metrics {
             $eng_env_vars{'tool-name'} = 'unknown';
         }
 
-        # Note that CDM being v7 should not assume all metrics have engine_env.txt because one may be re-postprocessing older crucible runs
+        # Note that any CDM version should not assume all metrics have engine_env.txt because one may be re-postprocessing older crucible runs
+        # where this file was not generated.
         my $eng_env_file = "engine-env.txt";
         if (! -e $eng_env_file) {
             $eng_env_file .= ".xz";
@@ -556,8 +611,10 @@ sub index_metrics {
     my %source;
     for my $this_metr ( @$metr_ref ) {
         my $idx = $$this_metr{'idx'};
-        #print "metric:\n";
-        #print Dumper $this_metr;
+        if (exists $all_metric_desc_uuid{ $$this_metr{$metric_id_field} }) {
+            printf "WARNING: already found metric_desc uuid: %s\n", $$this_metr{$metric_id_field};
+        }
+        $all_metric_desc_uuid{ $$this_metr{$metric_id_field} } = 1;
         $uuid{$idx} = $$this_metr{$metric_id_field};
         my %metr_desc_doc = %$base_doc_ref;
         if (defined $$this_metr{'desc'} and defined $$this_metr{'desc'}{'class'} and
@@ -592,12 +649,12 @@ sub index_metrics {
         # We do not use index_es_doc() here because that requires getting all info from the %result,
         # and %result (rickshaw-run.json) by design does not include any metric data, as it would be
         # way too large.
-        #print "Going to index this metric_desc doc: " . $metr_desc_doc_json . "\n";
-        my $resp_ref = http_request("POST", "localhost:9200", "/cdm" . $cdm{'ver'} . "-metric_desc/_doc/", $metr_desc_doc_json);
-        #print "response:\n";
-        #print Dumper $resp_ref;
+        debug_log(sprintf "Going to index this metric_desc doc with uuid: " . $$this_metr{$metric_id_field} . "\n");
+        my $resp_ref = http_request("POST", get_index_full_name('metric_desc') . "/_doc/", $metr_desc_doc_json);
         $num_metric_docs_submitted++;
     }
+    debug_log(sprintf "metric desc docs submitted: [%d]\n", $num_metric_docs_submitted);
+
     my $count = 0;
     my $ndjson = "";
     my $metr_csv_fh = new IO::Uncompress::UnXz $metr_csv_file, Transparent => 1 || die "[ERROR]could not open file " . $metr_csv_file;
@@ -612,24 +669,25 @@ sub index_metrics {
             my %desc = ( $metric_id_field => $uuid{$idx} );
             $metr_data_doc{'metric_desc'} = \%desc;
             $metr_data_doc{'metric_data'} = \%data;
-            # cdmv8 includes a very small verison of the run doc info, just the run-uuid, to make deleting metric_data docs much easier
-            if ($cdm{'ver'} eq 'v8dev') {
+            # cdmv8/9 includes a very small verison of the run doc info, just the run-uuid, to make deleting metric_data docs much easier
+            if ($instance{'ver'} eq 'v8dev' or $instance{'ver'} eq 'v9dev') {
                 my %micro_run_doc = ($run_id_field => $result{$run_id_field});
                 $metr_data_doc{'run'} = \%micro_run_doc;
             }
             my $metr_data_doc_json = $coder->encode(\%metr_data_doc);
             $ndjson .= sprintf "%s\n", '{ "index": {} }';
+            #$ndjson .= sprintf "%s\n", '{ "index": { "_index": ' . $instance{'ver'} . "-" . get_index_name('metric_data') . ' } }';
             $ndjson .= sprintf "%s\n", $metr_data_doc_json;
             $count++;
             # Limit the batch size to avoid a http error with too large of a request
             if ($count >= 1000) {
                 if ($index_or_queue eq "index") {
-                    # OpenSearch docs type metric_data do not contain other sections run, iteration, sample, period, metric_desc,
+                    debug_log(sprintf "Going to index %d metric data docs for %s\n", $count, $metr_file);
+                    # OpenSearch docs type metric_data do not contain other sections run (except uuid), iteration, sample, period, metric_desc,
                     # as this would take up sunstantially more space for potentially millions of documents.
-                    #print "going to index this ndjson:\n" . $ndjson;
-                    http_ndjson_request("POST", "localhost:9200", "/cdm" . $cdm{'ver'} . "-metric_data/_bulk", $ndjson);
+                    http_ndjson_request("POST", get_index_full_name('metric_data') . "/_bulk", $ndjson);
                 } else {
-                    print "going to *queue* this ndjson:\n" . $ndjson;
+                    debug_log(sprintf "Going to queue %d metric data docs for %s\n", $count, $metr_file);
                     push(@queued_ndjson, $ndjson);
                 }
                 $ndjson = "";
@@ -656,8 +714,10 @@ sub index_metrics {
     }
     if ($count > 0) {
         if ($index_or_queue eq "index") {
-            http_ndjson_request("POST", "localhost:9200", "/cdm" . $cdm{'ver'} . "-metric_data/_bulk", $ndjson);
+            debug_log(sprintf "Going to index %d metric data docs for %s\n", $count, $metr_file);
+            http_ndjson_request("POST", get_index_full_name('metric_data') . "/_bulk", $ndjson);
         } else {
+            debug_log(printf "Going to queue %d metric data docs for %s\n", $count, $metr_file);
             push(@queued_ndjson, $ndjson);
         }
     }
@@ -684,7 +744,7 @@ sub index_metrics {
 
 sub indexed_doc_count {
     my $doc_type = shift;
-    my $resp_ref= http_request("POST", "localhost:9200", "/cdm" . $cdm{'ver'} . "-" . $doc_type . "/_count/",
+    my $resp_ref= http_request("POST", get_index_full_name($doc_type) . "/_count/",
                                 '{"query":{"bool":{"filter":[{"term":{"run.' . $run_id_field . '": "' . $result{$run_id_field} . '"}}]}}}');
     debug_log(sprintf "response" . Dumper $resp_ref);
     return $$resp_ref{'count'};
@@ -754,12 +814,32 @@ while (scalar @ARGV > 0) {
     } elsif ($arg =~ /^max-jobs$/) {
         debug_log(sprintf "argument: [%s]\n", $arg);
         $max_jobs = $val;
+    } elsif ($arg =~ /^host$/) {
+        debug_log(sprintf "host: [%s]\n", $val);
+        $instance{'host'} = $val;
+        $instance{'header'} = { "Content-Type" => "application/json",
+                         # Below is necessary because some web servers
+                         # reject perl as the user agent.  How rude!!
+                         "User-agent" => "curl/7.76.1" };
+    } elsif ($arg =~ /^userpass$/) {
+        debug_log(sprintf "userpass: [%s]\n", $val);
+        $instance{'header'}{'Authorization'} = 'Basic ' . encode_base64($val);
+        chomp $instance{'header'}{'Authorization'};
+    } elsif ($arg =~ /^ver$/) {
+        debug_log(sprintf "ver: [%s]\n", $val);
+        #TODO: validate for only v7/8/9
+        $instance{'ver'} = $val;
     } else {
         printf "[ERROR]argument not valid: [%s]\n", $arg;
         usage;
         exit 1;
     }
 }
+
+#if (not defined $instance_host) {
+    #printf "You must provide a host (--host)\n";
+    #exit 1;
+#}
 
 # Ensure the run-dir has absolute path
 {
@@ -793,35 +873,47 @@ if ($fixup_status != 0) {
 }
 
 # Find the newest CDM version and verify all the required indices are present
-my $idx_resp_ref = http_request("GET", "localhost:9200", "_cat/indices?format=json", '');
+printf "Find latest CDM version\n";
+my $idx_resp_ref = http_request("GET", "_cat/indices?format=json", '');
 my $latest_ver;
 if (ref $idx_resp_ref eq ref [] ) {
-    my @fullnames;
+    my @cdm_fullnames;
     my @all_indices;
     my %vers;
     foreach my $idx (@{ $idx_resp_ref } ) {
         my $idx_name = $$idx{'index'};
-        if ($idx_name =~ /cdm(v\d+.+)-(.+)/) {
+        if ($idx_name =~ /^cdm[-]{0,1}(v\d+.+)-(.+)(@\d\d\d\d\.\d\d){0,1}/) {
             my $ver = $1;
             my $name = $2;
             $vers{$ver} = 1;
-            push(@fullnames, $idx_name);
+            push(@cdm_fullnames, $idx_name);
         }
         push(@all_indices, $idx_name);
     }
     my @sorted_vers = sort(keys(%vers));
     printf "sorted_vers: @sorted_vers \n";
     $latest_ver = $sorted_vers[0];
+
+    print "indices: " . Dumper @cdm_fullnames;
+
+
     if (defined $latest_ver) {
-        printf "Latest CDM version found in local OpenSearch instance is %s\n", $latest_ver;
-        foreach my $req_name ("run", "iteration", "tag", "param", "sample", "period", "metric_desc", "metric_data") {
-            my $complete_index_name = "cdm" . $latest_ver . "-" . $req_name;
-            if (grep(/^$complete_index_name$/, @fullnames)) {
-                printf "Found index %s\n", $req_name;
+        printf "Latest CDM version found in %s OpenSearch instance is %s\n", $instance{'host'}, $latest_ver;
+        if ($instance{'ver'} eq '') {
+            printf "Instance CDM version was not set by the user, so setting to latest CDM version [%s] found in [%s]\n", $latest_ver, $instance{'host'};
+            $instance{'ver'} = $latest_ver;
+        } elsif ($instance{'ver'} ne $latest_ver) {
+            printf "Warning: the latest CDM version [%s] in Opensearch instance [%s] is not being used\n", $latest_ver, $instance{'host'};
+        }
+        foreach my $doc_type ("run", "iteration", "tag", "param", "sample", "period", "metric_desc", "metric_data") {
+            my $index_full_name = get_index_full_name($doc_type);
+            printf "Index name for [%s]: [%s]\n", $doc_type, $index_full_name;
+            if (grep(/^$index_full_name$/, @cdm_fullnames)) {
+                printf "Found index for doctype %s: %s\n", $doc_type, $index_full_name;
             } else {
-                printf "Could not find index [%s] in OpenSearch\n", $complete_index_name;
-                printf "The following indices are present:\n";
-                foreach my $index (@all_indices) {
+                printf "Could not find index [%s] in OpenSearch\n", $index_full_name;
+                printf "The following CDM indices are present:\n";
+                foreach my $index (grep(@all_indices, "cdm")) {
                     printf "    [%s]\n", $index;
                 }
                 printf "\n";
@@ -843,9 +935,9 @@ if (ref $idx_resp_ref eq ref [] ) {
 
 $cdm{'ver'} = $latest_ver;
 printf "Latest CDM version found in local OpenSearch instance is %s\n", $latest_ver;
-if (not grep(/^$cdm{'ver'}$/, @suported_cdm_vers)) {
+if (not grep(/^$cdm{'ver'}$/, @supported_cdm_vers)) {
     printf "The version of CDM used in OpenSearch [%s] is not one that is supported by rickshaw-index: [%s]\n",
-           $cdm{'ver'}, join(" ",  @suported_cdm_vers);
+           $cdm{'ver'}, join(" ",  @supported_cdm_vers);
     printf "Either use an older version of CDM or (ideally) find a newer version of rickshaw which supports %s\n", $cdm{'ver'};
     exit 1;
 }
@@ -856,7 +948,7 @@ if ($cdm{'ver'} eq 'v7dev') {
     $samp_id_field = 'id';
     $period_id_field = 'id';
     $metric_id_field = 'id';
-} else {
+} else { # newer than v7
     $run_id_field = 'run-uuid';
     $iter_id_field = 'iteration-uuid';
     $samp_id_field = 'sample-uuid';
@@ -902,7 +994,7 @@ if (exists $result{'iterations'}) {
 }
 
 
-printf "Exporting from %s to OpenSearch documents and POSTing to localhost:9200\n", $run_file;
+printf "Exporting from %s to OpenSearch documents and POSTing to %s\n", $run_file, $instance{'host'};
 
 if (exists $result{'run-id'} and defined $result{'run-id'}) {
     # Convert to 'id', which matches OpenSearch docs
@@ -943,10 +1035,20 @@ if (-e $tool_dir and $index_tools == 1) {
                         for my $tool (@tools) {
                             my $tool_dir = $num_dir . "/" . $tool;
                             if (opendir(TOOLDIR, $tool_dir)) {
+                                # Find either .json.xz or .json files, not both!
+                                # It is possible, if someone has unxz'd these files, that when the uuid is added
+                                # and the file is re-written, there exists both a json and json.xz file.  Subsequent
+                                # post-processing (without this fix) will process both the json and the json.xz files!
                                 my @tool_files = grep(/metric-data-\S+\.json/, readdir(TOOLDIR));
+                                my @processed_tool_files;
                                 for my $tool_file (@tool_files) {
-
                                     $tool_file =~ s/(metric-data-\S+)\.json.*/$1/;
+                                    if (grep(/^$tool_file$/, @processed_tool_files)) {
+                                        # Because there may be duplicate files (one with .json and one with .json.xz,
+                                        # from older code which read .json, added uuid, then wrote .json.xz)
+                                        # we need to ensure only one of them was processed.
+                                        next;
+                                    }
                                     printf "Working on tool_file: %s\n", $tool_file;
 
                                     my %job_args = ( 'tool-dir' => $tool_dir,
@@ -955,8 +1057,7 @@ if (-e $tool_dir and $index_tools == 1) {
                                                      'num' => $num,
                                                      'doc-ref' => $base_metric_doc_ref );
                                     push(@jobs, \%job_args);
-
-
+                                    push(@processed_tool_files, $tool_file);
                                 }
                             }
                         }
@@ -1314,13 +1415,15 @@ if (scalar @queued_ndjson > 0) {
     } else {
         printf "Going to index %d ndjson metrics\n", scalar @queued_ndjson;
         while (scalar @queued_ndjson > 0) {
-            http_ndjson_request("POST", "localhost:9200", "/cdm" . $cdm{'ver'} . "-metric_data/_bulk", pop(@queued_ndjson));
+            http_ndjson_request("POST", get_index_full_name('metric_data') . "/_bulk", pop(@queued_ndjson));
         }
         printf "Finished indexing ndjson metrics\n";
         print "Waiting for metric data docs to be present in OpenSearch\n";
         wait_for_metric_descs(@queued_terms);
         exit 0;
     }
+} else {
+    printf "No queued metrics to index at this time\n";
 }
 
 if (exists $result{'tags'}) {
@@ -1350,5 +1453,5 @@ index_queued_es_docs();
 print "Writing queued docs\n";
 write_queued_es_docs();
 print "Waiting for docs to be present in OpenSearch\n";
-wait_for_docs;
+wait_for_docs();
 print "Indexing to OpenSearch complete\n";
