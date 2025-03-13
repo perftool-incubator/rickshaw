@@ -558,7 +558,7 @@ sub remote_image_found {
     if ($registry_type eq "private") {
         $skopeo_auth = "--authfile=" . $run{'registries'}{$registry_type}{'pull-token'};
     }
-    my $cmd = "skopeo inspect " . $skopeo_auth . " --tls-verify=" . $run{'registries'}{$registry_type}{'tls-verify'} . " " . $skopeo_url . " 2>&1";
+    my $cmd = "skopeo inspect --no-tags --raw " . $skopeo_auth . " --tls-verify=" . $run{'registries'}{$registry_type}{'tls-verify'} . " " . $skopeo_url . " 2>&1";
     debug_log(sprintf "running: %s\n", $cmd);
     ($cmd, my $output, my $cmd_rc) = run_cmd($cmd);
     if ($cmd_rc == 0) {
