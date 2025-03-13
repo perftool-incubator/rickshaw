@@ -901,6 +901,13 @@ sub decode_repo_urls {
     }
 }
 
+sub quay_image_refresh_formatted_timestamp {
+    # format a timestamp into human readable format
+    my $timestamp = shift;
+
+    return scalar localtime($timestamp);
+}
+
 sub source_container_image {
     # Ensure that the container image we need is either already in the container registry,
     # or build and push the image to the registry
@@ -1156,8 +1163,7 @@ sub source_container_image {
             #                               weeks   days/week   hours/day   min/hour   seconds/min
             $refresh_expiration = time() + ($1    * 7         * 24        * 60       * 60);
 
-            my $refresh_expiration_str = localtime($refresh_expiration);
-            printf "Going to refresh image expiration with this value: %d (%s)\n", $refresh_expiration, $refresh_expiration_str;
+            printf "Going to refresh image expiration with this value: %d (%s)\n", $refresh_expiration, quay_image_refresh_formatted_timestamp($refresh_expiration);
         } else {
             print "Failed to determine quay image expiration weeks\n";
             exit 1;
@@ -1208,7 +1214,7 @@ sub source_container_image {
                 }
 
                 if ($current_expiration >= $refresh_expiration) {
-                    printf "\tThe current expiration (%d) is greater than or equal to the refresh expiration so not refreshing\n", $current_expiration;
+                    printf "\tThe current expiration (%d / %s) is greater than or equal to the refresh expiration so not refreshing\n", $current_expiration, quay_image_refresh_formatted_timestamp($current_expiration);
                 } else {
                     my $refresh_cmd = 'curl --silent' .
                                       ' -X PUT -H "Authorization: Bearer ' . $quay_refresh_expiration_tokens{$registry_type} . '"' .
