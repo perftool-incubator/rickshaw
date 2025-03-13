@@ -1181,6 +1181,7 @@ sub source_container_image {
                 while ($refresh_attempts <= $max_refresh_attempts) {
                     $refresh_attempts += 1;
 
+                    debug_log(sprintf "executing quay API call: %s\n", $query_cmd);
                     ($query_cmd, my $query_status, my $query_rc) = run_cmd($query_cmd);
                     chomp($query_status);
 
@@ -1218,6 +1219,7 @@ sub source_container_image {
                     while ($refresh_attempts <= $max_refresh_attempts) {
                         $refresh_attempts += 1;
 
+                        debug_log(sprintf "executing quay API call: %s\n", $refresh_cmd);
                         ($refresh_cmd, my $refresh_status, my $refresh_rc) = run_cmd($refresh_cmd);
                         chomp($refresh_status);
 
