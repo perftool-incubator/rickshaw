@@ -23,6 +23,7 @@ use threads;
 use threads::shared;
 use Thread::Queue;
 use Thread::Semaphore;
+use Digest::SHA qw(sha256_hex);
 
 $Data::Dumper::Sortkeys = 1;
 $Data::Dumper::Pair = ' : ';
@@ -65,7 +66,21 @@ my @endpoints;
 my %image_ids; # {$benchmark-or-tool}{$userenv}
 my %run; # A multi-dimensional, nested hash, schema TBD
          # This hash documents what was run.
-my $redis_passwd = "flubber"; # TODO: make this cmdline setting
+
+
+my $random_file = "/dev/urandom";
+my $random_handle = undef;
+my $encoding = ":raw :bytes";
+my $BUFSIZ = 4096;
+
+open($random_handle, "< $encoding", $random_file) || die("[ERROR] Could not open /dev/urandom for reading\n");
+
+my $buffer;
+read($random_handle, $buffer, $BUFSIZ);
+my $passwd = sha256_hex($buffer);
+my $redis_passwd = "$passwd";
+
+
 my $rb_bin = "roadblocker.py";
 my $rb_module = "roadblock.py";
 my $messages_ref;
