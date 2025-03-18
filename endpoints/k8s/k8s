@@ -822,7 +822,7 @@ function build_pod_spec() {
         echo "          }," >>$json
         echo "          {" >>$json
         echo "            \"name\": \"roadblock_passwd\"," >>$json
-        echo "            \"value\": \"flubber\"" >>$json
+        echo "            \"value\": \"$rb_passwd\"" >>$json
         echo "          }," >>$json
         echo "          {" >>$json
         echo "            \"name\": \"roadblock_id\"," >>$json
