@@ -1230,11 +1230,11 @@ sub source_container_image {
                         chomp($refresh_status);
 
                         if (($refresh_rc == 0) && ($refresh_status eq "\"Updated\"")) {
-                            print "\tRefreshed expiration\n";
+                            printf "\tRefreshed expiration (was %d / %s)\n", $current_expiration, quay_image_refresh_formatted_timestamp($current_expiration);
                             last;
                         } else {
                             if ($refresh_attempts > $max_refresh_attempts) {
-                                printf "\tFailed to refresh expiration on %d attempts\n", $max_refresh_attempts;
+                                printf "\tFailed to refresh expiration on %d attempts (currently %d / %s)\n", $max_refresh_attempts, $current_expiration, quay_image_refresh_formatted_timestamp($current_expiration);
                                 exit 1;
                             } else {
                                 sleep 1;
