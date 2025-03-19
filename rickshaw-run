@@ -1667,7 +1667,7 @@ sub process_cmdline() {
             $run{$p} = $defaults{$p};
         }
     }
-    my $base_rb_leader_cmd = "--role=leader --redis-server=localhost --redis-password=" . $run{'roadblock-password'};
+    $base_rb_leader_cmd = "--role=leader --redis-server=localhost --redis-password=" . $run{'roadblock-password'};
 }
 
 sub validate_controller_env() {
