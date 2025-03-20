@@ -49,7 +49,7 @@ my $ug = Data::UUID->new;
 my %defaults = ( "num-samples" => 1, "tool-group" => "default", "test-order" => "s",
                  "base-run-dir" => tempdir(), "id" => $ug->create_str(),
                  "max-sample-failures" => 1, "max-rb-attempts" => 1,
-                 "run-file" => "");
+                 "run-file" => "", "roadblock-password" => "flubber");
 
 my @utilities = ( "packrat" );
 
@@ -65,7 +65,6 @@ my @endpoints;
 my %image_ids; # {$benchmark-or-tool}{$userenv}
 my %run; # A multi-dimensional, nested hash, schema TBD
          # This hash documents what was run.
-my $redis_passwd = "flubber"; # TODO: make this cmdline setting
 my $rb_bin = "roadblocker.py";
 my $rb_module = "roadblock.py";
 my $messages_ref;
@@ -74,7 +73,7 @@ my $collect_sysinfo_timeout;
 my $endpoint_deploy_timeout;
 my $engine_script_start_timeout;
 my $endpoint_move_data_rb_timeout;
-my $base_rb_leader_cmd = "--role=leader --redis-server=localhost --redis-password=" . $redis_passwd;
+my $base_rb_leader_cmd;
 my $config_dir;
 my $engine_config_dir;
 my $engine_bench_cmds_dir;
@@ -154,23 +153,24 @@ $SIG{'INT'} = sub {
 
 sub usage {
     print "\nusage:\n\n";
-    print "--registries-json       Path to a JSON file containing container registry information\n";
-    print "--external-userenvs-dir Path to look for userenv definitions in that are provided by external sources\n";
-    print "--json-validator        Path to json schema validation utility\n";
-    print "--engine-dir            Directory where the engine project exists\n";
-    print "--workshop-dir          Directory where workshop project exists\n";
-    print "--packrat-dir           Directory where the packrat project exists\n";
-    print "--roadblock-dir         Directory where workshop project exists\n";
-    print "--bench-dir             Directory where benchmark helper project exists\n";
-    print "--bench-params          File with benchmark parameters to use\n";
-    print "--tools-dir             Directory where *all* tool subprojects exist (like \$CRUCIBLE_HOME/subprojects/tools)\n";
-    print "--tool-params           File with tool parameters to use\n";
-    print "--num-samples           The number of sample exeuctions to run for each benchmark iteration\n";
-    print "--max-sample-failures   The total number of benchmark sample executions that are tolerated\n";
-    print "--test-order            's' = run all samples of an iteration first\n";
-    print "                        'i' = run all iterations of a sample first\n";
-    print "                        'r' = run a sample from a random iteration one at a time (ie. chaos mode)\n\n";
-    print "--max-rb-attempts       The number of times to try a given roadblock\n";
+    print "--registries-json        Path to a JSON file containing container registry information\n";
+    print "--external-userenvs-dir  Path to look for userenv definitions in that are provided by external sources\n";
+    print "--json-validator         Path to json schema validation utility\n";
+    print "--engine-dir             Directory where the engine project exists\n";
+    print "--workshop-dir           Directory where workshop project exists\n";
+    print "--packrat-dir            Directory where the packrat project exists\n";
+    print "--roadblock-dir          Directory where workshop project exists\n";
+    print "--roadblock-password     Password to use to access the valkey instance\n";
+    print "--bench-dir              Directory where benchmark helper project exists\n";
+    print "--bench-params           File with benchmark parameters to use\n";
+    print "--tools-dir              Directory where *all* tool subprojects exist (like \$CRUCIBLE_HOME/subprojects/tools)\n";
+    print "--tool-params            File with tool parameters to use\n";
+    print "--num-samples            The number of sample exeuctions to run for each benchmark iteration\n";
+    print "--max-sample-failures    The total number of benchmark sample executions that are tolerated\n";
+    print "--test-order             's' = run all samples of an iteration first\n";
+    print "                         'i' = run all iterations of a sample first\n";
+    print "                         'r' = run a sample from a random iteration one at a time (ie. chaos mode)\n\n";
+    print "--max-rb-attempts        The number of times to try a given roadblock\n";
 }
 
 sub find_index {
@@ -1633,7 +1633,7 @@ sub process_cmdline() {
         } elsif ($arg =~ /^help$/) {
             usage;
             exit 0;
-        } elsif ($arg =~ /^base-run-dir$|^workshop-dir$|^packrat-dir$|^bench-dir$|^roadblock-dir$|^tools-dir$|^engine-dir$/ or
+        } elsif ($arg =~ /^base-run-dir$|^workshop-dir$|^packrat-dir$|^bench-dir$|^roadblock-dir$|^roadblock-password$|^tools-dir$|^engine-dir$/ or
                  $arg =~ /^run-id$|^id$|^bench-params$|^tool-params$|^bench-params$|^max-rb-attempts$/ or
                  $arg =~ /^test-order$|^tool-group$|^num-samples$|^max-sample-failures$|^name$|^bench-ids$/ or
                  $arg =~ /^registries-json$|^external-userenvs-dir$/ or
@@ -1667,6 +1667,7 @@ sub process_cmdline() {
             $run{$p} = $defaults{$p};
         }
     }
+    $base_rb_leader_cmd = "--role=leader --redis-server=localhost --redis-password=" . $run{'roadblock-password'};
 }
 
 sub validate_controller_env() {
@@ -2526,7 +2527,7 @@ sub validate_endpoints() {
     }
 
     $endpoint_roadblock_opt = " --roadblock-id=" . $run{'id'} .
-        " --roadblock-passwd=" . $redis_passwd;
+        " --roadblock-passwd=" . $run{'roadblock-password'};
     $workshop_roadblock_opt = " --requirements " . $run{'roadblock-dir'} .
         "/workshop.json ";
     $run{'endpoints'} = \@endpoints;

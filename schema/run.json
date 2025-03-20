@@ -81,7 +81,7 @@
       "type": "string"
     },
     "reg-proto": {
-       "type": "string"
+      "type": "string"
     },
     "reg-repo": {
       "type": "string"
@@ -105,6 +105,10 @@
       "type": "string"
     },
     "roadblock-dir": {
+      "type": "string",
+      "pattern": "^.+$"
+    },
+    "roadblock-password": {
       "type": "string",
       "pattern": "^.+$"
     },
