@@ -102,41 +102,34 @@ function do_roadblock() {
     echo "Starting roadblock [`date`]"
     echo "server: ${rickshaw_host}"
     echo "role: ${role}"
-    echo "uuid (without attempt ID embedded): ${uuid}"
+    echo "uuid: ${uuid}"
     echo "timeout: ${timeout}"
 
-    local attempts=0
     local rc=99
-    while [ ${attempts} -lt ${max_rb_attempts} -a ${rc} -ne ${rb_exit_success} -a ${rc} -ne ${rb_exit_abort} ]; do
-        let attempts=${attempts}+1
-        echo "attempt number: ${attempts}"
-        echo "uuid: ${attempts}:${uuid}"
-        local rb_cmd="$cmd --uuid=${attempts}:${uuid}"
-        echo "going to run this roadblock command: ${rb_cmd}"
-        echo "roadblock output BEGIN"
-        # use eval to make the quoting behave properly
-        eval ${rb_cmd}
-        rc=$?
-        echo "roadblock output END"
-        echo "roadblock exit code: ${rc}"
-        if [ -f ${msgs_log_file} ]; then
-            echo "# start messages from roadblock ################################################"
-            cat ${msgs_log_file}
-            echo "# end messages from roadblock ##################################################"
-        else
-            echo "# no messages from roadblock ###################################################"
-        fi
-        if [ -n "${wait_for_log}" -a -f "${wait_for_log}" ]; then
-            echo "# start wait-for log ###########################################################"
-            cat ${wait_for_log}
-            echo "# end wait-for log #############################################################"
-            rm ${wait_for_log}
-        else
-            echo "# no wait for log ##############################################################"
-        fi
-    done
+    local rb_cmd="$cmd --uuid=${uuid}"
+    echo "going to run this roadblock command: ${rb_cmd}"
+    echo "roadblock output BEGIN"
+    # use eval to make the quoting behave properly
+    eval ${rb_cmd}
+    rc=$?
+    echo "roadblock output END"
+    echo "roadblock exit code: ${rc}"
+    if [ -f ${msgs_log_file} ]; then
+        echo "# start messages from roadblock ################################################"
+        cat ${msgs_log_file}
+        echo "# end messages from roadblock ##################################################"
+    else
+        echo "# no messages from roadblock ###################################################"
+    fi
+    if [ -n "${wait_for_log}" -a -f "${wait_for_log}" ]; then
+        echo "# start wait-for log ###########################################################"
+        cat ${wait_for_log}
+        echo "# end wait-for log #############################################################"
+        rm ${wait_for_log}
+    else
+        echo "# no wait for log ##############################################################"
+    fi
 
-    echo "total attempts: ${attempts}"
     echo "Completed roadblock [`date`]"
     printf "\n\n"
 
@@ -198,7 +191,7 @@ function archive_to_controller() {
 function process_opts() {
     longopts="rickshaw-host:,base-run-dir:,endpoint-run-dir:,cs-label:,roadblock-server:"
     longopts+=",roadblock-passwd:,roadblock-id:,disable-tools:,endpoint:,osruntime:,max-sample-failures:"
-    longopts+=",max-rb-attempts:,engine-script-start-timeout:"
+    longopts+=",,engine-script-start-timeout:"
     opts=$(getopt -q -o "" --longoptions "$longopts" -n "getopt.sh" -- "$@");
     eval set -- "$opts";
     while true; do
@@ -251,11 +244,6 @@ function process_opts() {
             --max-sample-failures)
                 shift;
                 max_sample_failures="$1"
-                shift;
-                ;;
-            --max-rb-attempts)
-                shift;
-                max_rb_attempts="$1"
                 shift;
                 ;;
             --engine-script-start-timeout)
@@ -329,12 +317,6 @@ function validate_core_env() {
         exit_error 'cs_label "'$cs_label'" is not valid'
     fi
 
-    if [ -z "${max_rb_attempts}" ]; then
-	max_rb_attempts=1
-	echo "[WARNING] --max-rb-attempts was not used, so setting to default of $max_rb_attempts"
-    else
-	echo "max_rb_attempts=${max_rb_attempts}"
-    fi
     if [ -z "$max_sample_failures" ]; then
         max_sample_failures=3
         echo "[WARNING] --max-sample-failures was not used, so seeting to default of $max_sample_failures"
