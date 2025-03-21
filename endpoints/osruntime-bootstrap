@@ -18,7 +18,6 @@ required_vars+=" cpu_partitioning"
 required_vars+=" endpoint"
 required_vars+=" osruntime"
 required_vars+=" max_sample_failures"
-required_vars+=" max_rb_attempts"
 required_vars+=" rb_passwd"
 required_vars+=" rb_id"
 required_vars+=" ssh_id"
@@ -216,7 +215,6 @@ function launch_osruntime() {
         base_cmd+=" --endpoint=$endpoint"
         base_cmd+=" --osruntime=$osruntime"
         base_cmd+=" --max-sample-failures=$max_sample_failures"
-        base_cmd+=" --max-rb-attempts=$max_rb_attempts"
         base_cmd+=" --roadblock-passwd=$rb_passwd"
         base_cmd+=" --roadblock-id=$rb_id"
         base_cmd+=" --image=$image"
@@ -251,7 +249,6 @@ function launch_osruntime() {
         echo "endpoint=$endpoint"                       >>$env_file
         echo "osruntime=$osruntime"                     >>$env_file
         echo "max_sample_failures=$max_sample_failures" >>$env_file
-        echo "max_rb_attempts=$max_rb_attempts"         >>$env_file
         echo "roadblock_passwd=$rb_passwd"              >>$env_file
         echo "roadblock_id=$rb_id"                      >>$env_file
         echo "ssh_id=$ssh_id"                           >>$env_file

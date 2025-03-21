@@ -320,7 +320,6 @@ function create_servers() {
             "$endpoint_label"\
             "podman"\
             "$max_sample_failures"\
-            "$max_rb_attempts"\
             "$rb_passwd"\
             "$rb_id"\
             "$ssh_id"\
@@ -456,7 +455,6 @@ function create_server() {
         "$endpoint_label"\
         "$os_runtime"\
         "$max_sample_failures"\
-        "$max_rb_attempts"\
         "$rb_passwd"\
         "$rb_id"\
         "$ssh_id"\

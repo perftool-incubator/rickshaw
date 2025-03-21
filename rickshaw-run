@@ -48,8 +48,7 @@ $toolbox::logging::debug = 0;
 my $ug = Data::UUID->new;
 my %defaults = ( "num-samples" => 1, "tool-group" => "default", "test-order" => "s",
                  "base-run-dir" => tempdir(), "id" => $ug->create_str(),
-                 "max-sample-failures" => 1, "max-rb-attempts" => 1,
-                 "run-file" => "", "roadblock-password" => "flubber");
+                 "max-sample-failures" => 1, "run-file" => "", "roadblock-password" => "flubber");
 
 my @utilities = ( "packrat" );
 
@@ -170,7 +169,6 @@ sub usage {
     print "--test-order             's' = run all samples of an iteration first\n";
     print "                         'i' = run all iterations of a sample first\n";
     print "                         'r' = run a sample from a random iteration one at a time (ie. chaos mode)\n\n";
-    print "--max-rb-attempts        The number of times to try a given roadblock\n";
 }
 
 sub find_index {
@@ -234,7 +232,6 @@ sub do_roadblock {
     }
     close(RB_FOLLOWERS);
 
-    my $attempts = 0;
     my $rc = 99;
     my $file_rc;
     my $output;
@@ -246,49 +243,46 @@ sub do_roadblock {
     (my $date_cmd, my $date, my $date_rc) = run_cmd('date');
     chomp $date;
     printf "Roadblock: %s ", $date;
-    while ($attempts < $run{'max-rb-attempts'} and $rc != $roadblock_exit_success and $rc != $roadblock_exit_abort and $rc != $roadblock_exit_abort_waiting) {
-        $attempts++;
-        my $this_uuid = $attempts . ":" . $uuid;
-        printf "role: %s ", $role;
-        printf "attempt number: %d ", $attempts;
-        printf "uuid: %s\n", $this_uuid;
-        my $cmd = $base_rb_leader_cmd .
-            " --leader-id=controller" .
-            " --uuid=" . $this_uuid .
-            " --timeout=" . $timeout .
-            " --message-log=" . $msgs_log_file .
-            " --followers-file=" . $rb_followers_file;
-        if ($abort_via_roadblock) {
-            $cmd .= " --abort";
-        }
-        debug_log(sprintf "roadblock leader command:%s\n", $cmd);
-        ($cmd, $output, $rc) = run_cmd($cmd);
-        debug_log(sprintf "roadblock leader rc:%s\n", $rc);
-        debug_log(sprintf "roadblock leader output:\n%s\n", $output);
-        my $rb_log_fh = open_write_text_file($rb_log_file) ||
-            die "[ERROR]could not open roadblock log file [" . $rb_log_file . "] for writing\n";
-        printf $rb_log_fh "%s", $output;
-        close($rb_log_fh);
-        ($file_rc, $_[0]) = get_json_file($msgs_log_file);
-        if ($file_rc > 0 or ! defined $_[0]) {
-            printf "Could not open the messages log file: %s\n", $msgs_log_file;
-            exit 1;
-        }
-        if ( $rc != $roadblock_exit_success) {
-            printf "roadblock output BEGIN\n";
-            printf "%s", $output;
-            printf "roadblock rc: %d\n", $rc;
-            printf "roadblock output END\n";
-        }
-        if ( $rc == $roadblock_exit_abort or $rc == $roadblock_exit_abort_waiting ) {
-            printf "roadblock messages\n";
-            foreach my $msg (@{ $_[0]{'received'} }) {
-                if (exists $$msg{'payload'}{'message'}{'user-object'} and exists $$msg{'payload'}{'message'}{'user-object'}{'error'}) {
-                    printf "\nError from %s:\n%s\n\n", $$msg{'payload'}{'sender'}{'id'}, $$msg{'payload'}{'message'}{'user-object'}{'error'};
-                }
+
+    printf "role: %s ", $role;
+    printf "uuid: %s\n", $uuid;
+    my $cmd = $base_rb_leader_cmd .
+        " --leader-id=controller" .
+        " --uuid=" . $uuid .
+        " --timeout=" . $timeout .
+        " --message-log=" . $msgs_log_file .
+        " --followers-file=" . $rb_followers_file;
+    if ($abort_via_roadblock) {
+        $cmd .= " --abort";
+    }
+    debug_log(sprintf "roadblock leader command:%s\n", $cmd);
+    ($cmd, $output, $rc) = run_cmd($cmd);
+    debug_log(sprintf "roadblock leader rc:%s\n", $rc);
+    debug_log(sprintf "roadblock leader output:\n%s\n", $output);
+    my $rb_log_fh = open_write_text_file($rb_log_file) ||
+        die "[ERROR]could not open roadblock log file [" . $rb_log_file . "] for writing\n";
+    printf $rb_log_fh "%s", $output;
+    close($rb_log_fh);
+    ($file_rc, $_[0]) = get_json_file($msgs_log_file);
+    if ($file_rc > 0 or ! defined $_[0]) {
+        printf "Could not open the messages log file: %s\n", $msgs_log_file;
+        exit 1;
+    }
+    if ( $rc != $roadblock_exit_success) {
+        printf "roadblock output BEGIN\n";
+        printf "%s", $output;
+        printf "roadblock rc: %d\n", $rc;
+        printf "roadblock output END\n";
+    }
+    if ( $rc == $roadblock_exit_abort or $rc == $roadblock_exit_abort_waiting ) {
+        printf "roadblock messages\n";
+        foreach my $msg (@{ $_[0]{'received'} }) {
+            if (exists $$msg{'payload'}{'message'}{'user-object'} and exists $$msg{'payload'}{'message'}{'user-object'}{'error'}) {
+                printf "\nError from %s:\n%s\n\n", $$msg{'payload'}{'sender'}{'id'}, $$msg{'payload'}{'message'}{'user-object'}{'error'};
             }
         }
     }
+
     if ($rc == $roadblock_exit_abort or $rc == $roadblock_exit_success or $rc == $roadblock_exit_abort_waiting ) {
         ($file_rc, $_[0]) = get_json_file($msgs_log_file);
         if ($file_rc > 0 or ! defined $_[0]) {
@@ -1634,7 +1628,7 @@ sub process_cmdline() {
             usage;
             exit 0;
         } elsif ($arg =~ /^base-run-dir$|^workshop-dir$|^packrat-dir$|^bench-dir$|^roadblock-dir$|^roadblock-password$|^tools-dir$|^engine-dir$/ or
-                 $arg =~ /^run-id$|^id$|^bench-params$|^tool-params$|^bench-params$|^max-rb-attempts$/ or
+                 $arg =~ /^run-id$|^id$|^bench-params$|^tool-params$|^bench-params$/ or
                  $arg =~ /^test-order$|^tool-group$|^num-samples$|^max-sample-failures$|^name$|^bench-ids$/ or
                  $arg =~ /^registries-json$|^external-userenvs-dir$/ or
                  $arg =~ /^email$|^desc$/) {
@@ -2973,7 +2967,6 @@ sub deploy_endpoints() {
                     " --run-id=" . $run{'id'} .
                     " --base-run-dir=" . $run{'base-run-dir'} .
                     " --max-sample-failures=" . $run{'max-sample-failures'} .
-                    " --max-rb-attempts=" . $run{'max-rb-attempts'} .
                     " --endpoint-deploy-timeout=" . $endpoint_deploy_timeout .
                     " --engine-script-start-timeout=" . $engine_script_start_timeout .
                     $endpoint_image_opt .
@@ -3350,7 +3343,6 @@ remove_ssh_keys();
 my $run_file = $run_dir . "/rickshaw-run.json";
 $run{'rickshaw-run'}{'schema'}{'version'} = "2020.03.18";
 # type fixup for JSON conversion
-$run{'max-rb-attempts'} += 0;
 $run{'max-sample-failures'} += 0;
 $run{'num-samples'} += 0;
 if (put_json_file($run_file, \%run, $run_schema_file) > 0) {

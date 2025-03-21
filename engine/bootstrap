@@ -97,7 +97,7 @@ echo "$@"
 echo
 longopts="rickshaw-host:,base-run-dir:,endpoint-run-dir:,cs-label:,roadblock-server:"
 longopts+=",roadblock-passwd:,roadblock-id:,disable-tools:,osruntime:,endpoint:,max-sample-failures:"
-longopts+=",cpu-partitioning:,max-rb-attempts:,engine-script-start-timeout:"
+longopts+=",cpu-partitioning:,engine-script-start-timeout:"
 longopts+=",cpu-partitions:,cpu-partition-index:"
 opts=$(getopt -q -o "" --longoptions "$longopts" -n "getopt.sh" -- "$@");
 eval set -- "$opts";
@@ -173,11 +173,6 @@ while true; do
             export max_sample_failures="$1"
             shift;
             ;;
-        --max-rb-attempts)
-            shift;
-            export max_rb_attempts="$1"
-            shift;
-            ;;
         --engine-script-start-timeout)
             shift;
             export engine_script_start_timeout="$1"
@@ -195,11 +190,6 @@ while true; do
             ;;
     esac
 done
-
-if [ -z "$max_rb_attempts" ]; then
-    max_rb_attempts=1
-    echo "[WARNING] --max-rb-attempts was not used, so setting to default of $max_rb_attempts"
-fi
 
 if [ -z "$max_sample_failures" ]; then
     max_sample_failures=3

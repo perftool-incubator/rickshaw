@@ -14,7 +14,6 @@ rb_exit_success=0
 rb_exit_timeout=3
 rb_exit_abort=4
 rb_exit_input=2
-max_rb_attempts=""
 cs_rb_opts=""
 do_validate="0"
 num_clients=0
@@ -146,7 +145,7 @@ function exit_error() {
 function process_opts() {
     local longopts="validate,endpoint-opts:,endpoint-label:,run-id:,base-run-dir:,image:"
     local longopts+=",roadblock-server:,roadblock-passwd:,roadblock-id:,osruntime:,max-sample-failures:"
-    local longopts+=",max-rb-attempts:,endpoint-deploy-timeout:,engine-script-start-timeout:"
+    local longopts+=",endpoint-deploy-timeout:,engine-script-start-timeout:"
     local longopts+=",packrat-dir:,bench-ids:,roadblock-dir:"
     local opts=$(getopt -q -o "" --longoptions "$longopts" -n "getopt.sh" -- "$@");
     if [ $? -ne 0 ]; then
@@ -216,11 +215,6 @@ function process_opts() {
                 max_sample_failures="$1"
                 shift;
                 ;;
-            --max-rb-attempts)
-                shift;
-                max_rb_attempts="$1"
-                shift;
-                ;;
             --endpoint-deploy-timeout)
                 shift;
                 endpoint_deploy_timeout="$1"
@@ -266,12 +260,6 @@ if [ -z "$max_sample_failures" ]; then
     max_sample_failures=3
     if [ "do_validate" == "0" ]; then
         echo "[WARNING] --max-sample-failures was not used, so setting to default of $max_sample_failures"
-    fi
-fi
-if [ -z "$max_rb_attempts" ]; then
-    max_rb_attempts=1
-    if [ "do_validate" == "0" ]; then
-        echo "[WARNING] --max-rb-attempts was not used, so setting to default of $max_rb_attempts"
     fi
 fi
 
@@ -599,36 +587,30 @@ function do_roadblock() {
     echo "Starting roadblock [`date`]"
     echo "server: localhost"
     echo "role: ${role}"
-    echo "uuid (without attempt ID embedded): ${uuid}"
+    echo "uuid: ${uuid}"
     echo "timeout: ${timeout}"
 
-    local attempts=0
     local rc=99
     local output=""
-    while [ ${attempts} -lt ${max_rb_attempts} -a ${rc} -ne ${rb_exit_success} -a ${rc} -ne ${rb_exit_abort} ]; do
-        let attempts=${attempts}+1
-        echo "attempt number: ${attempts}"
-        echo "uuid: ${attempts}:${uuid}"
-        local rb_cmd="${cmd} --uuid ${attempts}:${uuid}"
-        echo "going to run this roadblock command: ${rb_cmd}"
-        echo "roadblock output BEGIN"
-        # use eval to make the quoting behave properly
-        eval ${rb_cmd}
-        rc=$?
-        echo "roadblock output END"
-        echo "roadblock exit code: ${rc}"
-        if [ -f ${msgs_log_file} ]; then
-            echo "messages from roadblock:"
-            cat ${msgs_log_file}
-        fi
-        if [ -n "${wait_for_log}" -a -f "${wait_for_log}" ]; then
-            echo "wait-for log:"
-            cat ${wait_fir_log}
-            rm ${wait_for_log}
-        fi
-    done
 
-    echo "total attempts: ${attempts}"
+    local rb_cmd="${cmd} --uuid ${uuid}"
+    echo "going to run this roadblock command: ${rb_cmd}"
+    echo "roadblock output BEGIN"
+    # use eval to make the quoting behave properly
+    eval ${rb_cmd}
+    rc=$?
+    echo "roadblock output END"
+    echo "roadblock exit code: ${rc}"
+    if [ -f ${msgs_log_file} ]; then
+        echo "messages from roadblock:"
+        cat ${msgs_log_file}
+    fi
+    if [ -n "${wait_for_log}" -a -f "${wait_for_log}" ]; then
+        echo "wait-for log:"
+        cat ${wait_fir_log}
+        rm ${wait_for_log}
+    fi
+
     echo "Completed roadblock [`date`]"
     printf "\n\n"
 
@@ -1229,7 +1211,6 @@ function make_osruntime_boostrap_script() {
     echo "endpoint=$1"            >>$outfile; shift
     echo "osruntime=$1"           >>$outfile; shift
     echo "max_sample_failures=$1" >>$outfile; shift
-    echo "max_rb_attempts=$1"     >>$outfile; shift
     echo "rb_passwd=$1"           >>$outfile; shift
     echo "rb_id=$1"               >>$outfile; shift
     echo "ssh_id=\"$1\""          >>$outfile; shift

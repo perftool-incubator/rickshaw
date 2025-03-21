@@ -93,41 +93,35 @@ def do_roadblock(label, timeout, *args):
     print(f"Starting roadblock [`date`]")
     print(f"server: {rickshaw_host}")
     print(f"role: {role}")
-    print(f"uuid (without attempt ID embedded): {uuid}")
+    print(f"uuid: {uuid}")
     print(f"timeout: {timeout}")
 
-    attempts = 0
     rc = 99
-    while attempts < max_rb_attempts and rc != rb_exit_success and rc != rb_exit_abort:
-        attempts += 1
-        print(f"attempt number: {attempts}")
-        print(f"uuid: {attempts}:{uuid}")
-        rb_cmd = cmd + [f"--uuid={attempts}:{uuid}"]
-        print(f"going to run this roadblock command: {' '.join(rb_cmd)}")
-        print("roadblock output BEGIN")
-        result = subprocess.run(rb_cmd)
-        rc = result.returncode
-        print("roadblock output END")
-        print(f"roadblock exit code: {rc}")
+    rb_cmd = cmd + [f"--uuid={uuid}"]
+    print(f"going to run this roadblock command: {' '.join(rb_cmd)}")
+    print("roadblock output BEGIN")
+    result = subprocess.run(rb_cmd)
+    rc = result.returncode
+    print("roadblock output END")
+    print(f"roadblock exit code: {rc}")
 
-        if os.path.isfile(msgs_log_file):
-            print("# start messages from roadblock ################################################")
-            with open(msgs_log_file, "r") as f:
-                print(f.read())
-            print("# end messages from roadblock ##################################################")
-        else:
-            print("# no messages from roadblock ###################################################")
+    if os.path.isfile(msgs_log_file):
+        print("# start messages from roadblock ################################################")
+        with open(msgs_log_file, "r") as f:
+            print(f.read())
+        print("# end messages from roadblock ##################################################")
+    else:
+        print("# no messages from roadblock ###################################################")
 
-        if wait_for_log and os.path.isfile(wait_for_log):
-            print("# start wait-for log ###########################################################")
-            with open(wait_for_log, "r") as f:
-                print(f.read())
-            print("# end wait-for log #############################################################")
-            os.remove(wait_for_log)
-        else:
-            print("# no wait-for log ##############################################################")
+    if wait_for_log and os.path.isfile(wait_for_log):
+        print("# start wait-for log ###########################################################")
+        with open(wait_for_log, "r") as f:
+            print(f.read())
+        print("# end wait-for log #############################################################")
+        os.remove(wait_for_log)
+    else:
+        print("# no wait-for log ##############################################################")
 
-    print(f"total attempts: {attempts}")
     print("Completed roadblock [`date`]")
     print("\n\n")
 

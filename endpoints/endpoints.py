@@ -521,7 +521,7 @@ def create_roadblock_msg(recipient_type, recipient_id, payload_type, payload):
 
     return msg
 
-def do_roadblock(roadblock_id = None, label = None, timeout = None, messages = None, wait_for = None, abort = None, max_attempts = 1, follower_id = None, redis_password = None, msgs_dir = None):
+def do_roadblock(roadblock_id = None, label = None, timeout = None, messages = None, wait_for = None, abort = None, follower_id = None, redis_password = None, msgs_dir = None):
     """
     Run a roadblock
 
@@ -532,7 +532,6 @@ def do_roadblock(roadblock_id = None, label = None, timeout = None, messages = N
         messages (str): An optional messages file to send
         wait_for (str): An optional command to wait on to complete the roadblock
         abort (bool): An optional parameter specifying that a abort should be sent
-        max_attempts (int): The maximum number of attempts for the roadblock
         follower_id (str): The follower ID to use to communicate with the leader
         redis_password (str): The password used to connect to the redis server
         msgs_dir (str): The directory where the message log should be saved
@@ -587,48 +586,41 @@ def do_roadblock(roadblock_id = None, label = None, timeout = None, messages = N
     else:
         log.info(ping_log_msg)
 
-    attempts = 0
-    rc = -1
-    while attempts < max_attempts and rc != roadblock_exits["success"] and rc != roadblock_exits["abort"]:
-        attempts += 1
-        log.info("[%s] Attempt number: %d" % (label, attempts))
+    my_roadblock = roadblock(log, False)
+    my_roadblock.set_uuid(uuid)
+    my_roadblock.set_role("follower")
+    my_roadblock.set_follower_id(follower_id)
+    my_roadblock.set_leader_id(leader)
+    my_roadblock.set_timeout(timeout)
+    my_roadblock.set_redis_server(redis_server)
+    my_roadblock.set_redis_password(redis_password)
+    my_roadblock.set_abort(abort)
+    my_roadblock.set_message_log(msgs_log_file)
+    my_roadblock.set_user_messages(messages)
+    if not wait_for is None:
+        my_roadblock.set_wait_for_cmd(wait_for)
+        my_roadblock.set_wait_for_log(wait_for_log)
 
-        my_roadblock = roadblock(log, False)
-        my_roadblock.set_uuid("%d:%s" % (attempts, uuid))
-        my_roadblock.set_role("follower")
-        my_roadblock.set_follower_id(follower_id)
-        my_roadblock.set_leader_id(leader)
-        my_roadblock.set_timeout(timeout)
-        my_roadblock.set_redis_server(redis_server)
-        my_roadblock.set_redis_password(redis_password)
-        my_roadblock.set_abort(abort)
-        my_roadblock.set_message_log(msgs_log_file)
-        my_roadblock.set_user_messages(messages)
-        if not wait_for is None:
-            my_roadblock.set_wait_for_cmd(wait_for)
-            my_roadblock.set_wait_for_log(wait_for_log)
+    rc = my_roadblock.run_it()
+    result_log_msg = "[%s] Roadblock resulted in return code %d" % (label, rc)
+    if rc != 0:
+        log.error(result_log_msg)
+    else:
+        log.info(result_log_msg)
 
-        rc = my_roadblock.run_it()
-        result_log_msg = "[%s] Roadblock resulted in return code %d" % (label, rc)
-        if rc != 0:
-            log.error(result_log_msg)
-        else:
-            log.info(result_log_msg)
+    stream = ""
+    with open(msgs_log_file, "r", encoding = "ascii") as msgs_log_file_fp:
+        for line in msgs_log_file_fp:
+            stream += line
+    log.info("[%s] Logged messages from roadblock:\n%s" % (label, stream))
 
+    if not wait_for is None:
         stream = ""
-        with open(msgs_log_file, "r", encoding = "ascii") as msgs_log_file_fp:
-            for line in msgs_log_file_fp:
-                stream += line
-        log.info("[%s] Logged messages from roadblock:\n%s" % (label, stream))
+        with open(wait_for_log, "r", encoding = "ascii") as wait_for_log_fp:
+            for line in wait_for_log_fp:
+              stream += line
+        log.info("[%s] Wait-for log from raodblock:\n%s" % (label, stream))
 
-        if not wait_for is None:
-            stream = ""
-            with open(wait_for_log, "r", encoding = "ascii") as wait_for_log_fp:
-                for line in wait_for_log_fp:
-                    stream += line
-            log.info("[%s] Wait-for log from raodblock:\n%s" % (label, stream))
-
-    log.info("[%s] Total attempts: %d" % (label, attempts))
     log.info("[%s] Returning %d" % (label, rc))
     return rc
 
@@ -876,7 +868,7 @@ def setup_logger(log_level):
 
     return logging.getLogger(__file__)
 
-def process_roadblocks(callbacks = None, roadblock_id = None, endpoint_label = None, endpoint_deploy_timeout = None, max_roadblock_attempts = None, roadblock_password = None, new_followers = None, roadblock_messages_dir = None, roadblock_timeouts = None, max_sample_failures = None, engine_commands_dir = None, endpoint_dir = None, early_abort = False):
+def process_roadblocks(callbacks = None, roadblock_id = None, endpoint_label = None, endpoint_deploy_timeout = None, roadblock_password = None, new_followers = None, roadblock_messages_dir = None, roadblock_timeouts = None, max_sample_failures = None, engine_commands_dir = None, endpoint_dir = None, early_abort = False):
     """
     Process the beginning and ending roadblocks associated with synchronizing a test
 
@@ -890,7 +882,6 @@ def process_roadblocks(callbacks = None, roadblock_id = None, endpoint_label = N
         roadblock_id (str): The base ID to use as part of a roadblock's name
         endpoint_label (str): The name of the calling endpoint
         endpoint_deploy_timeout (int): The computed timeout value for endpoint engine deployment
-        max_roadblock_attempts (int): The maximum number of attempts that should be made for each roadblock
         roadblock_password (str): The password that roadblock uses to connect to it's server
         new_followers (list): A list of the new followers to inform the roadblock leader about
         roadblock_messages_dir (str): The directory where roadblock messages should be stored
@@ -923,7 +914,6 @@ def process_roadblocks(callbacks = None, roadblock_id = None, endpoint_label = N
                       label = "endpoint-deploy-begin",
                       timeout = endpoint_deploy_timeout,
                       messages = new_followers_msg_file,
-                      max_attempts = max_roadblock_attempts,
                       redis_password = roadblock_password,
                       msgs_dir = roadblock_messages_dir)
     if rc != 0:
@@ -932,7 +922,6 @@ def process_roadblocks(callbacks = None, roadblock_id = None, endpoint_label = N
                       follower_id = endpoint_label,
                       label = "endpoint-deploy-end",
                       timeout = endpoint_deploy_timeout,
-                      max_attempts = max_roadblock_attempts,
                       redis_password = roadblock_password,
                       msgs_dir = roadblock_messages_dir,
                       abort = early_abort)
@@ -943,7 +932,6 @@ def process_roadblocks(callbacks = None, roadblock_id = None, endpoint_label = N
                       follower_id = endpoint_label,
                       label = "engine-init-begin",
                       timeout = roadblock_timeouts["engine-start"],
-                      max_attempts = max_roadblock_attempts,
                       redis_password = roadblock_password,
                       msgs_dir = roadblock_messages_dir)
     if rc != 0:
@@ -959,7 +947,6 @@ def process_roadblocks(callbacks = None, roadblock_id = None, endpoint_label = N
                       label = "engine-init-end",
                       timeout = roadblock_timeouts["engine-start"],
                       messages = engine_init_msgs,
-                      max_attempts = max_roadblock_attempts,
                       redis_password = roadblock_password,
                       msgs_dir = roadblock_messages_dir)
     if rc != 0:
@@ -969,7 +956,6 @@ def process_roadblocks(callbacks = None, roadblock_id = None, endpoint_label = N
                       follower_id = endpoint_label,
                       label = "get-data-begin",
                       timeout = roadblock_timeouts["default"],
-                      max_attempts = max_roadblock_attempts,
                       redis_password = roadblock_password,
                       msgs_dir = roadblock_messages_dir)
     if rc != 0:
@@ -978,7 +964,6 @@ def process_roadblocks(callbacks = None, roadblock_id = None, endpoint_label = N
                       follower_id = endpoint_label,
                       label = "get-data-end",
                       timeout = roadblock_timeouts["default"],
-                      max_attempts = max_roadblock_attempts,
                       redis_password = roadblock_password,
                       msgs_dir = roadblock_messages_dir)
     if rc != 0:
@@ -988,7 +973,6 @@ def process_roadblocks(callbacks = None, roadblock_id = None, endpoint_label = N
                       follower_id = endpoint_label,
                       label = "collect-sysinfo-begin",
                       timeout = roadblock_timeouts["collect-sysinfo"],
-                      max_attempts = max_roadblock_attempts,
                       redis_password = roadblock_password,
                       msgs_dir = roadblock_messages_dir)
     if rc != 0:
@@ -1003,7 +987,6 @@ def process_roadblocks(callbacks = None, roadblock_id = None, endpoint_label = N
                       follower_id = endpoint_label,
                       label = "collect-sysinfo-end",
                       timeout = roadblock_timeouts["collect-sysinfo"],
-                      max_attempts = max_roadblock_attempts,
                       redis_password = roadblock_password,
                       msgs_dir = roadblock_messages_dir)
     if rc != 0:
@@ -1013,7 +996,6 @@ def process_roadblocks(callbacks = None, roadblock_id = None, endpoint_label = N
                       follower_id = endpoint_label,
                       label = "start-tools-begin",
                       timeout = roadblock_timeouts["default"],
-                      max_attempts = max_roadblock_attempts,
                       redis_password = roadblock_password,
                       msgs_dir = roadblock_messages_dir)
     if rc != 0:
@@ -1022,7 +1004,6 @@ def process_roadblocks(callbacks = None, roadblock_id = None, endpoint_label = N
                       follower_id = endpoint_label,
                       label = "start-tools-end",
                       timeout = roadblock_timeouts["default"],
-                      max_attempts = max_roadblock_attempts,
                       redis_password = roadblock_password,
                       msgs_dir = roadblock_messages_dir)
     if rc != 0:
@@ -1031,7 +1012,6 @@ def process_roadblocks(callbacks = None, roadblock_id = None, endpoint_label = N
     rc = process_bench_roadblocks(callbacks = callbacks,
                                   roadblock_id = roadblock_id,
                                   endpoint_label = endpoint_label,
-                                  max_roadblock_attempts = max_roadblock_attempts,
                                   roadblock_password = roadblock_password,
                                   max_sample_failures = max_sample_failures,
                                   roadblock_messages_dir = roadblock_messages_dir,
@@ -1045,14 +1025,12 @@ def process_roadblocks(callbacks = None, roadblock_id = None, endpoint_label = N
                  follower_id = endpoint_label,
                  label = "stop-tools-begin",
                  timeout = roadblock_timeouts["default"],
-                 max_attempts = max_roadblock_attempts,
                  redis_password = roadblock_password,
                  msgs_dir = roadblock_messages_dir)
     do_roadblock(roadblock_id = roadblock_id,
                  follower_id = endpoint_label,
                  label = "stop-tools-end",
                  timeout = roadblock_timeouts["default"],
-                 max_attempts = max_roadblock_attempts,
                  redis_password = roadblock_password,
                  msgs_dir = roadblock_messages_dir)
 
@@ -1060,14 +1038,12 @@ def process_roadblocks(callbacks = None, roadblock_id = None, endpoint_label = N
                  follower_id = endpoint_label,
                  label = "send-data-begin",
                  timeout = roadblock_timeouts["default"],
-                 max_attempts = max_roadblock_attempts,
                  redis_password = roadblock_password,
                  msgs_dir = roadblock_messages_dir)
     do_roadblock(roadblock_id = roadblock_id,
                  follower_id = endpoint_label,
                  label = "send-data-end",
                  timeout = roadblock_timeouts["default"],
-                 max_attempts = max_roadblock_attempts,
                  redis_password = roadblock_password,
                  msgs_dir = roadblock_messages_dir)
 
@@ -1075,7 +1051,6 @@ def process_roadblocks(callbacks = None, roadblock_id = None, endpoint_label = N
                  follower_id = endpoint_label,
                  label = "endpoint-cleanup-begin",
                  timeout = roadblock_timeouts["default"],
-                 max_attempts = max_roadblock_attempts,
                  redis_password = roadblock_password,
                  msgs_dir = roadblock_messages_dir)
     callback = "remote-cleanup"
@@ -1088,13 +1063,12 @@ def process_roadblocks(callbacks = None, roadblock_id = None, endpoint_label = N
                  follower_id = endpoint_label,
                  label = "endpoint-cleanup-end",
                  timeout = roadblock_timeouts["default"],
-                 max_attempts = max_roadblock_attempts,
                  redis_password = roadblock_password,
                  msgs_dir = roadblock_messages_dir)
 
     return 0
 
-def process_bench_roadblocks(callbacks = None, roadblock_id = None, endpoint_label = None, max_roadblock_attempts = None, roadblock_password = None, max_sample_failures = None, roadblock_messages_dir = None, roadblock_timeouts = None, engine_commands_dir = None, endpoint_dir = None):
+def process_bench_roadblocks(callbacks = None, roadblock_id = None, endpoint_label = None, roadblock_password = None, max_sample_failures = None, roadblock_messages_dir = None, roadblock_timeouts = None, engine_commands_dir = None, endpoint_dir = None):
     """
     Handle the running and evaluation of roadblocks while looping through the iterations and samples
 
@@ -1107,7 +1081,6 @@ def process_bench_roadblocks(callbacks = None, roadblock_id = None, endpoint_lab
                           remote-cleanup
         roadblock_id (str): The base ID to use as part of a roadblock's name
         endpoint_label (str): The name of the calling endpoint
-        max_roadblock_attempts (int): The maximum number of attempts that should be made for each roadblock
         roadblock_password (str): The password that roadblock uses to connect to it's server
         max_sample_failures (int): The maximum number of times a sample can fail before the iteration is considered a failure
         roadblock_messages_dir (str): The directory where roadblock messages should be stored
@@ -1127,7 +1100,6 @@ def process_bench_roadblocks(callbacks = None, roadblock_id = None, endpoint_lab
                       follower_id = endpoint_label,
                       label = "setup-bench-begin",
                       timeout = roadblock_timeouts["default"],
-                      max_attempts = max_roadblock_attempts,
                       redis_password = roadblock_password,
                       msgs_dir = roadblock_messages_dir)
     if rc != 0:
@@ -1163,7 +1135,6 @@ def process_bench_roadblocks(callbacks = None, roadblock_id = None, endpoint_lab
                       follower_id = endpoint_label,
                       label = "setup-bench-end",
                       timeout = roadblock_timeouts["default"],
-                      max_attempts = max_roadblock_attempts,
                       redis_password = roadblock_password,
                       msgs_dir = roadblock_messages_dir)
     if rc != 0:
@@ -1215,7 +1186,6 @@ def process_bench_roadblocks(callbacks = None, roadblock_id = None, endpoint_lab
                               label = rb_name,
                               timeout = timeout,
                               messages = user_msgs_file,
-                              max_attempts = max_roadblock_attempts,
                               redis_password = roadblock_password,
                               msgs_dir = roadblock_messages_dir)
             quit,abort = evaluate_roadblock(quit, abort, rb_name, rc, iteration_sample, engine_rx_msgs_dir, max_sample_failures)
@@ -1227,7 +1197,6 @@ def process_bench_roadblocks(callbacks = None, roadblock_id = None, endpoint_lab
                               label = rb_name,
                               timeout = timeout,
                               messages = user_msgs_file,
-                              max_attempts = max_roadblock_attempts,
                               redis_password = roadblock_password,
                               msgs_dir = roadblock_messages_dir)
             quit,abort = evaluate_roadblock(quit, abort, rb_name, rc, iteration_sample, engine_rx_msgs_dir, max_sample_failures)
@@ -1239,7 +1208,6 @@ def process_bench_roadblocks(callbacks = None, roadblock_id = None, endpoint_lab
                               label = rb_name,
                               timeout = timeout,
                               messages = user_msgs_file,
-                              max_attempts = max_roadblock_attempts,
                               redis_password = roadblock_password,
                               msgs_dir = roadblock_messages_dir)
             quit,abort = evaluate_roadblock(quit, abort, rb_name, rc, iteration_sample, engine_rx_msgs_dir, max_sample_failures)
@@ -1251,7 +1219,6 @@ def process_bench_roadblocks(callbacks = None, roadblock_id = None, endpoint_lab
                               label = rb_name,
                               timeout = timeout,
                               messages = user_msgs_file,
-                              max_attempts = max_roadblock_attempts,
                               redis_password = roadblock_password,
                               msgs_dir = roadblock_messages_dir)
             quit,abort = evaluate_roadblock(quit, abort, rb_name, rc, iteration_sample, engine_rx_msgs_dir, max_sample_failures)
@@ -1263,7 +1230,6 @@ def process_bench_roadblocks(callbacks = None, roadblock_id = None, endpoint_lab
                               label = rb_name,
                               timeout = timeout,
                               messages = user_msgs_file,
-                              max_attempts = max_roadblock_attempts,
                               redis_password = roadblock_password,
                               msgs_dir = roadblock_messages_dir)
             quit,abort = evaluate_roadblock(quit, abort, rb_name, rc, iteration_sample, engine_rx_msgs_dir, max_sample_failures)
@@ -1282,7 +1248,6 @@ def process_bench_roadblocks(callbacks = None, roadblock_id = None, endpoint_lab
                               label = rb_name,
                               timeout = timeout,
                               messages = user_msgs_file,
-                              max_attempts = max_roadblock_attempts,
                               redis_password = roadblock_password,
                               msgs_dir = roadblock_messages_dir)
             quit,abort = evaluate_roadblock(quit, abort, rb_name, rc, iteration_sample, engine_rx_msgs_dir, max_sample_failures)
@@ -1294,7 +1259,6 @@ def process_bench_roadblocks(callbacks = None, roadblock_id = None, endpoint_lab
                               label = rb_name,
                               timeout = timeout,
                               messages = user_msgs_file,
-                              max_attempts = max_roadblock_attempts,
                               redis_password = roadblock_password,
                               msgs_dir = roadblock_messages_dir)
             quit,abort = evaluate_roadblock(quit, abort, rb_name, rc, iteration_sample, engine_rx_msgs_dir, max_sample_failures)
@@ -1327,7 +1291,6 @@ def process_bench_roadblocks(callbacks = None, roadblock_id = None, endpoint_lab
                               label = rb_name,
                               timeout = timeout,
                               messages = user_msgs_file,
-                              max_attempts = max_roadblock_attempts,
                               redis_password = roadblock_password,
                               msgs_dir = roadblock_messages_dir)
             quit,abort = evaluate_roadblock(quit, abort, rb_name, rc, iteration_sample, engine_rx_msgs_dir, max_sample_failures)
@@ -1343,7 +1306,6 @@ def process_bench_roadblocks(callbacks = None, roadblock_id = None, endpoint_lab
                               label = rb_name,
                               timeout = timeout,
                               messages = user_msgs_file,
-                              max_attempts = max_roadblock_attempts,
                               redis_password = roadblock_password,
                               msgs_dir = roadblock_messages_dir)
             quit,abort = evaluate_roadblock(quit, abort, rb_name, rc, iteration_sample, engine_rx_msgs_dir, max_sample_failures)
@@ -1355,7 +1317,6 @@ def process_bench_roadblocks(callbacks = None, roadblock_id = None, endpoint_lab
                               label = rb_name,
                               timeout = timeout,
                               messages = user_msgs_file,
-                              max_attempts = max_roadblock_attempts,
                               redis_password = roadblock_password,
                               msgs_dir = roadblock_messages_dir)
             quit,abort = evaluate_roadblock(quit, abort, rb_name, rc, iteration_sample, engine_rx_msgs_dir, max_sample_failures)
@@ -1367,7 +1328,6 @@ def process_bench_roadblocks(callbacks = None, roadblock_id = None, endpoint_lab
                               label = rb_name,
                               timeout = timeout,
                               messages = user_msgs_file,
-                              max_attempts = max_roadblock_attempts,
                               redis_password = roadblock_password,
                               msgs_dir = roadblock_messages_dir)
             quit,abort = evaluate_roadblock(quit, abort, rb_name, rc, iteration_sample, engine_rx_msgs_dir, max_sample_failures)
@@ -1379,7 +1339,6 @@ def process_bench_roadblocks(callbacks = None, roadblock_id = None, endpoint_lab
                               label = rb_name,
                               timeout = timeout,
                               messages = user_msgs_file,
-                              max_attempts = max_roadblock_attempts,
                               redis_password = roadblock_password,
                               msgs_dir = roadblock_messages_dir)
             quit,abort = evaluate_roadblock(quit, abort, rb_name, rc, iteration_sample, engine_rx_msgs_dir, max_sample_failures)
@@ -1391,7 +1350,6 @@ def process_bench_roadblocks(callbacks = None, roadblock_id = None, endpoint_lab
                               label = rb_name,
                               timeout = timeout,
                               messages = user_msgs_file,
-                              max_attempts = max_roadblock_attempts,
                               redis_password = roadblock_password,
                               msgs_dir = roadblock_messages_dir)
             quit,abort = evaluate_roadblock(quit, abort, rb_name, rc, iteration_sample, engine_rx_msgs_dir, max_sample_failures)
@@ -1410,7 +1368,6 @@ def process_bench_roadblocks(callbacks = None, roadblock_id = None, endpoint_lab
                               label = rb_name,
                               timeout = timeout,
                               messages = user_msgs_file,
-                              max_attempts = max_roadblock_attempts,
                               redis_password = roadblock_password,
                               msgs_dir = roadblock_messages_dir)
             quit,abort = evaluate_roadblock(quit, abort, rb_name, rc, iteration_sample, engine_rx_msgs_dir, max_sample_failures)
@@ -1422,7 +1379,6 @@ def process_bench_roadblocks(callbacks = None, roadblock_id = None, endpoint_lab
                               label = rb_name,
                               timeout = timeout,
                               messages = user_msgs_file,
-                              max_attempts = max_roadblock_attempts,
                               redis_password = roadblock_password,
                               msgs_dir = roadblock_messages_dir)
             quit,abort = evaluate_roadblock(quit, abort, rb_name, rc, iteration_sample, engine_rx_msgs_dir, max_sample_failures)
@@ -1434,7 +1390,6 @@ def process_bench_roadblocks(callbacks = None, roadblock_id = None, endpoint_lab
                               label = rb_name,
                               timeout = timeout,
                               messages = user_msgs_file,
-                              max_attempts = max_roadblock_attempts,
                               redis_password = roadblock_password,
                               msgs_dir = roadblock_messages_dir)
             quit,abort = evaluate_roadblock(quit, abort, rb_name, rc, iteration_sample, engine_rx_msgs_dir, max_sample_failures)
@@ -1529,13 +1484,6 @@ def process_options():
                         type = str,
                         choices = [ "debug", "normal" ],
                         default = "normal")
-
-    parser.add_argument("--max-rb-attempts",
-                        dest = "max_rb_attempts",
-                        help = "The maximum number of times a roadblock should be attempted if it fails.",
-                        required = False,
-                        type = int,
-                        default = 1)
 
     parser.add_argument("--max-sample-failures",
                         dest = "max_sample_failures",

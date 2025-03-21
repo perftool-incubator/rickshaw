@@ -833,10 +833,6 @@ function build_pod_spec() {
         echo "            \"value\": \"$max_sample_failures\"" >>$json
         echo "          }," >>$json
         echo "          {" >>$json
-        echo "            \"name\": \"max_rb_attempts\"," >>$json
-        echo "            \"value\": \"$max_rb_attempts\"" >>$json
-        echo "          }," >>$json
-        echo "          {" >>$json
         echo "            \"name\": \"engine_script_start_timeout\"," >>$json
         echo "            \"value\": \"$engine_script_start_timeout\"" >>$json
         echo "          }," >>$json
