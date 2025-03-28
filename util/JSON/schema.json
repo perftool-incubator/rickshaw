@@ -51,10 +51,6 @@
 			"i",
 			"r"
 		    ]
-		},
-		"max-rb-attempts": {
-		    "type": "integer",
-		    "minimum": 1
 		}
 	    },
 	    "additionalProperties": false,

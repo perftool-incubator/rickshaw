@@ -1101,7 +1101,6 @@ def create_podman(thread_name, remote_name, engine_name, container_name, connect
         env_file.write("endpoint_run_dir=" + settings["dirs"]["local"]["endpoint"] + "\n")
         env_file.write("engine_script_start_timeout=" + str(args.engine_script_start_timeout) + "\n")
         env_file.write("max_sample_failures=" + str(args.max_sample_failures) + "\n")
-        env_file.write("max_rb_attempts=" + str(args.max_rb_attempts) + "\n")
         env_file.write("rickshaw_host=" + controller_ip + "\n")
         env_file.write("roadblock_id=" + args.roadblock_id + "\n")
         env_file.write("roadblock_passwd=" + args.roadblock_passwd + "\n")
@@ -1387,7 +1386,6 @@ def start_chroot(thread_name, remote_name, engine_name, container_name, connecti
         "--endpoint=remotehosts",
         "--endpoint-run-dir=" + settings["dirs"]["local"]["endpoint"],
         "--engine-script-start-timeout=" + str(args.engine_script_start_timeout),
-        "--max-rb-attempts=" + str(args.max_rb_attempts),
         "--max-sample-failures=" + str(args.max_sample_failures),
         "--rickshaw-host=" + controller_ip,
         "--roadblock-id=" + args.roadblock_id,
@@ -1636,7 +1634,7 @@ def test_start(msgs_dir, test_id, tx_msgs_dir):
 
     Args:
         msgs_dir (str): The directory look for received messages in
-        test_id (str): A string of the for "<iteration>:<sample>:<attempt>" used to identify the current test
+        test_id (str): A string of the form "<iteration>:<sample>:<attempt>" used to identify the current test
         tx_msgs_dir (str): The directory where to write queued messages for transmit
 
     Globals:
@@ -2646,7 +2644,6 @@ def main():
                                       roadblock_id = args.roadblock_id,
                                       endpoint_label = args.endpoint_label,
                                       endpoint_deploy_timeout = args.endpoint_deploy_timeout,
-                                      max_roadblock_attempts = args.max_rb_attempts,
                                       roadblock_password = args.roadblock_passwd,
                                       new_followers = settings["engines"]["new-followers"],
                                       roadblock_messages_dir = settings["dirs"]["local"]["roadblock-msgs"],
