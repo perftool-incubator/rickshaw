@@ -491,7 +491,7 @@ sub generate_metrics {
             $metr_data_doc{'metric_desc'} = \%desc;
             $metr_data_doc{'metric_data'} = \%data;
             # Newwer than cdmv7 includes a very small verison of the run doc info, just the run-uuid, to make deleting metric_data docs much easier
-            if (!$cdm{'ver'} eq "v7dev") {
+            if ($cdm{'ver'} ne "v7dev") {
                 my %micro_run_doc = ($run_id_field => $result{$run_id_field});
                 $metr_data_doc{'run'} = \%micro_run_doc;
             }
