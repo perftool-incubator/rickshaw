@@ -1,0 +1,1354 @@
+#!/usr/bin/perl
+# -*- mode: perl; indent-tabs-mode: nil; perl-indent-level: 4 -*-
+# vim: autoindent tabstop=4 shiftwidth=4 expandtab softtabstop=4 filetype=perl
+#
+# Author: Andrew Theurer
+#
+# Rickshaw will run a benhcmark for you.  Please see README.md for instructions.
+# rickshaw-index takes the rickshaw-run.json, plus metric data found from benchmark
+# and tools, and indexes that data into OpenSearch.
+
+use strict;
+use warnings;
+use Cwd;
+use Data::UUID;
+use File::pushd;
+use File::Basename;
+use File::Temp qw(tempdir);
+use File::Copy;
+use File::Path qw(make_path);
+use JSON::XS;
+use JSON::Validator;
+use Data::Dumper;
+use REST::Client;
+
+BEGIN {
+    if (!(exists $ENV{'TOOLBOX_HOME'} && -d "$ENV{'TOOLBOX_HOME'}/perl")) {
+        print "This script requires libraries that are provided by the toolbox project.\n";
+        print "Toolbox can be acquired from https://github.com/perftool-incubator/toolbox and\n";
+        print "then use 'export TOOLBOX_HOME=/path/to/toolbox' so that it can be located.\n";
+        exit 1;
+    }
+
+    if (!(exists $ENV{'RICKSHAW_HOME'} && -d "$ENV{'RICKSHAW_HOME'}")) {
+        print "This script requires libraries that are provided by the rickshaw project.\n";
+        print "Since this script is part of rickshaw you should already have it.  You can then\n";
+        print "use 'export RICKSHAW_HOME=/path/to/rickshaw so that it can be located.\n";
+        exit 1;
+    }
+}
+use lib "$ENV{'TOOLBOX_HOME'}/perl";
+use toolbox::json;
+use toolbox::logging;
+
+use lib "$ENV{'RICKSHAW_HOME'}";
+use rickshaw::fixup;
+
+$| = 1; # flush stdout
+$toolbox::logging::debug = 0;
+
+my @pids;
+my $index_tools = 1;
+my @suported_cdm_vers = ('v7dev', 'v8dev');
+my %result;
+my $base_run_dir;
+my %cdm = ( 'ver' => '' );
+my $coder = JSON::XS->new->canonical;
+my $result_schema_file;
+my $bench_metric_schema_file;
+my $sample_persistent_ids_schema_file;
+my $file_rc;
+my @queued_docs;
+my @queued_ndjson;
+my @queued_terms;
+my %num_docs_submitted = ('run' => 0, 'iteration' => 0, 'param' => 0, 'tag' => 0, 'sample' => 0, 'period' => 0);
+my $max_jobs = 20;
+my $update_run_json = 0;
+my $run_id_field;
+my $iter_id_field;
+my $samp_id_field;
+my $period_id_field;
+my $metric_id_field;
+
+sub usage {
+    print "\nusage:\n\n";
+    print "--base-run-dir <dir>  (this is a result-file in json that rickshaw-post-process generates)\n";
+    print "--max-jobs <num>  (maximum number of background jobs for indexing)\n";
+}
+
+sub add_persistent_uuid {
+    my $doc_ref = shift; # A reference to the object, like run, param, etc
+    my $doc_type = shift; # Valid types: run, tag, iteration, param, sample, period, metric_desc
+    my $update_var_ref = shift; # A reference to tracker var that indicates that we need to write data file
+    my $old_field_name = "id";
+    my $new_field_name = $doc_type . "-uuid";
+
+    if ($cdm{'ver'} eq 'v7dev') {
+        # V7 uses the older field name, 'id'
+        if (exists $$doc_ref{$old_field_name}) {
+            # Already exists, nothing to do
+            if (not defined $$doc_ref{$old_field_name}) {
+                print "WHY is this null?" . Dumper $doc_ref;
+                exit 1;
+            }
+        } else {
+            $$doc_ref{$old_field_name} = Data::UUID->new->create_str();
+            $$update_var_ref++;
+            debug_log(sprintf "Adding $old_field_name %s\n", $$doc_ref{$old_field_name});
+        }
+        # Nothing else to do for v7
+        return;
+    }
+
+    # Newer than cdmv7:
+
+    if (exists $$doc_ref{$new_field_name}) {
+        # Already exists, nothing to do
+        return;
+    }
+
+    if (not exists $$doc_ref{$old_field_name}) {
+        # Did not find older style id, so simply create newer style id
+        $$doc_ref{$new_field_name} = Data::UUID->new->create_str();
+        $$update_var_ref++;
+        debug_log(sprintf "Adding $new_field_name %s\n", $$doc_ref{$new_field_name});
+        return;
+    }
+
+    # Older style id does exist and newer style does not exist
+
+    # The param doc actually used the id as the client/server id,
+    # so if this is detected, don't assume it is an older 'uuid'
+    if ($doc_type eq "param" and $$doc_ref{$old_field_name} =~ /^[\d]+$/) {
+        # Leave 'id' alone and create a new uuid
+        $$doc_ref{$new_field_name} = Data::UUID->new->create_str();
+        debug_log(sprintf "Adding $new_field_name %s\n", $$doc_ref{$new_field_name});
+        $$update_var_ref++;
+        return;
+    }
+
+    # Older style id needs to move to newer style id
+    $$doc_ref{$new_field_name} = $$doc_ref{$old_field_name};
+    debug_log(sprintf "Switching from %s to %s\n", $old_field_name, $new_field_name);
+    delete $$doc_ref{$old_field_name};
+    $$update_var_ref++;
+    return;
+}
+
+sub http_request {
+    my $method = shift;
+    my $host = shift;
+    my $req = shift;
+    my $body = shift;
+    my $client = REST::Client->new();
+    $client->setHost($host);
+    my %req_header = ("Content-Type" => "application/json");
+    debug_log(sprintf "Request: http://%s/%s\nbody: %s\n\n", $host, $req, $body);
+    $client->request($method, $req, $body, \%req_header);
+    my $response = $client->responseContent();
+    debug_log(sprintf "Response:\n%s\n\n", $response);
+    my $resp_ref = $coder->decode($response);
+    if (not defined $resp_ref) {
+        printf "ERROR: response to index request is undefined\n";
+        exit 1;
+    }
+    if (defined $resp_ref and ref $resp_ref eq ref {} and exists $$resp_ref{'error'}) {
+        printf "ERROR:\n%s\n", $response;
+        exit 1;
+    }
+    return $resp_ref;
+}
+
+sub http_ndjson_request {
+    my $method = shift;
+    my $host = shift;
+    my $req = shift;
+    my $body = shift;
+    my $client = REST::Client->new();
+    $client->setHost($host);
+    my %req_header = ("Content-Type" => "application/x-ndjson");
+    debug_log(sprintf "Request: http://%s/%s\nbody: %s\n\n", $host, $req, $body);
+    $client->request($method, $req, $body, \%req_header);
+    my $response = $client->responseContent();
+    my $resp_ref = $coder->decode($response);
+    if (defined $resp_ref and ref $resp_ref eq ref {} and exists $$resp_ref{'errors'} and $$resp_ref{'errors'} != 0) {
+        printf "ERROR:\n%s\n", $response;
+    }
+    return $response;
+}
+
+sub create_es_doc {
+    my $doc_type = shift;
+    my $iter_idx = shift;
+    my $sample_idx = shift;
+    my $period_idx = shift;
+
+    my %es_doc = ( 'cdm' => \%cdm );
+    for my $field ($run_id_field, qw(harness host email name source begin end benchmark)) {
+        if (exists $result{$field} and defined $result{$field}) {
+            $es_doc{'run'}{$field} = $result{$field};
+        } elsif ($field =~ /benchmark|source/) {
+            printf "ERROR: field name %s was not found in rickshaw-result.json:\n", $field;
+            print Dumper \%result;
+        }
+    }
+    if ($doc_type eq "tag") {
+        if (defined $iter_idx) {
+            # When creating a tag OpenSearch doc, the $iter_idx is repurposed for the tag_idx,
+            # because a tag is not specific to an iteration
+            my $tag_idx = $iter_idx;
+            if (exists $result{'tags'}) {
+                if (ref($result{'tags'}) eq ref([])) {
+                    for my $field (qw(name val)) {
+                        if (exists $result{'tags'}[$tag_idx]{$field} and defined $result{'tags'}[$tag_idx]{$field}) {
+                            $es_doc{'tag'}{$field} = $result{'tags'}[$tag_idx]{$field};
+                        } else {
+                            printf "ERROR: field name %s for tag %d was not found in rickshaw-result.json:\n", $field, $tag_idx;
+                            printf Dumper $result{'tags'}[$tag_idx];
+                            exit 1;
+                        }
+                    }
+                } else {
+                    printf "ERROR: tag at index %d is not an array/list in rickshaw-result.json, exiting:";
+                    print Dumper \%result;
+                    exit 1;
+                }
+            } else {
+                printf "ERROR: tags array/list is missing from the rickshaw-result.json, exiting:\n";
+                print Dumper \%result;
+                exit 1;
+            }
+        } else {
+            print "ERROR: create_es_doc(%s,) tag index missing, exiting\n", $doc_type;
+        }
+    } elsif ($doc_type eq "param") {
+        if (defined $iter_idx) {
+            if (defined $sample_idx) {
+                # Since a $sample_idx is not needed for a param, we reuse it for a param_idx
+                my $param_idx = $sample_idx;
+                if (exists $result{'iterations'}[$iter_idx]{'params'}[$param_idx]) {
+                    if (ref($result{'iterations'}[$iter_idx]{'params'}[$param_idx]) eq ref({})) {
+                        for my $g ($iter_id_field, qw(status primary-metric primary-period num path)) {
+                            $es_doc{'iteration'}{$g} = $result{'iterations'}[$iter_idx]{$g};
+                        }
+                        for my $field (qw(arg val)) {  ##TODO: add role and [cs]id if present
+                            if (exists $result{'iterations'}[$iter_idx]{'params'}[$param_idx]{$field} and defined $result{'iterations'}[$iter_idx]{'params'}[$param_idx]{$field}) {
+                                $es_doc{'param'}{$field} = $result{'iterations'}[$iter_idx]{'params'}[$param_idx]{$field};
+                            } else {
+                                printf "ERROR: field name %s for param %d in iteration %d was not found in rickshaw-result.json:\n", $field, $param_idx, $iter_idx;
+                                print Dumper $result{'iterations'}[$iter_idx]{'params'}[$param_idx];
+                                exit 1;
+                            }
+                        }
+                    } else {
+                        printf "ERROR: param at index %d is not an object/hash, exiting", $iter_idx;
+                        print Dumper $result{'iterations'}[$iter_idx]{'params'};
+                        exit 1;
+                    }
+                } else {
+                    printf "ERROR: param array/list at index %d does not exist in rickshaw-result.json, exiting", $iter_idx;
+                    print Dumper $result{'iterations'}[$iter_idx];
+                    exit 1;
+                }
+            } else {
+                print "ERROR: create_es_doc(%s,%s,%s) param index missing, exiting\n", $doc_type, $iter_idx, "";
+                exit 1;
+            }
+        } else {
+            print "ERROR: create_es_doc(%s,%s,%s) iter index missing, exiting\n", $doc_type, "", $sample_idx;
+            exit 1;
+        }
+    } else { # All other doc types
+        if (defined $iter_idx) {
+            if (exists $result{'iterations'}[$iter_idx]) {
+                foreach  my $iter_field ($iter_id_field, qw(status primary-metric primary-period num path)) {
+                    $es_doc{'iteration'}{$iter_field} = $result{'iterations'}[$iter_idx]{$iter_field};
+                }
+                if (defined $sample_idx) {
+                    if (exists $result{'iterations'}[$iter_idx]{'samples'}[$sample_idx]) {
+                        foreach my $sample_field ($samp_id_field, qw(status num path)) {
+                            $es_doc{'sample'}{$sample_field} = $result{'iterations'}[$iter_idx]{'samples'}[$sample_idx]{$sample_field};
+                        }
+                        if (defined $period_idx) {
+                            if (exists $result{'iterations'}[$iter_idx]{'samples'}[$sample_idx]) {
+                                for my $period_field ($period_id_field, qw(name begin end)) {
+                                    $es_doc{'period'}{$period_field} = $result{'iterations'}[$iter_idx]{'samples'}[$sample_idx]{'periods'}[$period_idx]{$period_field};
+                                }
+                            } else {
+                                printf "ERROR: Period index %d (for sample index %d, iteration index %d) does not exist in rickshaw-result.json\n", $period_idx, $sample_idx, $iter_idx;
+                                exit 1;
+                            }
+                        }
+                    } else {
+                        printf "ERROR: Sample index %d (for iteration index %d) does not exist in rickshaw-result.json\n", $sample_idx, $iter_idx;
+                        exit 1;
+                    }
+                }
+            } else {
+                printf "ERROR: Iteration index %d does not exist in rickshaw-result.json\n", $iter_idx;
+                exit 1;
+            }
+        }
+    }
+    return \%es_doc;
+}
+
+sub queue_es_doc {
+    my $doc_type = shift;
+    if (not defined $doc_type) {
+        print "ERROR: doc_type must be defined\n";
+        exit 1;
+    }
+    my $dir = shift;
+    if (not defined $dir) {
+        print "ERROR: dir must be defined\n";
+        exit 1;
+    }
+    my $iter = shift;
+    my $sample = shift;
+    my $period = shift;
+    my %doc_info = ( 'doc-type' => $doc_type, 'dir' => $dir );
+    if (defined $iter) {
+        $doc_info{'iter'} = $iter;
+    }
+    if (defined $sample) {
+        $doc_info{'sample'} = $sample;
+    }
+    if (defined $period) {
+        $doc_info{'period'} = $period;
+    }
+    push(@queued_docs, \%doc_info);
+}
+
+# This is meant to index a specific OpenSearch document type with sourcing the info direclty
+# from %result hash (wich is the contents of rickshaw-run.json).  When a tag, param,
+# iteration, sample, or period document is desired, a corresponing index for the respective
+# array(s) in %result is necessary.
+sub index_es_doc {
+    my $doc_type = shift;
+    if (not defined $doc_type) {
+        print "ERROR: doc_type must be defined\n";
+        exit 1;
+    }
+    #TODO match a valid doc_type
+    my $iter = shift;
+    my $sample = shift;
+    my $period = shift;
+    my $es_doc_ref = create_es_doc($doc_type, $iter, $sample, $period);
+    my $es_doc_json = $coder->encode($es_doc_ref);
+    my $resp_ref = http_request("POST", "localhost:9200", "cdm" . $cdm{'ver'} . "-" . $doc_type . "/_doc/", $es_doc_json);
+    $num_docs_submitted{$doc_type}++;
+    if ($$resp_ref{'result'} ne "created") {
+        printf "Request to index failed:\n%s\n", $coder->encode($resp_ref);
+        exit 1;
+    }
+}
+
+sub index_queued_es_docs {
+    foreach my $this_doc (@queued_docs) {
+        index_es_doc($$this_doc{'doc-type'}, $$this_doc{'iter'}, $$this_doc{'sample'}, $$this_doc{'period'});
+    }
+}
+
+sub write_es_doc {
+    my $doc_type = shift;
+    if (not defined $doc_type) {
+        print "ERROR: doc_type must be defined\n";
+        exit 1;
+    }
+    my $dir = shift;
+    my $iter = shift;
+    my $sample = shift;
+    my $period = shift;
+    my $es_doc_ref = create_es_doc($doc_type, $iter, $sample, $period);
+    {
+        my $this_dir = pushd($dir);
+        if ($doc_type eq "period") {
+            my $file = "period-" . $period . ".json";
+            put_json_file($file, $es_doc_ref);
+            if (defined $result{'iterations'}[$iter]{'primary-period'}) {
+                if (defined $result{'iterations'}[$iter]{'samples'}[$sample]{'periods'}[$period]{'name'}) {
+                    if ($result{'iterations'}[$iter]{'primary-period'} eq $result{'iterations'}[$iter]{'samples'}[$sample]{'periods'}[$period]{'name'}) {
+                        my $link_file = "primary-period.json";
+                        if (-e $file . ".xz") {
+                            $file .= ".xz";
+                            $link_file .= ".xz";
+                        }
+                        if ( -e $link_file) {
+                            debug_log(sprintf "Deleting stale symlink %s\n", $link_file);
+                            unlink($link_file);
+                        }
+                        debug_log(sprintf "Creating a symlink %s -> %s\n", $link_file, $file);
+                        symlink($file, $link_file) || printf "WARNING: could not symlink %s -> %s\n", $link_file, $file;
+                    }
+                } else {
+                    printf "WARNING: period name is not defined for iteration %s sample %d\n", $iter, $sample;
+                }
+            } else {
+                printf "WARNING: iteration %d does not have a primary period defined\n", $iter;
+                print Dumper $result{'iterations'}[$iter];
+            }
+        } else {
+            my $file = $doc_type . ".json";
+            put_json_file($file, $es_doc_ref);
+        }
+    } # popd
+}
+
+sub write_queued_es_docs {
+    foreach my $this_doc (@queued_docs) {
+        write_es_doc($$this_doc{'doc-type'}, $$this_doc{'dir'}, $$this_doc{'iter'}, $$this_doc{'sample'}, $$this_doc{'period'});
+    }
+}
+
+sub wait_for_metric_descs {
+    my @terms = @_;
+    my $attempts = 1;
+    my $max_attempts = 20;
+    my $submitted_metric_descs = scalar @terms;
+    my $found_metric_descs = 0;
+
+    while ($found_metric_descs < $submitted_metric_descs) {
+        if ($attempts > $max_attempts) {
+            print "ERROR: could not ensure all OpenSearch metric_desc docs are indexed, exiting\n";
+            exit 1;
+        }
+        sleep 5;
+        my $request_body;
+        my $request_path = "/cdm" . $cdm{'ver'} . "-metric_desc/_count/";
+        if ($cdm{'ver'} eq 'v7dev') {
+            $request_body = '{"query":{"terms":{"metric_desc.id": ' . $coder->encode(\@terms) . '}}}';
+        } else { # later than cdmv7
+            $request_body = '{"query":{"terms":{"metric_desc.metric_desc-uuid": ' . $coder->encode(\@terms) . '}}}';
+        }
+        #printf "submitting request_path:\n%s\n", $request_path;
+        #printf "submitting request_body:\n%s\n", $request_body;
+
+        my $resp_ref = http_request("POST", "localhost:9200", $request_path, $request_body);
+        #print "\nrequest completed\nresponse:\n";
+        #print Dumper $resp_ref;
+        $found_metric_descs = $$resp_ref{'count'};
+        if ($found_metric_descs > $submitted_metric_descs) {
+            printf "Something went wrong, the number of metrics found (%d) in OpenSearch is greater than the number submitted (%d)\n", $found_metric_descs, $submitted_metric_descs;
+        }
+        $attempts++;
+    }
+}
+
+# This will index 1 or more metrics, based on what is found in the metric json & csv documents.
+# Unlike index_es_doc(), index_metrics() needs a "base" document to work with, which can be generated
+# with create_es_doc().  Metrics can be indexed from either a benchmark sample directory or a tool
+# directory.
+sub index_metrics {
+    my $index_or_queue = shift; # what action to take, index = submit to OpenSearch, queue = enqueue to file for bulk index later
+    my $metr_dir = shift; # directory where metric files exist
+    my $metr_file = shift; # metric filename without .json or .csv
+    my $cstype = shift;
+    my $csid = shift;
+    my $base_doc_ref = shift; # metric_desc doc gets populated with this, usually a run doc or period doc
+    my $benchmark = shift; # optional, for reporting earliest-begin and latest-end from all
+    my $primary_metric = shift; # optional, for reporting earliest-begin and latest-end from all
+                                # metrics processed with type matching $primary_metric
+    my $primary_metric_found = 0;
+    my $num_metric_docs_submitted = 0;
+    my $earliest_begin;
+    my $latest_end;
+    my $pri_earliest_begin;
+    my $pri_latest_end;
+    my $coder = JSON::XS->new->canonical;
+
+    my $dir =  pushd($metr_dir);
+    my %eng_env_vars;
+    if ($cdm{'ver'} eq 'v7dev' or $cdm{'ver'} eq 'v8dev') {
+        # engine-type and engine-id replace cstype and csid, but cstype/id to be removed later
+        $eng_env_vars{'engine-type'} = $cstype;
+        $eng_env_vars{'engine-id'} = $csid;
+        # engine-role is the engine's primary purpose (to run a bvenchmark, to collect tool data, etc)
+        if ($cstype =~ /^client$|^server$/) {
+            $eng_env_vars{'engine-role'} = 'benchmarker';
+            $eng_env_vars{'benchmark-role'} = $cstype;
+            # the following to be properly defined in a future enhancement
+            $eng_env_vars{'benchmark-name'} = 'unknown';
+            $eng_env_vars{'benchmark-group'} = 'unknown';
+            # to be 'none' once one-tool-per engine is implemented (and a benchmark engine no longer runs tools)
+            $eng_env_vars{'tool-name'} = 'unknown';
+        } elsif ($cstype =~ /^worker$|^master$|^profiler$/) {
+            $eng_env_vars{'engine-role'} = 'profiler';
+            $eng_env_vars{'benchmark-role'} = 'none';
+            $eng_env_vars{'benchmark-name'} = 'none';
+            # the following to be properly defined once one-tool-per engine is implemented
+            $eng_env_vars{'tool-name'} = 'unknown';
+        }
+
+        # Note that CDM being v7 should not assume all metrics have engine_env.txt because one may be re-postprocessing older crucible runs
+        my $eng_env_file = "engine-env.txt";
+        if (! -e $eng_env_file) {
+            $eng_env_file .= ".xz";
+        }
+        if (! -e $eng_env_file) {
+            printf "pwd: %s\nCould not find %s, will not use engine env vars for metadata\n", getcwd(), $eng_env_file;
+        } else {
+            my $eng_env_fh = new IO::Uncompress::UnXz $eng_env_file, Transparent => 1 || die "[ERROR]could not open file " . $eng_env_file;
+            # Cull out env vars which we want as metadata
+            #printf "Looking for engine env vars\n";
+            my @varnames = ('HOSTNAME', 'tool_name', 'engine_type', 'engine_role', 'benchmark_group', 'benchmark_role', 'hosted_by', 'hypervisor_host', 'osruntime', 'endpoint_label', 'userenv');
+            while (<$eng_env_fh>) {
+                chomp;
+                foreach my $varname (@varnames) {
+                    if (/^$varname=(.*)$/) {
+                        my $val = $1;
+                        $varname =~ s/_/-/g;
+                        if ($varname eq "HOSTNAME") {
+                            $varname = "hostname";
+                        }
+                        $eng_env_vars{$varname} = $val;
+                        next;
+                    }
+                }
+            }
+            close $eng_env_fh;
+        }
+    }
+
+    # Copy data from 'parent' doc so querying directly for metric_desc with
+    # run data is possible
+    my $metr_json_file = $metr_file . ".json";
+    my $metr_csv_file = $metr_file . ".csv";
+    if (! -e $metr_json_file) {
+        $metr_json_file .= ".xz";
+    }
+    if (! -e $metr_json_file) {
+        printf "pwd: %s\nCould not find %s, exiting\n", getcwd(), $metr_json_file;
+        exit 1;
+    }
+    if (! -e $metr_csv_file) {
+        $metr_csv_file .= ".xz";
+    }
+    if (! -e $metr_csv_file) {
+        printf "Could not find %s, exiting\n", $metr_csv_file;
+        exit 1;
+    }
+    print "About to open $metr_json_file\n";
+    ($file_rc, my $metr_ref) = get_json_file($metr_json_file);
+    if ($file_rc > 0 or ! defined $metr_ref) {
+        print "Could not open the metric data  file\n";
+        exit 1;
+    }
+
+    # add persistent IDs to the metrics if they don't already exist
+    debug_log(sprintf "Making sure %s has persistent IDs\n", $metr_json_file);
+    my $update_metric_file = 0;
+    for my $this_metr ( @$metr_ref ) {
+        add_persistent_uuid($this_metr, "metric_desc", \$update_metric_file);
+    }
+    if ($update_metric_file > 0) {
+        debug_log(sprintf "Added %d persistent IDs to %s\n", $update_metric_file, $metr_json_file);
+        debug_log(sprintf "Overwriting %s after persistent ID update\n", $metr_json_file);
+        my $update_rc = put_json_file($metr_json_file, $metr_ref);
+        if ($update_rc != 0) {
+            print "Could not add persistent IDs to %s\n", $metr_json_file;
+            exit 1;
+        }
+    }
+
+    my %uuid;
+    my %type;
+    my %source;
+    for my $this_metr ( @$metr_ref ) {
+        my $idx = $$this_metr{'idx'};
+        #print "metric:\n";
+        #print Dumper $this_metr;
+        $uuid{$idx} = $$this_metr{$metric_id_field};
+        my %metr_desc_doc = %$base_doc_ref;
+        if (defined $$this_metr{'desc'} and defined $$this_metr{'desc'}{'class'} and
+            defined $$this_metr{'desc'}{'source'} and defined $$this_metr{'desc'}{'type'}) {
+            $metr_desc_doc{'metric_desc'} = $$this_metr{'desc'};
+        } else {
+            printf "ERROR: A metric must have source, class, and type defined\n";
+            exit 1;
+        }
+        $type{$idx} = $$this_metr{'desc'}{'type'};
+        $source{$idx} = $$this_metr{'desc'}{'source'};
+        $metr_desc_doc{'metric_desc'}{$metric_id_field} = $uuid{$idx};
+        if ( exists $$this_metr{'names'} ) {
+            $metr_desc_doc{'metric_desc'}{'names'} = $$this_metr{'names'};
+        }
+        if ( exists $$this_metr{'values'} ) {
+            $metr_desc_doc{'metric_desc'}{'values'} = $$this_metr{'values'};
+        }
+        # this is where we add engine-related metadata
+        $metr_desc_doc{'metric_desc'}{'names'}{'cstype'} = $cstype;
+        $metr_desc_doc{'metric_desc'}{'names'}{'csid'} = $csid;
+        foreach my $env_var (keys %eng_env_vars) {
+            $metr_desc_doc{'metric_desc'}{'names'}{$env_var} = $eng_env_vars{$env_var};
+        }
+
+        my @names_list = sort(keys(%{ $metr_desc_doc{'metric_desc'}{'names'} }));
+        $metr_desc_doc{'metric_desc'}{'names-list'} = \@names_list;
+        #print "metric_desc_doc:\n";
+        #print Dumper \%metr_desc_doc;
+        my $metr_desc_doc_json = $coder->encode(\%metr_desc_doc);
+        #printf "metric_desc_doc:\n %s\n", $metr_desc_doc_json;
+        # We do not use index_es_doc() here because that requires getting all info from the %result,
+        # and %result (rickshaw-run.json) by design does not include any metric data, as it would be
+        # way too large.
+        #print "Going to index this metric_desc doc: " . $metr_desc_doc_json . "\n";
+        my $resp_ref = http_request("POST", "localhost:9200", "/cdm" . $cdm{'ver'} . "-metric_desc/_doc/", $metr_desc_doc_json);
+        #print "response:\n";
+        #print Dumper $resp_ref;
+        $num_metric_docs_submitted++;
+    }
+    my $count = 0;
+    my $ndjson = "";
+    my $metr_csv_fh = new IO::Uncompress::UnXz $metr_csv_file, Transparent => 1 || die "[ERROR]could not open file " . $metr_csv_file;
+    while (<$metr_csv_fh>) {
+        my %metr_data_doc = ( 'cdm' => \%cdm );
+        if (/^(\d+),(\d+),(\d+),(.*)$/) {
+            my $idx = $1;
+            my $begin = $2;
+            my $end = $3;
+            my $value = $4;
+            my %data = ( 'begin' => $begin, 'end' => $end, 'value' => $value, 'duration' => $end - $begin + 1 );
+            my %desc = ( $metric_id_field => $uuid{$idx} );
+            $metr_data_doc{'metric_desc'} = \%desc;
+            $metr_data_doc{'metric_data'} = \%data;
+            # cdmv8 includes a very small verison of the run doc info, just the run-uuid, to make deleting metric_data docs much easier
+            if ($cdm{'ver'} eq 'v8dev') {
+                my %micro_run_doc = ($run_id_field => $result{$run_id_field});
+                $metr_data_doc{'run'} = \%micro_run_doc;
+            }
+            my $metr_data_doc_json = $coder->encode(\%metr_data_doc);
+            $ndjson .= sprintf "%s\n", '{ "index": {} }';
+            $ndjson .= sprintf "%s\n", $metr_data_doc_json;
+            $count++;
+            # Limit the batch size to avoid a http error with too large of a request
+            if ($count >= 1000) {
+                if ($index_or_queue eq "index") {
+                    # OpenSearch docs type metric_data do not contain other sections run, iteration, sample, period, metric_desc,
+                    # as this would take up sunstantially more space for potentially millions of documents.
+                    #print "going to index this ndjson:\n" . $ndjson;
+                    http_ndjson_request("POST", "localhost:9200", "/cdm" . $cdm{'ver'} . "-metric_data/_bulk", $ndjson);
+                } else {
+                    print "going to *queue* this ndjson:\n" . $ndjson;
+                    push(@queued_ndjson, $ndjson);
+                }
+                $ndjson = "";
+                $count = 0;
+            }
+
+            if (defined $primary_metric and $type{$idx} eq $primary_metric and $source{$idx} eq $benchmark) {
+                $primary_metric_found = 1;
+                if (not defined $pri_earliest_begin or $pri_earliest_begin > $metr_data_doc{'metric_data'}{'begin'}) {
+                    $pri_earliest_begin = $metr_data_doc{'metric_data'}{'begin'};
+                }
+                if (not defined $pri_latest_end or $pri_latest_end < $metr_data_doc{'metric_data'}{'end'}) {
+                    $pri_latest_end = $metr_data_doc{'metric_data'}{'end'};
+                }
+            } else {
+                if (not defined $earliest_begin or $earliest_begin > $metr_data_doc{'metric_data'}{'begin'}) {
+                    $earliest_begin = $metr_data_doc{'metric_data'}{'begin'};
+                }
+                if (not defined $latest_end or $latest_end < $metr_data_doc{'metric_data'}{'end'}) {
+                    $latest_end = $metr_data_doc{'metric_data'}{'end'};
+                }
+            }
+        }
+    }
+    if ($count > 0) {
+        if ($index_or_queue eq "index") {
+            http_ndjson_request("POST", "localhost:9200", "/cdm" . $cdm{'ver'} . "-metric_data/_bulk", $ndjson);
+        } else {
+            push(@queued_ndjson, $ndjson);
+        }
+    }
+    close $metr_csv_fh;
+
+    # Verify these (and only these) specific metric docs are queryable in OpenSearch
+    if ($index_or_queue eq "index") {
+        wait_for_metric_descs(values %uuid);
+    } else {
+        push(@queued_terms, values %uuid);
+    }
+
+    if (defined $primary_metric and $primary_metric_found == 1) {
+        if (defined $pri_earliest_begin and defined $pri_latest_end) {
+            return ($num_metric_docs_submitted, 1, $pri_earliest_begin, $pri_latest_end);
+        } else {
+            printf "ERROR: index_metrics() primary_metric found, but undefined earliest_begin and/or undefined latest_end, exiting\n";
+            exit 1;
+        }
+    } else {
+        return ($num_metric_docs_submitted, 0, $earliest_begin, $latest_end);
+    }
+}
+
+sub indexed_doc_count {
+    my $doc_type = shift;
+    my $resp_ref= http_request("POST", "localhost:9200", "/cdm" . $cdm{'ver'} . "-" . $doc_type . "/_count/",
+                                '{"query":{"bool":{"filter":[{"term":{"run.' . $run_id_field . '": "' . $result{$run_id_field} . '"}}]}}}');
+    debug_log(sprintf "response" . Dumper $resp_ref);
+    return $$resp_ref{'count'};
+}
+
+sub wait_for_docs {
+    my @doctypes =  (keys %num_docs_submitted);
+    my $attempts = 1;
+    my $max_attempts = 20;
+    while (scalar @doctypes > 0) {
+        if ($attempts > $max_attempts) {
+            print "ERROR: could not ensure all OpenSearch docs are indexed, exiting\n";
+            exit 1;
+        }
+        printf "wait_for_docs(): Confirming all non-metric documents are in OpenSearch (attempt #%d of %d)\n", $attempts, $max_attempts;
+        my @these_doctypes = @doctypes;
+        foreach my $doctype (@these_doctypes) {
+            if ($num_docs_submitted{$doctype} == 0) {
+                @doctypes = grep(!/^$doctype?/, @doctypes);
+                next;
+            }
+            my $found = indexed_doc_count($doctype);
+            my $submitted = $num_docs_submitted{$doctype};
+            printf "  %s: %d submitted, %d found", $doctype, $submitted, $found;
+            if ($submitted == $found) {
+                print ", complete";
+                @doctypes = grep(!/^$doctype?/, @doctypes);
+            }
+            print "\n";
+            if ($found > $submitted) {
+                printf "ERROR: should not have more found than submitted, exiting\n";
+                exit 1;
+            }
+        }
+        $attempts++;
+        sleep 2;
+    }
+}
+
+# Process the cmdline params
+while (scalar @ARGV > 0) {
+    my $p = shift @ARGV;
+    debug_log(sprintf "processing \@ARGV, param: [%s]\n", $p);
+    my $arg;
+    my $val;
+
+    if ( $p =~ /^\-\-(\S+)/ ) {
+        $arg = $1;
+        if ( $arg =~ /^(\S+)=(.*)/ ) { # '--arg=val'
+            $arg = $1;
+            $val = $2;
+        } else { # '--arg val'
+            $val = shift @ARGV;
+        }
+    } else {
+        print "[ERROR]malformed cmdline parameter: %s\n";
+        usage;
+        exit 1;
+    }
+    debug_log(sprintf "processing \@ARGV, arg is: [%s], val is: [%s]\n", $arg, $val);
+    if ($arg =~ /^help$/) {
+        usage;
+        exit 1;
+    } elsif ($arg =~ /^base-run-dir$/) {
+        debug_log(sprintf "argument: [%s]\n", $arg);
+        $base_run_dir = $val;
+    } elsif ($arg =~ /^max-jobs$/) {
+        debug_log(sprintf "argument: [%s]\n", $arg);
+        $max_jobs = $val;
+    } else {
+        printf "[ERROR]argument not valid: [%s]\n", $arg;
+        usage;
+        exit 1;
+    }
+}
+
+# Ensure the run-dir has absolute path
+{
+    my $dir = pushd($base_run_dir);
+    debug_log(sprintf "pushd to [%s]\n", $base_run_dir);
+    my $cwd = getcwd();
+    debug_log(sprintf "cwd [%s]\n", $cwd);
+    $base_run_dir = $cwd;
+}
+my $rickshaw_project_dir; # We need the project dir to load schemas to validate json
+{
+    # Get the absolute path of the rickshaw project directory
+    my $dir = pushd(dirname($0));
+    $rickshaw_project_dir = getcwd();
+}
+my $config_dir = $base_run_dir . "/config";
+my $run_dir = $base_run_dir . "/run";
+my $iter_subdir = "iterations";
+my $tool_dir = $run_dir . "/tool-data";
+$result_schema_file = $rickshaw_project_dir . "/schema/run.json";
+$bench_metric_schema_file = $rickshaw_project_dir . "/schema/bench-metric.json";
+$sample_persistent_ids_schema_file = $rickshaw_project_dir . "/schema/sample-persistent-ids.json";
+
+# All OpenSearch document creation starts with the rickshaw-result.json which is a product of running
+# rickshaw-run, rickshaw-postprocess-bench, and rickshaw-postprocess-tools
+my $run_file = $run_dir . "/rickshaw-run.json";
+
+my $fixup_status = rickshaw_run_schema_fixup($run_file, $result_schema_file);
+if ($fixup_status != 0) {
+    exit $fixup_status;
+}
+
+# Find the newest CDM version and verify all the required indices are present
+my $idx_resp_ref = http_request("GET", "localhost:9200", "_cat/indices?format=json", '');
+my $latest_ver;
+if (ref $idx_resp_ref eq ref [] ) {
+    my @fullnames;
+    my @all_indices;
+    my %vers;
+    foreach my $idx (@{ $idx_resp_ref } ) {
+        my $idx_name = $$idx{'index'};
+        if ($idx_name =~ /cdm(v\d+.+)-(.+)/) {
+            my $ver = $1;
+            my $name = $2;
+            $vers{$ver} = 1;
+            push(@fullnames, $idx_name);
+        }
+        push(@all_indices, $idx_name);
+    }
+    my @sorted_vers = sort(keys(%vers));
+    printf "sorted_vers: @sorted_vers \n";
+    $latest_ver = $sorted_vers[0];
+    if (defined $latest_ver) {
+        printf "Latest CDM version found in local OpenSearch instance is %s\n", $latest_ver;
+        foreach my $req_name ("run", "iteration", "tag", "param", "sample", "period", "metric_desc", "metric_data") {
+            my $complete_index_name = "cdm" . $latest_ver . "-" . $req_name;
+            if (grep(/^$complete_index_name$/, @fullnames)) {
+                printf "Found index %s\n", $req_name;
+            } else {
+                printf "Could not find index [%s] in OpenSearch\n", $complete_index_name;
+                printf "The following indices are present:\n";
+                foreach my $index (@all_indices) {
+                    printf "    [%s]\n", $index;
+                }
+                printf "\n";
+                exit 1;
+            }
+        }
+    } else {
+        print "Could not find any CDM versions in OpenSearch\n";
+        print "Query response:\n";
+        print Dumper $idx_resp_ref;
+        exit 1;
+    }
+} else {
+    printf "Could not find any indices in OpenSearch\n";
+    print "Query response:\n";
+    print Dumper $idx_resp_ref;
+    exit 1;
+}
+
+$cdm{'ver'} = $latest_ver;
+printf "Latest CDM version found in local OpenSearch instance is %s\n", $latest_ver;
+if (not grep(/^$cdm{'ver'}$/, @suported_cdm_vers)) {
+    printf "The version of CDM used in OpenSearch [%s] is not one that is supported by rickshaw-index: [%s]\n",
+           $cdm{'ver'}, join(" ",  @suported_cdm_vers);
+    printf "Either use an older version of CDM or (ideally) find a newer version of rickshaw which supports %s\n", $cdm{'ver'};
+    exit 1;
+}
+
+if ($cdm{'ver'} eq 'v7dev') {
+    $run_id_field = 'id';
+    $iter_id_field = 'id';
+    $samp_id_field = 'id';
+    $period_id_field = 'id';
+    $metric_id_field = 'id';
+} else {
+    $run_id_field = 'run-uuid';
+    $iter_id_field = 'iteration-uuid';
+    $samp_id_field = 'sample-uuid';
+    $period_id_field = 'period-uuid';
+    $metric_id_field = 'metric_desc-uuid';
+}
+
+# start processing rickshaw-run.json "for real"
+debug_log(sprintf "Opening %s for normal processing\n", $run_file);
+($file_rc, my $result_ref) = get_json_file($run_file, $result_schema_file);
+if ($file_rc > 0 or ! defined $result_ref) {
+    print "Could not open the rickshaw-run  file\n";
+    exit 1;
+}
+if (defined $result_ref) {
+    %result = %{ $result_ref };
+} else {
+    printf "Could not find or load rickshaw-run.json in %s, exiting\n", $run_dir;
+    exit 1;
+}
+
+# add persistent IDs to the result data if it doesn't already exist
+if (exists $result{'iterations'}) {
+
+    debug_log(sprintf "Making sure %s has persistent IDs\n", $run_file);
+    for my $iteration (@{ $result{'iterations'} }) {
+        add_persistent_uuid($iteration, "iteration", \$update_run_json);
+
+        for my $parameter (@{ $$iteration{'params'} }) {
+            add_persistent_uuid($parameter, "param", \$update_run_json);
+        }
+    }
+
+    if ($update_run_json > 0) {
+        debug_log(sprintf "Added %d persistent IDs to %s\n", $update_run_json, $run_file);
+        debug_log(sprintf "Overwriting %s after persistent ID update\n", $run_file);
+        my $update_rc = put_json_file($run_file, \%result, $result_schema_file);
+        if ($update_rc > 0) {
+            print "Could not add persistent IDs to rickshaw-run file\n";
+            exit 1;
+        }
+    }
+}
+
+
+printf "Exporting from %s to OpenSearch documents and POSTing to localhost:9200\n", $run_file;
+
+if (exists $result{'run-id'} and defined $result{'run-id'}) {
+    # Convert to 'id', which matches OpenSearch docs
+    $result{'id'} = $result{'run-id'};
+    delete $result{'run-id'};
+}
+
+add_persistent_uuid(\%result, "run", \$update_run_json);
+
+printf "%s: %s\n", $run_id_field, $result{$run_id_field};
+
+my $host = `hostname`;
+chomp $host;
+$result{'source'} = $host . "/" . $base_run_dir;
+printf "Run ID: %s\n", $result{$run_id_field};
+
+if (indexed_doc_count("run") > 0) {
+    printf "Run ID %s already exists, so will not POST to OpenSearch\n", $result{$run_id_field};
+    print "Either delete existing run from OpenSearch or regenerate rickshaw-result.json\n";
+    exit 1;
+}
+
+my @jobs;
+if (-e $tool_dir and $index_tools == 1) {
+    my $base_metric_doc_ref = create_es_doc("metric_desc");
+    if (opendir(TOOLDIR, $tool_dir)) {
+        my @collectors = grep(/\w+/, readdir(TOOLDIR));
+        for my $collector (@collectors) {
+                my $collector_dir = $tool_dir . "/" . $collector;  # $run_dir/tool-data/[client|server|worker|master]
+            if (opendir(COLLECTORDIR, $collector_dir)) {
+                my @numbers = grep (/\d+/, readdir(COLLECTORDIR));
+                for my $num (@numbers) {
+                    my $cd_id = $collector . "-" . $num;
+                    my $num_dir = $collector_dir . "/" . $num; # $run_dir/tool-data/[client|server|worker|master]/[0-N]
+                    printf "Indexing of tool data for %s starting\n", $cd_id;
+                    if (opendir(NUMDIR, $num_dir)) {
+                        my @tools = grep(/\w+/, readdir(NUMDIR));
+                        for my $tool (@tools) {
+                            my $tool_dir = $num_dir . "/" . $tool;
+                            if (opendir(TOOLDIR, $tool_dir)) {
+                                my @tool_files = grep(/metric-data-\S+\.json/, readdir(TOOLDIR));
+                                for my $tool_file (@tool_files) {
+
+                                    $tool_file =~ s/(metric-data-\S+)\.json.*/$1/;
+                                    printf "Working on tool_file: %s\n", $tool_file;
+
+                                    my %job_args = ( 'tool-dir' => $tool_dir,
+                                                     'tool-file' => $tool_file,
+                                                     'collector' => $collector,
+                                                     'num' => $num,
+                                                     'doc-ref' => $base_metric_doc_ref );
+                                    push(@jobs, \%job_args);
+
+
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+my $num_jobs = 0;
+foreach my $job_args (@jobs) {
+    if (my $pid = fork) {
+        push(@pids, $pid);
+        $num_jobs++;
+    } else {
+        my $num_metric_docs_submitted = index_metrics('index', $$job_args{'tool-dir'}, $$job_args{'tool-file'}, $$job_args{'collector'}, $$job_args{'num'}, $$job_args{'doc-ref'});
+        #$tool_dir . "/" . $tool_file, $collector, $num, $base_metric_doc_ref);
+        exit 0;
+    }
+    if ($num_jobs >= $max_jobs) {
+        printf "Waiting for %d indexing jobs to complete\n", $max_jobs;
+        while (1) {
+            my $wait_return = wait();
+            if ($wait_return < 0) {
+                last;
+            }
+        }
+        $num_jobs = 0;
+    }
+}
+@pids = ();
+
+
+if (exists $result{'iterations'}) {
+    print "Indexing of benchmark data starting\n";
+    my $iter_num = 1;
+    for my $iter (@{ $result{'iterations'} }) {
+        printf "working on iter num %d\n", $iter_num;
+        my $iter_idx = $iter_num - 1;
+        $$iter{'samples'} = ();
+        $$iter{'num'} = $iter_num;
+        my $param_idx = 0;
+        for my $param (@{ $$iter{'params'} }) {
+            index_es_doc("param", $iter_idx, $param_idx);
+            $param_idx++;
+        }
+        my $this_iter_path = "iteration-" . $iter_num;
+        my $this_iter_dir = $iter_subdir . "/" . $this_iter_path;
+        my $iter_status;
+        if (-d $run_dir . "/" . $this_iter_dir) {
+            $iter_status = "pass";
+        } elsif (-d $run_dir . "/" . $this_iter_dir . "-fail") {
+            $iter_status = "fail";
+            $this_iter_dir .= "-fail";
+            printf "Not going to index iteration %d because it failed\n", $iter_num;
+        } else {
+            $iter_status = "missing";
+            printf "Not going to index iteration %d because its directory cannot be found\n", $iter_num;
+        }
+        $$iter{'status'} = $iter_status;
+        if ($cdm{'ver'} eq "v6dev") {
+            $$iter{'path'} = $this_iter_dir;
+        }
+        if ($iter_status eq "pass") {
+            my @primary_metrics = ();
+            if (opendir(my $iter_dh, $run_dir . "/" . $this_iter_dir)) {
+                my @samp_dirs = grep(/^sample-\d+$/, readdir($iter_dh));
+                my @samples;
+                my $primary_metric;
+                my $primary_period;
+                my $sample_num;
+                for my $samp_dir (@samp_dirs) {
+                    my $samp_persist_ids_file = $run_dir . "/" . $this_iter_dir . "/" . $samp_dir . "/persistent-ids.json";
+                    my $create_samp_persist_ids_file = 0;
+                    my $update_samp_persist_ids_file = 0;
+                    my $samp_persist_ids_ref;
+                    if (-e $samp_persist_ids_file or -e $samp_persist_ids_file . ".xz") {
+                        debug_log(sprintf "Found existing sample persistent IDs file %s\n", $samp_persist_ids_file);
+                        ($file_rc, $samp_persist_ids_ref) = get_json_file($samp_persist_ids_file, $sample_persistent_ids_schema_file);
+                        if ($file_rc > 0 or ! defined $samp_persist_ids_ref) {
+                            print "Could not open sample persistent IDs file %s\n", $samp_persist_ids_file;
+                            exit 1
+                        }
+                    } else {
+                        debug_log(sprintf "No existing sample persistent IDs file %s found, a new one will be created\n", $samp_persist_ids_file);
+                        $create_samp_persist_ids_file = 1;
+
+                        my %samp_persist_ids;
+                        $samp_persist_ids{'sample-persistent-ids'}{'schema'}{'version'} = "2024.01.20";
+                        $samp_persist_ids{'samples'} = ();
+                        $samp_persist_ids{'periods'} = [];
+
+                        $samp_persist_ids_ref = \%samp_persist_ids;
+                    }
+
+                    $samp_dir =~ /^sample-(\d+)$/;
+                    $sample_num = $1;
+                    my $sample_idx = $sample_num - 1;
+                    $$iter{'samples'}[$sample_idx] = {};
+                    my $this_sample = $$iter{'samples'}[$sample_idx];
+                    my $samp_status = "pass";
+                    if ($samp_dir =~ /fail\d+/) {
+                        $$this_sample{'status'} = "fail";
+                    } else {
+                        $$this_sample{'status'} = "pass";
+                    }
+                    if ($samp_status eq "pass") {
+                        my $this_sample = $$iter{'samples'}[$sample_idx];
+                        my $this_samp_dir = $this_iter_dir . "/" .  $samp_dir;
+                        $$this_sample{'num'} = $sample_num;
+                        $$this_sample{'status'} = $samp_status;
+
+                        # Keeping these persistent id files (and only these files) consistent for cdmv7 and v8
+                        if (exists $$samp_persist_ids_ref{'samples'}{'id'}) {
+                            $$this_sample{$samp_id_field} = $$samp_persist_ids_ref{'samples'}{'id'};
+                            debug_log(sprintf "Found existing persistent ID %s for sample %d\n", $$this_sample{$samp_id_field}, $$this_sample{'num'});
+                        } else {
+                            $$samp_persist_ids_ref{'samples'}{'id'} = Data::UUID->new->create_str();
+                            $$this_sample{$samp_id_field} = $$samp_persist_ids_ref{'samples'}{'id'};
+                            debug_log(sprintf "Creating new persistent ID %s for sample %d\n", $$this_sample{$samp_id_field}, $$this_sample{'num'});
+                            $update_samp_persist_ids_file++;
+                        }
+
+                        if ($cdm{'ver'} eq "v6dev") {
+                            $$this_sample{'path'} = $this_samp_dir;
+                        }
+                        $$this_sample{'periods'} = [];
+                        debug_log("Working on " . $this_samp_dir . "\n");
+                        if (opendir(my $samp_dh, $run_dir . "/" . $this_samp_dir)) {
+                            my @cs_names = grep(/^(client|server)$/, readdir($samp_dh));
+                            for my $cs_name (@cs_names) {
+                                my $cs_name_dir = $this_samp_dir . "/" . $cs_name;
+                                if (opendir(my $cs_name_dh, $run_dir . "/" . $cs_name_dir)) {
+                                    my @cs_ids = grep(/^(\d+)$/, readdir($cs_name_dh));
+                                    for my $cs_id (@cs_ids) {
+                                        my $cs_id_dir = $cs_name_dir . "/" . $cs_id;
+                                        my $data_file = $run_dir . "/" . $cs_id_dir . "/" . "post-process-data.json";
+                                        ($file_rc, my $data_ref) = get_json_file($data_file, $bench_metric_schema_file);
+                                        if ($file_rc > 0 or ! defined $data_ref) {
+                                            if ($cs_id eq "client") {
+                                                # Always require client data
+                                                printf "Could not open the client post-process-data.json file, dir: %s\n", $cs_id_dir;
+                                                exit 1;
+                                            }
+                                        } else {
+                                            my %data = %$data_ref;
+                                            if (! exists $data{'primary-metric'}) {
+                                                printf "ERROR: primary-metric not found in %s\n", $data_file;
+                                                exit 1;
+                                            }
+                                            if (! exists $data{'benchmark'}) {
+                                                printf "ERROR: benchmark not found in %s\n", $data_file;
+                                                exit 1;
+                                            }
+                                            # The primary metric previously only included the "type" portion, but
+                                            # for better clarity, now includes the "source" (the benchmark)
+                                            my $this_csid_primary_metric = $data{'benchmark'} . '::' . $data{'primary-metric'};
+                                            if (! grep(/^$this_csid_primary_metric$/, @primary_metrics)) {
+                                                push(@primary_metrics, $this_csid_primary_metric);
+                                            }
+
+                                            # TODO: instead of just checking first doc, validate all docs
+                                            # have the same primary-period.
+                                            if (! defined $primary_period and exists $data{'primary-period'}) {
+                                                $primary_period = $data{'primary-period'};
+                                                $$iter{'primary-period'} = $primary_period;
+                                            }
+                                            # For any sample, every client/server has information that contributes to one
+                                            # or more benchmark-sample-periods.  This data needs to be consolidated into
+                                            # 1 period doc for each common period across the clients/servers.
+                                            if (defined $data{'periods'}) {
+                                                for (my $k = 0; $k < scalar @{ $data{'periods'} }; $k++) {
+                                                    my $period_idx;
+                                                    for (my $idx = 0; $idx < scalar @{ $$this_sample{'periods'} }; $idx++) {
+                                                        if (defined $$this_sample{'periods'}[$idx]{'name'} and $$this_sample{'periods'}[$idx]{'name'} eq $data{'periods'}[$k]{'name'}) {
+                                                            $period_idx = $idx;
+                                                            last;
+                                                        }
+                                                    }
+                                                    # If there is no match, this is the first time a period of this name
+                                                    # has been processed, so add it to $$this_sample{'periods'}[]
+                                                    if (! defined $period_idx) {
+                                                        my %period = ( 'name' => $data{'periods'}[$k]{'name'}, 'id' => undef );
+                                                        debug_log(sprintf "Searching for persistent ID for period %s\n", $period{'name'});
+                                                        foreach my $period_id (@{ $$samp_persist_ids_ref{'periods'} }) {
+                                                            if ($period{'name'} eq $$period_id{'name'}) {
+                                                                debug_log(sprintf "Found persistent ID %s for period name %s\n", $$period_id{'id'}, $period{'name'});
+                                                                # The id field from $samp_persist_ids_ref is always 'id' because we can't
+                                                                # have a 'rewquired-field' in the json-schema be [id|period-uuid];
+                                                                $period{$period_id_field} = $$period_id{'id'};
+                                                                last;
+                                                            }
+                                                        }
+                                                        if (! defined $period{$period_id_field}) {
+                                                            my %period_id = ( 'name' => $period{'name'}, 'id' => Data::UUID->new->create_str() );
+                                                            debug_log(sprintf "Creating persistent ID %s for period %s\n", $period_id{'id'}, $period_id{'name'});
+                                                            push @{ $$samp_persist_ids_ref{'periods'} }, \%period_id;
+                                                            $period{$period_id_field} = $period_id{'id'};
+                                                            $update_samp_persist_ids_file++;
+                                                        }
+
+                                                        if (defined $data{'periods'}[$k]{'begin'}) {
+                                                            $period{'begin'} = $data{'periods'}[$k]{'begin'};
+                                                        }
+                                                        if (defined $data{'periods'}[$k]{'end'}) {
+                                                            $period{'end'} = $data{'periods'}[$k]{'end'};
+                                                        }
+                                                        push(@{ $$this_sample{'periods'} }, \%period);
+                                                        $period_idx = scalar @{ $$this_sample{'periods'} } - 1;
+                                                    }
+
+                                                    # When we consolidate the same period from many clients/servers, we need to find
+                                                    # the time period where there are samples from all clients/servers, in order to
+                                                    # ensure we are measuring a period with "full participation".  We can do this
+                                                    # while indexing the metrics.
+                                                    my $earliest_begin;
+                                                    my $latest_end;
+                                                    my $pm_earliest_begin;
+                                                    my $pm_latest_end;
+                                                    my $base_metric_doc_ref = create_es_doc("metric_desc", $iter_idx, $sample_idx, $period_idx);
+                                                    print "period: $$this_sample{'periods'}[$period_idx]{'name'}\n";
+                                                    my $primary_metric_found = 0;
+                                                    for (my $j = 0; $j < scalar(@{ $data{'periods'}[$k]{'metric-files'} }); $j++) {
+                                                        # Metric data is still in other file(s).  For each member in 'metric-files' array,
+                                                        # there should be a 2 files with the same prefix
+                                                        my $metric_file_prefix = $data{'periods'}[$k]{'metric-files'}[$j];
+                                                        my $metric_dir = $run_dir . "/" . $cs_id_dir;
+                                                        my $this_begin;
+                                                        my $this_end;
+                                                        my $this_pm_found;
+                                                        # index_metric(): Note that if a primary metric is found on this data,
+                                                        # it returns the earliest begin and latest end for only metric data from the
+                                                        # primary metric.  If the primary metric is not found, then it returns the
+                                                        # earliest begin and latest end for all metric data found.
+                                                        #
+                                                        # Given that there can be multiple metric data files to process, and it's
+                                                        # possible that one data file could contain primary metric data, but another
+                                                        # file could contain no primary metric data, we have to be prepared to later use
+                                                        # the begin/end from either all the metric data or just the primary metric data.
+                                                        #
+                                                        # After all files are processed, if there is no data for the primary metric found,
+                                                        # then the earliest begin and latest end from *all* metric data can be used.
+                                                        # However, if at least one metric data file does contains primary metric data,
+                                                        # then only the earliest begin and latest end for the primary metric can be used.
+                                                        #
+                                                        # What exactly are these earliest begin and latest end used for?  To determine the
+                                                        # period's begin and end, including facotring for multiple clients, further below.
+
+                                                        (my $num_metric_docs_submitted, $this_pm_found, $this_begin, $this_end) =
+                                                            index_metrics('queue', $metric_dir, $metric_file_prefix,
+                                                                          $cs_name, $cs_id, $base_metric_doc_ref,
+                                                                          $data{'benchmark'}, $data{'primary-metric'});
+                                                        # From processing all metric files (for this-client in this-priod),
+                                                        # get the very-earliest begin and very-latest end
+
+                                                        if ($this_pm_found) {
+                                                            $primary_metric_found = 1;
+                                                            if (not defined $pm_earliest_begin or $pm_earliest_begin > $this_begin) {
+                                                                $pm_earliest_begin = $this_begin;
+                                                            }
+                                                            if (not defined $pm_latest_end or $pm_latest_end < $this_end) {
+                                                                $pm_latest_end = $this_end;
+                                                            }
+                                                        } else {
+                                                            if (not defined $earliest_begin or $earliest_begin > $this_begin) {
+                                                                $earliest_begin = $this_begin;
+                                                            }
+                                                            if (not defined $latest_end or $latest_end < $this_end) {
+                                                                $latest_end = $this_end;
+                                                            }
+                                                        }
+                                                    }
+                                                    if ($primary_metric_found) {
+                                                        if (not defined $pm_earliest_begin or not defined $pm_latest_end) {
+                                                            print "Either earliest_begin and/or latest_end were not defined, exiting";
+                                                            exit 1;
+                                                        } else {
+                                                            $earliest_begin = $pm_earliest_begin;
+                                                            $latest_end = $pm_latest_end;
+                                                        }
+                                                    }
+                                                    if (not defined $earliest_begin or not defined $latest_end) {
+                                                        print "Either earliest_begin and/or latest_end were not defined, exiting";
+                                                        exit 1;
+                                                    }
+                                                    # Now if this client/server's earliest_begin is *later* than a defined begin for the consolidated period,
+                                                    # we need to adjust the begin for the consolidated period to match this client/server's earliest_begin.
+                                                    # This ensures the consolidated period always has samples from every single client/server for the entire
+                                                    # period.
+                                                    if (not defined $$this_sample{'periods'}[$period_idx]{'begin'} or $$this_sample{'periods'}[$period_idx]{'begin'} < $earliest_begin) {
+                                                        $$this_sample{'periods'}[$period_idx]{'begin'} = $earliest_begin;
+                                                        debug_log(sprintf "client/server's ID %d begin is after current sample begin, so assigning sample begin to %d\n", $cs_id, $earliest_begin);
+                                                    }
+                                                    if (not defined $$this_sample{'periods'}[$period_idx]{'end'} or $$this_sample{'periods'}[$period_idx]{'end'} > $latest_end) {
+                                                        $$this_sample{'periods'}[$period_idx]{'end'} = $latest_end;
+                                                        debug_log(sprintf "client/server's ID %d end is before current sample end, so assigning sample begin to %d\n", $cs_id, $latest_end);
+                                                    }
+                                                    if (! defined $result{'run.begin'} or $result{'begin'} > $$this_sample{'periods'}[$period_idx]{'begin'}) {
+                                                        $result{'begin'} = $$this_sample{'periods'}[$period_idx]{'begin'};
+                                                    }
+                                                    if (! defined $result{'end'} or $result{'end'} < $$this_sample{'periods'}[$period_idx]{'end'}) {
+                                                        $result{'end'} = $$this_sample{'periods'}[$period_idx]{'end'};
+                                                    }
+
+                                                    queue_es_doc("period", $run_dir . "/" . $this_samp_dir, $iter_idx, $sample_idx, $period_idx);
+                                                }
+                                            }
+                                        }
+                                    } #cs_ids
+                                } #opendir csnames
+                            } #cs_names
+                            queue_es_doc("sample", $run_dir . "/" . $this_samp_dir, $iter_idx, $sample_idx);
+                        } #opendir samp
+                    } #samp pass
+
+                    if ($create_samp_persist_ids_file == 1 or $update_samp_persist_ids_file > 0) {
+                        if ($create_samp_persist_ids_file == 1) {
+                            debug_log(sprintf "Creating sample persistent IDs file %s\n", $samp_persist_ids_file);
+                        }
+                        debug_log(sprintf "Added %d persistent IDs to %s\n", $update_samp_persist_ids_file, $samp_persist_ids_file);
+                        my $file_rc = put_json_file($samp_persist_ids_file, $samp_persist_ids_ref, $sample_persistent_ids_schema_file);
+                        if ($file_rc > 0) {
+                            printf "Could not save the sample persistent IDs file %s\n", $samp_persist_ids_file;
+                            exit 1;
+                        }
+                    } else {
+                        debug_log(sprintf "No need to save sample persistent IDs file %s\n", $samp_persist_ids_file);
+                    }
+                } #samp_dirs
+                if (scalar @primary_metrics == 0) {
+                    printf "ERROR: No primary-metrics were found, exiting.\n";
+                    exit 1;
+                }
+                $$iter{'primary-metric'} = join(",", @primary_metrics);
+
+                if (defined $primary_period) {
+                    $$iter{'primary-period'} = $primary_period;
+                } else {
+                    printf "ERROR: no primary-period was found for %s\n", $this_iter_dir;
+                    exit 1;
+                }
+                queue_es_doc("iteration", $run_dir . "/" . $this_iter_dir, $iter_idx);
+            } else {
+                printf "Skipping iteration %d\n", $iter_num;
+            } #opendir iter
+        } #iter pass
+        $iter_num++;
+    } #iterations
+    print "Indexing of benchmark data complete\n";
+} #if iterations
+
+if (scalar @queued_ndjson > 0) {
+    if (my $pid = fork) {
+        push(@pids, $pid);
+    } else {
+        printf "Going to index %d ndjson metrics\n", scalar @queued_ndjson;
+        while (scalar @queued_ndjson > 0) {
+            http_ndjson_request("POST", "localhost:9200", "/cdm" . $cdm{'ver'} . "-metric_data/_bulk", pop(@queued_ndjson));
+        }
+        printf "Finished indexing ndjson metrics\n";
+        print "Waiting for metric data docs to be present in OpenSearch\n";
+        wait_for_metric_descs(@queued_terms);
+        exit 0;
+    }
+}
+
+if (exists $result{'tags'}) {
+    my $tag_idx = 0;
+    for my $tag (@{ $result{'tags'} }) {
+        queue_es_doc("tag", $run_dir, $tag_idx);
+        #index_es_doc("tag", $tag_idx);
+        $tag_idx++;
+    }
+}
+
+if (scalar @pids > 0) {
+    printf "Waiting for %d indexing jobs to complete\n", scalar @pids;
+    while (1) {
+        my $wait_return = wait();
+        if ($wait_return < 0) {
+            last;
+        }
+    }
+    printf "%d indexing jobs have completed\n\n", scalar @pids;
+}
+
+print "Indexing run doc\n";
+index_es_doc("run");
+print "Indexing queued docs\n";
+index_queued_es_docs();
+print "Writing queued docs\n";
+write_queued_es_docs();
+print "Waiting for docs to be present in OpenSearch\n";
+wait_for_docs;
+print "Indexing to OpenSearch complete\n";
