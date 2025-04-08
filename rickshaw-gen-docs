@@ -5,9 +5,16 @@
 # Author: Andrew Theurer
 #
 # Rickshaw will run a benhcmark for you.  Please see README.md for instructions.
-# rickshaw-pre-index takes the rickshaw-run.json, plus metric data found from benchmark
+#
+# rickshaw-gen-docs takes the rickshaw-run.json, plus metric data found from benchmark
 # and tools, and generates all of the opensearch documents, to be later submitted for
 # indexing by CommonDataModel subproject (or by other means).
+#
+# Opensearch documents are generated in <result_dir>/run/opensearch.  These documents
+# are always ndjson, and can be consumed by add-run.js in the CommonDataModel project.
+#
+# This script supports cdm versions cdmv[7|8|9]dev.  The default for is the latest, cdmv9dev,
+# and the version can be chosen with --ver
 
 use strict;
 use warnings;
@@ -297,7 +304,6 @@ sub create_es_doc {
 
 sub write_ndjson {
     my $filename = $doc_dir . "/" . $$ . "-docs.ndjson";
-    #printf "calling open_write_text_file\n";
     (my $rc, my $json_fh) = open_write_text_file($filename);
     if ($rc == 0 and defined $json_fh) {
         printf $json_fh "%s", $ndjson;
