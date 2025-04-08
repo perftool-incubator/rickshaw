@@ -2792,10 +2792,10 @@ sub prepare_bench_tool_engines() {
         next if ($cs_type eq "profiler"); # Currently we do not generate specific tools cmds for each profiler
         for my $start_stop ("start", "stop") {
             foreach my $cs_ref (@{ $clients_servers{$cs_type} }) {
-		if (! defined $$cs_ref{'id'}) {
-			printf "cs_ref{'id'} for client_servers{%s} is not defined, skipping.\n", $cs_type;
-			next;
-		}
+                if (! defined $$cs_ref{'id'}) {
+                        printf "cs_ref{'id'} for client_servers{%s} is not defined, skipping.\n", $cs_type;
+                        next;
+                }
                 my $cs_tool_cmds_dir = $tool_cmds_dir . "/" . $cs_type . "/" . $$cs_ref{'id'};
                 make_path($cs_tool_cmds_dir);
                 my $tool_cmd_file = $cs_tool_cmds_dir . "/" . $start_stop;
@@ -2826,10 +2826,10 @@ sub prepare_bench_tool_engines() {
             if ($cs_type eq "client") {
                 push(@cmd_type_files, "infra");
             }
-	    if (! defined $$cs_ref{'id'}) {
-		printf "cs_type: [%s] cs_ref{'id'} not defined, skipping\n", $cs_type;
+            if (! defined $$cs_ref{'id'}) {
+                printf "cs_type: [%s] cs_ref{'id'} not defined, skipping\n", $cs_type;
                 next;
-	    }
+            }
             my $cs_id = $$cs_ref{'id'};
             my $this_cmds_dir = $engine_bench_cmds_dir . "/" . $cs_type . "/" . $cs_id;
             #make_path($this_cmds_dir) || die "Could not mkdir " . $this_cmds_dir;
@@ -2881,10 +2881,10 @@ sub prepare_bench_tool_engines() {
     foreach my $cs_type (keys %clients_servers, @all_collector_types) {
         if ($cs_type =~ /^client|server?/) {
             foreach my $cs_ref (@{ $clients_servers{$cs_type} }) {
-	        if (! defined $$cs_ref{'id'}) {
-		    printf "cs_type: [%s] cs_ref{'id'} not defined, skipping\n", $cs_type;
+                if (! defined $$cs_ref{'id'}) {
+                    printf "cs_type: [%s] cs_ref{'id'} not defined, skipping\n", $cs_type;
                     next;
-	        }
+                }
                 my $cs_id = $$cs_ref{'id'};
                 my $benchmark = $ids_to_benchmark{$cs_id};
                 build_files_list($cs_type, $cs_id, $benchmark);
