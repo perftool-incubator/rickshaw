@@ -17,13 +17,13 @@ sub rickshaw_run_schema_fixup {
     my $result_file = shift;
     chomp $result_file;
     if (! defined $result_file) {
-	print "rickshaw_run_schema_fixup(): result_file not defined\n";
+	log_print "rickshaw_run_schema_fixup(): result_file not defined\n";
 	return 1;
     }
     my $result_schema_file = shift;
     chomp $result_schema_file;
     if (! defined $result_schema_file) {
-	print "rickshaw_run_schema_fixup(): result_schema_file not defined\n";
+	log_print "rickshaw_run_schema_fixup(): result_schema_file not defined\n";
 	return 1;
     }
 
@@ -38,7 +38,7 @@ sub rickshaw_run_schema_fixup {
     # data being run through JSON validation
     (my $file_rc, my $result_fh) = open_read_text_file($result_file);
     if ($file_rc == 0 and defined $result_fh) {
-	print "Checking if the rickshaw-run data matches the current JSON schema\n";
+	log_print "Checking if the rickshaw-run data matches the current JSON schema\n";
 
 	my $result_text = "";
 	while ( <$result_fh> ) {
@@ -49,13 +49,13 @@ sub rickshaw_run_schema_fixup {
 
 	my $result_ref = $coder->decode($result_text);
 	if (not defined $result_ref) {
-	    print "The rickshaw-run data is not valid JSON\n";
+	    log_print "The rickshaw-run data is not valid JSON\n";
 	    return 1;
 	}
 
 	my $validation_result = validate_schema($result_schema_file, $result_file, $result_ref);
 	if ($validation_result != 0) {
-	    print "Attempting to update the rickshaw-run data to match the current JSON schema\n";
+	    log_print "Attempting to update the rickshaw-run data to match the current JSON schema\n";
 
 	    # force these parameters to be integers instead of strings by
 	    # "numifying" them
@@ -68,18 +68,18 @@ sub rickshaw_run_schema_fixup {
 	    if ($validation_result == 0) {
 		my $update_rc = put_json_file($result_file, $result_ref, $result_schema_file);
 		if ($update_rc != 0) {
-		    print "Unable to update the rickshaw-run file after updating to match the current JSON schema\n";
+		    log_print "Unable to update the rickshaw-run file after updating to match the current JSON schema\n";
 		    return 1;
 		} else {
-		    print "Updating the rickshaw-run file to match the current JSON schema succeeded\n";
+		    log_print "Updating the rickshaw-run file to match the current JSON schema succeeded\n";
 		}
 	    } else {
-		print "Unable to validate rickshaw-run data after updating to match the current JSON schema\n";
+		log_print "Unable to validate rickshaw-run data after updating to match the current JSON schema\n";
 		return 1;
 	    }
 	}
     } else {
-	print "Could not open the rickshaw-run for JSON Schema correction\n";
+	log_print "Could not open the rickshaw-run for JSON Schema correction\n";
 	return 1;
     }
 

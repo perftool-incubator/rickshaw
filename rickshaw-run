@@ -146,29 +146,29 @@ debug_log(sprintf "Found %d available cpus for job processing.\n", $available_cp
 
 
 $SIG{'INT'} = sub {
-    print "Caught a CTRL-C/SIGINT, aborting via roadblock!\n";
+    log_print "Caught a CTRL-C/SIGINT, aborting via roadblock!\n";
     $abort_via_roadblock = 1;
 };
 
 sub usage {
-    print "\nusage:\n\n";
-    print "--registries-json        Path to a JSON file containing container registry information\n";
-    print "--external-userenvs-dir  Path to look for userenv definitions in that are provided by external sources\n";
-    print "--json-validator         Path to json schema validation utility\n";
-    print "--engine-dir             Directory where the engine project exists\n";
-    print "--workshop-dir           Directory where workshop project exists\n";
-    print "--packrat-dir            Directory where the packrat project exists\n";
-    print "--roadblock-dir          Directory where workshop project exists\n";
-    print "--roadblock-password     Password to use to access the valkey instance\n";
-    print "--bench-dir              Directory where benchmark helper project exists\n";
-    print "--bench-params           File with benchmark parameters to use\n";
-    print "--tools-dir              Directory where *all* tool subprojects exist (like \$CRUCIBLE_HOME/subprojects/tools)\n";
-    print "--tool-params            File with tool parameters to use\n";
-    print "--num-samples            The number of sample exeuctions to run for each benchmark iteration\n";
-    print "--max-sample-failures    The total number of benchmark sample executions that are tolerated\n";
-    print "--test-order             's' = run all samples of an iteration first\n";
-    print "                         'i' = run all iterations of a sample first\n";
-    print "                         'r' = run a sample from a random iteration one at a time (ie. chaos mode)\n\n";
+    log_print "\nusage:\n\n";
+    log_print "--registries-json        Path to a JSON file containing container registry information\n";
+    log_print "--external-userenvs-dir  Path to look for userenv definitions in that are provided by external sources\n";
+    log_print "--json-validator         Path to json schema validation utility\n";
+    log_print "--engine-dir             Directory where the engine project exists\n";
+    log_print "--workshop-dir           Directory where workshop project exists\n";
+    log_print "--packrat-dir            Directory where the packrat project exists\n";
+    log_print "--roadblock-dir          Directory where workshop project exists\n";
+    log_print "--roadblock-password     Password to use to access the valkey instance\n";
+    log_print "--bench-dir              Directory where benchmark helper project exists\n";
+    log_print "--bench-params           File with benchmark parameters to use\n";
+    log_print "--tools-dir              Directory where *all* tool subprojects exist (like \$CRUCIBLE_HOME/subprojects/tools)\n";
+    log_print "--tool-params            File with tool parameters to use\n";
+    log_print "--num-samples            The number of sample exeuctions to run for each benchmark iteration\n";
+    log_print "--max-sample-failures    The total number of benchmark sample executions that are tolerated\n";
+    log_print "--test-order             's' = run all samples of an iteration first\n";
+    log_print "                         'i' = run all iterations of a sample first\n";
+    log_print "                         'r' = run a sample from a random iteration one at a time (ie. chaos mode)\n\n";
 }
 
 sub find_index {
@@ -242,10 +242,10 @@ sub do_roadblock {
     my $rb_log_file = $roadblock_logs_dir . "/" . $label . ".txt";
     (my $date_cmd, my $date, my $date_rc) = run_cmd('date');
     chomp $date;
-    printf "Roadblock: %s ", $date;
+    log_print sprintf "Roadblock: %s ", $date;
 
-    printf "role: %s ", $role;
-    printf "uuid: %s\n", $uuid;
+    log_print sprintf "role: %s ", $role;
+    log_print sprintf "uuid: %s\n", $uuid;
     my $cmd = $base_rb_leader_cmd .
         " --leader-id=controller" .
         " --uuid=" . $uuid .
@@ -265,20 +265,20 @@ sub do_roadblock {
     close($rb_log_fh);
     ($file_rc, $_[0]) = get_json_file($msgs_log_file);
     if ($file_rc > 0 or ! defined $_[0]) {
-        printf "Could not open the messages log file: %s\n", $msgs_log_file;
+        log_print sprintf "Could not open the messages log file: %s\n", $msgs_log_file;
         exit 1;
     }
     if ( $rc != $roadblock_exit_success) {
-        printf "roadblock output BEGIN\n";
-        printf "%s", $output;
-        printf "roadblock rc: %d\n", $rc;
-        printf "roadblock output END\n";
+        log_print "roadblock output BEGIN\n";
+        log_print $output;
+        log_print sprintf "roadblock rc: %d\n", $rc;
+        log_print "roadblock output END\n";
     }
     if ( $rc == $roadblock_exit_abort or $rc == $roadblock_exit_abort_waiting ) {
-        printf "roadblock messages\n";
+        log_print "roadblock messages\n";
         foreach my $msg (@{ $_[0]{'received'} }) {
             if (exists $$msg{'payload'}{'message'}{'user-object'} and exists $$msg{'payload'}{'message'}{'user-object'}{'error'}) {
-                printf "\nError from %s:\n%s\n\n", $$msg{'payload'}{'sender'}{'id'}, $$msg{'payload'}{'message'}{'user-object'}{'error'};
+                log_print sprintf "\nError from %s:\n%s\n\n", $$msg{'payload'}{'sender'}{'id'}, $$msg{'payload'}{'message'}{'user-object'}{'error'};
             }
         }
     }
@@ -286,7 +286,7 @@ sub do_roadblock {
     if ($rc == $roadblock_exit_abort or $rc == $roadblock_exit_success or $rc == $roadblock_exit_abort_waiting ) {
         ($file_rc, $_[0]) = get_json_file($msgs_log_file);
         if ($file_rc > 0 or ! defined $_[0]) {
-            printf "Could not open the messages log file on abort/exit: %s\n". $msgs_log_file;
+            log_print sprintf "Could not open the messages log file on abort/exit: %s\n". $msgs_log_file;
             exit 1;
         }
         return $rc;
@@ -430,8 +430,8 @@ sub calc_image_md5 {
     (my $cmd, my $cmd_output, my $cmd_rc) = run_cmd($workshop_config_cmd);
     my @config_analysis_output = split(/\n/, $cmd_output);
     if ($cmd_rc > 0) {
-        printf "Workshop dump config failed:\n";
-        printf "%s\n", join("\n", @config_analysis_output);
+        log_print "Workshop dump config failed:\n";
+        log_print sprintf "%s\n", join("\n", @config_analysis_output);
         exit 1;
     }
     my $break_line = 0;
@@ -454,8 +454,8 @@ sub calc_image_md5 {
     ($cmd, $cmd_output, $cmd_rc) = run_cmd($workshop_files_cmd);
     my @files_dump_output = split(/\n/, $cmd_output);
     if ($cmd_rc > 0) {
-        printf "Workshop dump files failed:\n";
-        printf "%s\n", join("\n", @files_dump_output);
+        log_print "Workshop dump files failed:\n";
+        log_print sprintf "%s\n", join("\n", @files_dump_output);
         exit 1;
     }
     $break_line = 0;
@@ -603,7 +603,7 @@ sub workshop_build_image {
     my $tag = shift;
     my $skip_update = shift;
     if (!defined $skip_update) {
-        printf "skip_update was not defined, so setting to false\n";
+        log_print "skip_update was not defined, so setting to false\n";
         $skip_update = "false";
     }
     my $proj;
@@ -627,10 +627,10 @@ sub workshop_build_image {
     printf $fh "%s\n", join("\n", @workshop_output);
     close($fh);
     if ($workshop_rc > 0) {
-        printf "Workshop build failed: rc=%d\n", $workshop_rc;
-        printf "Workshop build command: %s\n", $workshop_build_cmd;
-        printf "Workshop build output:\n";
-        printf "%s\n", join("\n", @workshop_output);
+        log_print sprintf "Workshop build failed: rc=%d\n", $workshop_rc;
+        log_print sprintf "Workshop build command: %s\n", $workshop_build_cmd;
+        log_print "Workshop build output:\n";
+        log_print sprintf "%s\n", join("\n", @workshop_output);
         exit 1;
     }
     debug_log(sprintf "%s\n", join("\n", @workshop_output));
@@ -659,10 +659,10 @@ sub delete_local_image {
         $full_url = $run{'registries'}{$registry_type}{'url-details'}{'source-image-url'} . ":" . $image;
     }
     if (!local_image_found($image, $registry_type)) {
-        printf "ERROR: delete_local_image(): could not find local image [%s] before delete\n", $full_url;
-        printf "imgae: [%s]\n", $image;
-        printf "full_url: [%s]\n", $full_url;
-        printf "source-image-url: [%s]\n", $run{'source-image-url'};
+        log_print sprintf "ERROR: delete_local_image(): could not find local image [%s] before delete\n", $full_url;
+        log_print sprintf "imgae: [%s]\n", $image;
+        log_print sprintf "full_url: [%s]\n", $full_url;
+        log_print sprintf "source-image-url: [%s]\n", $run{'source-image-url'};
         exit 1;
     }
     debug_log(sprintf "Deleting local image %s\n", $full_url);
@@ -670,8 +670,8 @@ sub delete_local_image {
     $cmd .= " rmi " . " " . $full_url;
     ($cmd, my $output, my $cmd_rc) = run_cmd($cmd);
     if ($cmd_rc != 0) {
-        printf "ERROR: delete_local_image(): rmi command [%s] failed with %d\nOutput:\n%s\n\n",
-               $cmd, $cmd_rc, $output;
+        log_print sprintf "ERROR: delete_local_image(): rmi command [%s] failed with %d\nOutput:\n%s\n\n",
+                          $cmd, $cmd_rc, $output;
         exit 1;
     }
 }
@@ -685,12 +685,12 @@ sub push_local_image {
         $full_dest_url =~ /^dir:(.*)/;
         my $image_dir = $1;
         if (! -d $image_dir) {
-            printf "Creating local registry directory: %s\n", $image_dir;
+            log_print sprintf "Creating local registry directory: %s\n", $image_dir;
             make_path($image_dir, { verbose => 1, error => \my $err } );
             if ($err && @$err) {
-                print "make_path: encountered errors:\n";
+                log_print "make_path: encountered errors:\n";
                 for my $diag (@$err) {
-                    print Dumper $diag;
+                    log_print Dumper $diag;
                 }
             }
         }
@@ -705,12 +705,12 @@ sub push_local_image {
     $cmd .= " push --tls-verify=" . $run{'registries'}{$registry_type}{'tls-verify'} . " " . $full_src_url . " " . $full_dest_url;
     ($cmd, my $output, my $cmd_rc) = run_cmd($cmd);
     if ($cmd_rc != 0) {
-        printf "ERROR: push_local_image(): push command [%s] failed with %d\nOutput:\n%s\n\n",
-               $cmd, $cmd_rc, $output;
+        log_print sprintf "ERROR: push_local_image(): push command [%s] failed with %d\nOutput:\n%s\n\n",
+                          $cmd, $cmd_rc, $output;
         exit 1;
     }
     if (!remote_image_found($image_tag, $registry_type)) {
-        printf "WARNING: push_local_image(): failed to find remote image after push...retrying!\n";
+        log_print "WARNING: push_local_image(): failed to find remote image after push...retrying!\n";
         my $found_it = 0;
         for (my $i=1; $i<=20; $i++) {
             sleep 3;
@@ -718,9 +718,9 @@ sub push_local_image {
             if (remote_image_found($image_tag, $registry_type)) {
                 $found_it = 1;
                 last;
-                printf "NOTICE: push_local_image(): found image on retry attempt number %d\n", $i;
+                log_print sprintf "NOTICE: push_local_image(): found image on retry attempt number %d\n", $i;
             } else {
-                printf "NOTICE: push_local_image(): failed to find image on retry attempt number %d\n", $i;
+                log_print sprintf "NOTICE: push_local_image(): failed to find image on retry attempt number %d\n", $i;
             }
         }
 
@@ -788,7 +788,7 @@ sub build_reqs {
                     ]
                 );
     if (put_json_file($tb_req_file, \%tb_req) > 0) {
-        printf "build_container_image(): put_json_file() failed\n";
+        log_print "build_container_image(): put_json_file() failed\n";
         exit 1;
     }
     push (@$req_ref, "--requirement " . $tb_req_file);
@@ -814,10 +814,10 @@ sub decode_repo_urls {
     my $registry_type = shift;
 
     if (exists $run{'registries'}{$registry_type}{'url-details'}) {
-        printf "%s registry repository URL (%s) details have already been decoded\n", $registry_type, $run{'registries'}{$registry_type}{'repo'};
+        log_print sprintf "%s registry repository URL (%s) details have already been decoded\n", $registry_type, $run{'registries'}{$registry_type}{'repo'};
         return;
     } else {
-        printf "Decoding %s registry repository URL (%s) details\n", $registry_type, $run{'registries'}{$registry_type}{'repo'};
+        log_print sprintf "Decoding %s registry repository URL (%s) details\n", $registry_type, $run{'registries'}{$registry_type}{'repo'};
     }
 
     $run{'registries'}{$registry_type}{'url-details'} = ();
@@ -888,7 +888,7 @@ sub decode_repo_urls {
                 $run{'registries'}{$registry_type}{'url-details'}{'label'};
             debug_log(sprintf "dest-image-url: [%s]\n", $run{'registries'}{$registry_type}{'url-details'}{'dest-image-url'});
         } else {
-            print "The label/repo was not defined in \$run{'registries'}{$registry_type}{'repo'}: [%s]\n", $run{'registries'}{$registry_type}{'repo'};
+            log_print "The label/repo was not defined in \$run{'registries'}{$registry_type}{'repo'}: [%s]\n", $run{'registries'}{$registry_type}{'repo'};
         }
     } else {
         die "The \$run{'registries'}{$registry_type}{'repo'} does not match the pattern [protocol:][host[:port]][/<project>]/<repo>: " . $run{'registries'}{$registry_type}{'repo'};
@@ -941,7 +941,7 @@ sub source_container_image {
                             }
                             if ($userenv_dir_entry eq ($userenv . ".json")) {
                                 $userenv_file_path = $userenv_dir . "/" . $userenv_dir_entry;
-                                printf "Found userenv %s in external userenv directory at %s\n", $userenv, $userenv_file_path;
+                                log_print sprintf "Found userenv %s in external userenv directory at %s\n", $userenv, $userenv_file_path;
                             }
                         }
                     } else {
@@ -957,7 +957,7 @@ sub source_container_image {
     my $internal_userenv_file_path = $rickshaw_project_dir . "/userenvs/" . $userenv . ".json";
     if (! defined $userenv_file_path && -e $internal_userenv_file_path) {
         $userenv_file_path = $internal_userenv_file_path;
-        printf "Found userenv %s in rickshaw directory at %s\n", $userenv, $userenv_file_path;
+        log_print sprintf "Found userenv %s in rickshaw directory at %s\n", $userenv, $userenv_file_path;
     }
 
     if (! defined $userenv_file_path) {
@@ -976,9 +976,9 @@ sub source_container_image {
         }
     }
     if ($registry_type eq "public") {
-        printf "Userenv %s does not require a pull token so it comes from a public registry repo.\n", $userenv;
+        log_print sprintf "Userenv %s does not require a pull token so it comes from a public registry repo.\n", $userenv;
     } elsif ($registry_type eq "private") {
-        printf "Userenv %s does require a pull token so it comes from a private registry repo.\n", $userenv;
+        log_print sprintf "Userenv %s does require a pull token so it comes from a private registry repo.\n", $userenv;
     }
 
     if (! exists $run{'registries'}{$registry_type}) {
@@ -996,7 +996,7 @@ sub source_container_image {
     " --registries-json=" . $run{'registries-json'} .
     " 2>&1";
 
-    printf "Sourcing container image for userenv '%s' (%s) and benchmark/tool '%s'; this may take a few minutes\n", $userenv, $registry_type, $benchmark;
+    log_print sprintf "Sourcing container image for userenv '%s' (%s) and benchmark/tool '%s'; this may take a few minutes\n", $userenv, $registry_type, $benchmark;
 
     my @requirements;
     build_reqs(\@requirements, $userenv, $benchmark);
@@ -1039,13 +1039,13 @@ sub source_container_image {
                 }
             );
         if (put_json_file($cs_conf_file, \%cs_conf) > 0) {
-            printf "put_json_file(): initial %s: failed\n", $cs_conf_file;
+            log_print sprintf "put_json_file(): initial %s: failed\n", $cs_conf_file;
             exit 1;
         }
         my $tag = calc_image_md5($workshop_base_cmd, $userenv_arg, $req_arg, $container_arch, $userenv, $benchmark, scalar(@workshop_args) + 1);
         $cs_conf{'config'}{'labels'} = [ 'quay.expires-after=' . $run{'registries'}{'public'}{'quay-expiration-length'} ];
         if (put_json_file($cs_conf_file, \%cs_conf) > 0) {
-            printf "put_json_file(): update %s: failed\n", $cs_conf_file;
+            log_print sprintf "put_json_file(): update %s: failed\n", $cs_conf_file;
             exit 1;
         }
 
@@ -1082,7 +1082,7 @@ sub source_container_image {
     if ($workshop_force_builds eq "false") {
         # Now that we have all the info to build any stage of the container image we could need,
         # search for existing container images, starting with the most complete image first.
-        printf "Searching for existing stages (1 to %d, %d being most complete)\n", $num_images, $num_images;
+        log_print sprintf "Searching for existing stages (1 to %d, %d being most complete)\n", $num_images, $num_images;
         $i = $num_images - 1;
         while ($i >= 0) {
             debug_log(sprintf "Checking for stage number %d (of %d)\n", $i + 1, $num_images);
@@ -1099,24 +1099,24 @@ sub source_container_image {
             }
         }
         if ($i == -1) {
-            printf "Did not find any existing stages\n";
+            log_print "Did not find any existing stages\n";
         } elsif ($i < $num_images - 1) {
-            printf "Found stage number %d (of %d), need to build %d stage(s)\n", $i + 1, $num_images, $num_images - 1 - $i;
+            log_print sprintf "Found stage number %d (of %d), need to build %d stage(s)\n", $i + 1, $num_images, $num_images - 1 - $i;
         } elsif ($i == $num_images - 1) {
-            printf "Found most complete stage (number %d)\n", $i + 1;
+            log_print sprintf "Found most complete stage (number %d)\n", $i + 1;
         } else {
-            printf "Something went wrong, stage number: %d, num_images: %d\n", $i + 1, $num_images;
+            log_print sprintf "Something went wrong, stage number: %d, num_images: %d\n", $i + 1, $num_images;
             exit 1;
         }
     } elsif ($workshop_force_builds eq "true") {
-        printf "Image building is forced, checking if any of the needed stages were already built during this run (1 to %d, %d being most complete)\n", $num_images, $num_images;
+        log_print sprintf "Image building is forced, checking if any of the needed stages were already built during this run (1 to %d, %d being most complete)\n", $num_images, $num_images;
         $i = $num_images - 1;
         while ($i >= 0) {
             debug_log(sprintf "Checking for stage number %d (of %d)\n", $i + 1, $num_images);
             if (exists $workshop_built_tags{$workshop_args[$i]{'tag'}}) {
                 if (!remote_image_found($workshop_args[$i]{'tag'}, $registry_type)) {
                     if (!local_image_found($workshop_args[$i]{'tag'}, $registry_type)) {
-                        printf "ERROR: Cannot find the image I was previously forced to build (%s)", $workshop_args[$i]{'tag'};
+                        log_print sprintf "ERROR: Cannot find the image I was previously forced to build (%s)", $workshop_args[$i]{'tag'};
                         exit 1;
                     } else {
                         push_local_image($workshop_args[$i]{'tag'}, $registry_type);
@@ -1131,13 +1131,13 @@ sub source_container_image {
             }
         }
         if ($i == -1) {
-            printf "Did not find any existing stages built during this run\n";
+            log_print "Did not find any existing stages built during this run\n";
         } elsif ($i < $num_images - 1) {
-            printf "Found stage number %d (of %d) built during this run, need to build %d stage(s)\n", $i + 1, $num_images, $num_images - 1 - $i;
+            log_print sprintf "Found stage number %d (of %d) built during this run, need to build %d stage(s)\n", $i + 1, $num_images, $num_images - 1 - $i;
         } elsif ($i == $num_images - 1) {
-            printf "Found most complete stage built during this run (number %d)\n", $i + 1;
+            log_print sprintf "Found most complete stage built during this run (number %d)\n", $i + 1;
         } else {
-            printf "Something went wrong searching for stages built during this run, stage number: %d, num_images: %d\n", $i + 1, $num_images;
+            log_print sprintf "Something went wrong searching for stages built during this run, stage number: %d, num_images: %d\n", $i + 1, $num_images;
             exit 1;
         }
     }
@@ -1157,14 +1157,14 @@ sub source_container_image {
             #                               weeks   days/week   hours/day   min/hour   seconds/min
             $refresh_expiration = time() + ($1    * 7         * 24        * 60       * 60);
 
-            printf "Going to refresh image expiration with this value: %d (%s)\n", $refresh_expiration, quay_image_refresh_formatted_timestamp($refresh_expiration);
+            log_print sprintf "Going to refresh image expiration with this value: %d (%s)\n", $refresh_expiration, quay_image_refresh_formatted_timestamp($refresh_expiration);
         } else {
-            print "Failed to determine quay image expiration weeks\n";
+            log_print "Failed to determine quay image expiration weeks\n";
             exit 1;
         }
     }
     while ($x < $i) {
-        printf "Processing stage %d (%s)...\n", $x + 1, $workshop_args[$x]{'tag'};
+        log_print sprintf "Processing stage %d (%s)...\n", $x + 1, $workshop_args[$x]{'tag'};
         if (defined $quay_refresh_expiration_tokens{$registry_type} && defined $run{'registries'}{$registry_type}{'quay-refresh-expiration-api-url'}) {
             if (remote_image_found($workshop_args[$x]{'tag'}, $registry_type)) {
                 my $max_refresh_attempts = 3;
@@ -1193,13 +1193,13 @@ sub source_container_image {
                             $current_expiration = $$query_ref{'tags'}[0]{'end_ts'};
                             last;
                         } else {
-                            print "\tTag information returned from query is incomplete\n";
-                            print Dumper $query_ref;
+                            log_print "\tTag information returned from query is incomplete\n";
+                            log_print Dumper $query_ref;
                             exit 1;
                         }
                     } else {
                         if ($refresh_attempts > $max_refresh_attempts) {
-                            printf "\tFailed to query for tag information on %d attempts\n", $max_refresh_attempts;
+                            log_print sprintf "\tFailed to query for tag information on %d attempts\n", $max_refresh_attempts;
                             exit 1;
                         } else {
                             sleep 1;
@@ -1208,7 +1208,7 @@ sub source_container_image {
                 }
 
                 if ($current_expiration >= $refresh_expiration) {
-                    printf "\tThe current expiration (%d / %s) is greater than or equal to the refresh expiration so not refreshing\n", $current_expiration, quay_image_refresh_formatted_timestamp($current_expiration);
+                    log_print sprintf "\tThe current expiration (%d / %s) is greater than or equal to the refresh expiration so not refreshing\n", $current_expiration, quay_image_refresh_formatted_timestamp($current_expiration);
                 } else {
                     my $refresh_cmd = 'curl --silent' .
                                       ' -X PUT -H "Authorization: Bearer ' . $quay_refresh_expiration_tokens{$registry_type} . '"' .
@@ -1224,11 +1224,11 @@ sub source_container_image {
                         chomp($refresh_status);
 
                         if (($refresh_rc == 0) && ($refresh_status eq "\"Updated\"")) {
-                            printf "\tRefreshed expiration (was %d / %s)\n", $current_expiration, quay_image_refresh_formatted_timestamp($current_expiration);
+                            log_print sprintf "\tRefreshed expiration (was %d / %s)\n", $current_expiration, quay_image_refresh_formatted_timestamp($current_expiration);
                             last;
                         } else {
                             if ($refresh_attempts > $max_refresh_attempts) {
-                                printf "\tFailed to refresh expiration on %d attempts (currently %d / %s)\n", $max_refresh_attempts, $current_expiration, quay_image_refresh_formatted_timestamp($current_expiration);
+                                log_print sprintf "\tFailed to refresh expiration on %d attempts (currently %d / %s)\n", $max_refresh_attempts, $current_expiration, quay_image_refresh_formatted_timestamp($current_expiration);
                                 exit 1;
                             } else {
                                 sleep 1;
@@ -1237,22 +1237,22 @@ sub source_container_image {
                     }
                 }
             } else {
-                print "\tskipping expiration refresh because remote image does not exist (!!)\n";
+                log_print "\tskipping expiration refresh because remote image does not exist (!!)\n";
             }
         }
-        print "\tReady\n";
+        log_print "\tReady\n";
         $x++;
     }
     while ($i <= $num_images - 1) {
-        printf "Processing stage %d (%s)...\n", $i + 1, $workshop_args[$i]{'tag'};
+        log_print sprintf "Processing stage %d (%s)...\n", $i + 1, $workshop_args[$i]{'tag'};
         my $begin = time();
         workshop_build_image($userenv, $registry_type, $benchmark, $workshop_base_cmd, $i + 1, $workshop_args[$i]{'userenv'}, $workshop_args[$i]{'reqs'}, $workshop_args[$i]{'tag'}, $workshop_args[$i]{'skip-update'});
         my $end = time();
-        printf "\tBuilding took %d seconds\n", $end - $begin;
+        log_print sprintf "\tBuilding took %d seconds\n", $end - $begin;
         $begin = time();
         push_local_image($workshop_args[$i]{'tag'}, $registry_type);
         $end = time();
-        printf "\tPushing took %d seconds\n", $end - $begin;
+        log_print sprintf "\tPushing took %d seconds\n", $end - $begin;
         $workshop_built_tags{$workshop_args[$i]{'tag'}} = 1;
         push(@local_images, $workshop_args[$i]{'tag'});
         $image = $run{'registries'}{$registry_type}{'url-details'}{'dest-image-url'} . ":" . $workshop_args[$i]{'tag'};
@@ -1260,12 +1260,12 @@ sub source_container_image {
     }
     my $num_local_images = scalar @local_images;
     if ($num_local_images > 0) {
-        printf "Deleting %d local images\n", $num_local_images;
+        log_print sprintf "Deleting %d local images\n", $num_local_images;
         while (scalar @local_images) {
             delete_local_image(pop(@local_images), $registry_type);
         }
     }
-    printf "Finished sourcing container image for userenv '%s' (%s) and benchmark/tool '%s'\n", $userenv, $registry_type, $benchmark;
+    log_print sprintf "Finished sourcing container image for userenv '%s' (%s) and benchmark/tool '%s'\n", $userenv, $registry_type, $benchmark;
     if ($registry_type eq "private") {
         $image .= "::" . $run{'registries'}{$registry_type}{'pull-token'};
     }
@@ -1315,8 +1315,8 @@ sub process_bench_roadblocks {
             $sample_data[$iter_array_idx]{'attempt-fail'} = 0;
             $sample_data[$iter_array_idx]{'attempt-num'}++;
 
-            printf "Starting iteration %d sample %d (test %d of %d) attempt number %d of %d\n",
-                $iter_id,
+            log_print sprintf "Starting iteration %d sample %d (test %d of %d) attempt number %d of %d\n",
+                              $iter_id,
                 $samp_id,
                 $tid+1,
                 scalar(@tests),
@@ -1371,11 +1371,11 @@ sub process_bench_roadblocks {
                 for my $message (@{ $messages{'received'} }) {
                     if (exists $$message{'payload'}{'message'}{'user-object'}{'timeout'}) {
                         $timeout = $$message{'payload'}{'message'}{'user-object'}{'timeout'};
-                        printf "Found new client-start-end timeout value: %s\n", $timeout;
+                        log_print sprintf "Found new client-start-end timeout value: %s\n", $timeout;
                     }
                 }
             } else {
-                printf "No messages received\n";
+                log_print "No messages received\n";
             }
 
             $rb_name = $rb_prefix . "client-start-end";
@@ -1386,7 +1386,7 @@ sub process_bench_roadblocks {
             # reset the timeout value in case it was changed
             if ($timeout != $default_rb_timeout) {
                 $timeout = $default_rb_timeout;
-                printf "Resetting timeout value: %s\n", $timeout;
+                log_print sprintf "Resetting timeout value: %s\n", $timeout;
             }
 
             $rb_name = $rb_prefix . "client-stop-begin";
@@ -1441,15 +1441,15 @@ sub process_bench_roadblocks {
                 $sample_result = "unsuccessfully";
 
                 if ($abort != 0) {
-                    printf "[WARNING] An abort signal has been encountered!\n";
+                    log_print "[WARNING] An abort signal has been encountered!\n";
                 }
 
                 if ($quit != 0) {
-                    printf "[ERROR] A quit signal has been encountered!\n";
+                    log_print "[ERROR] A quit signal has been encountered!\n";
                 }
             }
 
-            printf "Completed iteration %d sample %d (test %d of %d) attempt number %d of %d %s\n",
+            log_print sprintf "Completed iteration %d sample %d (test %d of %d) attempt number %d of %d %s\n",
                 $iter_id,
                 $samp_id,
                 $tid+1,
@@ -1476,7 +1476,7 @@ sub process_cmdline() {
                 $val = shift @ARGV;
             }
         } else {
-            printf "[ERROR]malformed cmdline parameter: %s\n", $p;
+            log_print sprintf "[ERROR]malformed cmdline parameter: %s\n", $p;
             usage;
             exit 1;
         }
@@ -1490,7 +1490,7 @@ sub process_cmdline() {
             debug_log(sprintf "about to run: %s\n", $blockbreaker_cmd);
             (my $cmd, my $cmd_output, my $cmd_rc) = run_cmd($blockbreaker_cmd);
             if ($cmd_rc != 0) {
-                printf "[ERROR] blockbreaker failed to run with rc=%d for command=[%s]:\n%s\n", $cmd_rc, $cmd, $cmd_output;
+                log_print sprintf "[ERROR] blockbreaker failed to run with rc=%d for command=[%s]:\n%s\n", $cmd_rc, $cmd, $cmd_output;
                 exit 1;
             }
             chomp($cmd_output);
@@ -1512,7 +1512,7 @@ sub process_cmdline() {
                 my $benchmark_dir = $ENV{'CRUCIBLE_HOME'} . "/subprojects/benchmarks/" . $benchmark;
 
                 if (! -d $benchmark_dir) {
-                    printf "[ERROR] invalid benchmark %s, benchmark directory %s does not exist\n", $benchmark, $benchmark_dir;
+                    log_print sprintf "[ERROR] invalid benchmark %s, benchmark directory %s does not exist\n", $benchmark, $benchmark_dir;
                     exit 1;
                 }
 
@@ -1520,7 +1520,7 @@ sub process_cmdline() {
                 debug_log(sprintf "about to run: %s\n", $blockbreaker_cmd);
                 (my $cmd, my $cmd_output, my $cmd_rc) = run_cmd($blockbreaker_cmd);
                 if ($cmd_rc != 0) {
-                    printf "[ERROR] blockbreaker failed with rc=%d for command=[%s]:\n%s\n", $cmd_rc, $cmd, $cmd_output;
+                    log_print sprintf "[ERROR] blockbreaker failed with rc=%d for command=[%s]:\n%s\n", $cmd_rc, $cmd, $cmd_output;
                     exit 1;
                 }
                 my $bench_mv_params = $run{'base-run-dir'} . "/config/" . $benchmark . "-mv-params.json";
@@ -1528,7 +1528,7 @@ sub process_cmdline() {
                     print BMP $cmd_output;
                     close BMP;
                 } else {
-                    printf "[ERROR] failed to write %s:\n%s\n", $bench_mv_params, $cmd_output;
+                    log_print sprintf "[ERROR] failed to write %s:\n%s\n", $bench_mv_params, $cmd_output;
                     exit 1;
                 }
 
@@ -1544,12 +1544,12 @@ sub process_cmdline() {
                     print MO $cmd_output;
                     close MO;
                 } else {
-                    print "[ERROR] failed to write %s:\n%s\n", $bench_params_run_output, $cmd_output;
+                    log_print "[ERROR] failed to write %s:\n%s\n", $bench_params_run_output, $cmd_output;
                     exit 1;
                 }
                 if ($cmd_rc != 0) {
-                    printf "[ERROR] multiplex failed with an error and returned rc=%d\n", $cmd_rc;
-                    printf "multiplex output is:\n%s\n", $cmd_output;
+                    log_print sprintf "[ERROR] multiplex failed with an error and returned rc=%d\n", $cmd_rc;
+                    log_print sprintf "multiplex output is:\n%s\n", $cmd_output;
                     exit 1;
                 }
                 $bench_params .= ',' . $bench_params_run_file;
@@ -1564,7 +1564,7 @@ sub process_cmdline() {
             debug_log(sprintf "about to run: %s\n", $blockbreaker_cmd);
             ($cmd, $cmd_output, $cmd_rc) = run_cmd($blockbreaker_cmd);
             if ($cmd_rc != 0) {
-                printf "[ERROR] blockbreaker failed to run with rc=%d for command=[%s]:\n%s\n", $cmd_rc, $cmd, $cmd_output;
+                log_print sprintf "[ERROR] blockbreaker failed to run with rc=%d for command=[%s]:\n%s\n", $cmd_rc, $cmd, $cmd_output;
                 exit 1;
             }
             my $tool_params = $run{'base-run-dir'} . "/config/tool-params.json";
@@ -1572,7 +1572,7 @@ sub process_cmdline() {
                 print TP $cmd_output;
                 close TP;
             } else {
-                printf "[ERROR] failed to write %s:\n%s\n", $tool_params, $cmd_output;
+                log_print sprintf "[ERROR] failed to write %s:\n%s\n", $tool_params, $cmd_output;
                 exit 1;
             }
             debug_log(sprintf "appending arg [%s] with value [%s] extracted from from-file to \@ARGV\n", "--tool-params", $tool_params);
@@ -1583,7 +1583,7 @@ sub process_cmdline() {
             debug_log(sprintf "about to run: %s\n", $blockbreaker_cmd);
             ($cmd, $cmd_output, $cmd_rc) = run_cmd($blockbreaker_cmd);
             if ($cmd_rc != 0) {
-                printf "[ERROR] blockbreaker failed to run with rc=%d for command=[%s]:\n%s\n", $cmd_rc, $cmd, $cmd_output;
+                log_print sprintf "[ERROR] blockbreaker failed to run with rc=%d for command=[%s]:\n%s\n", $cmd_rc, $cmd, $cmd_output;
                 exit 1;
             }
             chomp($cmd_output);
@@ -1595,7 +1595,7 @@ sub process_cmdline() {
             debug_log(sprintf "about to run: %s\n", $blockbreaker_cmd);
             ($cmd, $cmd_output, $cmd_rc) = run_cmd($blockbreaker_cmd);
             if ($cmd_rc != 0) {
-                printf "[ERROR] blockbreaker failed to run with rc=%d for command=[%s]:\n%s\n", $cmd_rc, $cmd, $cmd_output;
+                log_print sprintf "[ERROR] blockbreaker failed to run with rc=%d for command=[%s]:\n%s\n", $cmd_rc, $cmd, $cmd_output;
                 exit 1;
             }
             chomp($cmd_output);
@@ -1609,7 +1609,7 @@ sub process_cmdline() {
             debug_log(sprintf "about to run: %s\n", $blockbreaker_cmd);
             ($cmd, $cmd_output, $cmd_rc) = run_cmd($blockbreaker_cmd);
             if ($cmd_rc != 0) {
-                printf "[ERROR blockbreaker failed to run with rc=%d for command=[%s]:\n%s\n", $cmd_rc, $cmd, $cmd_output;
+                log_print sprintf "[ERROR blockbreaker failed to run with rc=%d for command=[%s]:\n%s\n", $cmd_rc, $cmd, $cmd_output;
                 exit 1;
             }
             chomp($cmd_output);
@@ -1644,12 +1644,12 @@ sub process_cmdline() {
                     my %tag = ('name' => $1, 'val' => $2);
                     push(@{ $run{'tags'} }, \%tag);
                 } else {
-                    printf "ERROR: format for tag is not valid: %s\n", $this_tag;
+                    log_print sprintf "ERROR: format for tag is not valid: %s\n", $this_tag;
                     exit 1;
                 }
             }
         } else {
-            printf "[ERROR]argument not valid: [%s]\n", $arg;
+            log_print sprintf "[ERROR]argument not valid: [%s]\n", $arg;
             usage;
             exit 1;
         }
@@ -1668,7 +1668,7 @@ sub validate_controller_env() {
     if (defined $run{'roadblock-dir'} and -e $run{'roadblock-dir'} . "/" . $rb_bin) {
         $base_rb_leader_cmd = $run{'roadblock-dir'} . "/" . $rb_bin . " " . $base_rb_leader_cmd;
     } else {
-        printf "ERROR, roadblock project directory not defined or roadblocker.py not found";
+        log_print "ERROR, roadblock project directory not defined or roadblocker.py not found";
         exit 1;
     }
     if (defined $run{'workshop-dir'} and -e $run{'workshop-dir'} . "/workshop.pl") {
@@ -1713,7 +1713,7 @@ sub assign_bench_ids() {
                 push(@{ $benchmark_to_ids{$bench} }, $id_range);
                 $ids_to_benchmark{$id_range} = $bench;
             } else {
-                printf "ID range or number not recognized: %s\n", $id_range;
+                log_print sprintf "ID range or number not recognized: %s\n", $id_range;
             }
         }
     }
@@ -1736,27 +1736,27 @@ sub load_bench_params() {
         if (-e $bench_config_file) {
             ($rc, my $bench_config_ref) = get_json_file($bench_config_file, $bench_schema_file);
             if ($rc > 0 or ! defined $bench_config_ref) {
-                print "Could not open the bench config file\n";
+                log_print "Could not open the bench config file\n";
                 exit 1;
             }
             if (exists $$bench_config_ref{'benchmark'}) {
                 $benchmark_name = $$bench_config_ref{'benchmark'};
                 $bench_dirs{$benchmark_name} = $this_bench_dir;
-                printf "Preparing to run %s\n", $benchmark_name;
+                log_print sprintf "Preparing to run %s\n", $benchmark_name;
                 $run{'benchmark'} .= "," . $benchmark_name;
                 $bench_configs{$benchmark_name} = $bench_config_ref;
             } else {
-                print "[ERROR]benchmark was not defined in %s\n", $bench_config_file;
+                log_print "[ERROR]benchmark was not defined in %s\n", $bench_config_file;
                 exit 1;
             }
         } else {
-            printf "[ERROR]benchmark subproject config file %s was not found\n", $bench_config_file;
+            log_print sprintf "[ERROR]benchmark subproject config file %s was not found\n", $bench_config_file;
             exit 1;
         }
 
         ($rc, my $param_sets_ref) = get_json_file($params_files[$count], $bench_params_schema_file);
         if ($rc > 0 or ! defined $param_sets_ref) {
-            printf "Could not open the bench params file: %s\n", $params_files[$count];
+            log_print sprintf "Could not open the bench params file: %s\n", $params_files[$count];
             exit 1;
         }
         my @param_sets = @{ $param_sets_ref };
@@ -1776,7 +1776,7 @@ sub load_bench_params() {
     }
     $run{'benchmark'} =~ s/^,//;
 
-    printf "There are %d benchmark types to run\n", scalar keys %bench_configs;
+    log_print sprintf "There are %d benchmark types to run\n", scalar keys %bench_configs;
 }
 
 sub load_tool_params() {
@@ -1787,7 +1787,7 @@ sub load_tool_params() {
     # TODO: need schema for tool-params
     ($rc, my $json_ref) = get_json_file($run{'tool-params'}, $tool_params_schema_file);
     if ($rc > 0 or ! defined $json_ref) {
-        print "Could not open the tool params file\n";
+        log_print "Could not open the tool params file\n";
         exit 1;
     }
     my @tmp_tools_params = @{ $json_ref };
@@ -1808,15 +1808,15 @@ sub load_tool_params() {
         my $this_tool_config = $this_tool_dir . "/rickshaw.json";
         my ($rc, $json_ref) = get_json_file($this_tool_config, $tool_schema_file);
         if ($rc > 0 or ! defined $json_ref) {
-            printf "Could not open the tool config file: %s\n", $this_tool_config;
+            log_print sprintf "Could not open the tool config file: %s\n", $this_tool_config;
             exit 1;
         }
         if (! exists $$json_ref{'tool'} or $$json_ref{'tool'} ne $tool_name) {
-            printf "In the following tool config, found in %s, the value for key \"tool\" ", $this_tool_config;
-            printf "does not match the tool name, '%s'\n", $tool_name;
-            printf "Either correct the tool config, or remove this tool from your test\n";
+            log_print sprintf "In the following tool config, found in %s, the value for key \"tool\" ", $this_tool_config;
+            log_print sprintf "does not match the tool name, '%s'\n", $tool_name;
+            log_print "Either correct the tool config, or remove this tool from your test\n";
             my $coder = JSON::XS->new->canonical->pretty;
-            printf "%s", $coder->encode($json_ref);
+            log_print $coder->encode($json_ref);
             exit 1;
         }
         $tools_configs{$$json_ref{'tool'}} = $json_ref;
@@ -1835,20 +1835,20 @@ sub load_utility_params() {
             my $this_utility_config = $run{$utility . '-dir'} . "/rickshaw.json";
             ($rc, my $json_ref) = get_json_file($this_utility_config, $utility_schema_file);
             if ($rc > 0 or ! defined $json_ref) {
-                printf "Could not open the utility config file: %s\n", $this_utility_config;
+                log_print sprintf "Could not open the utility config file: %s\n", $this_utility_config;
                 exit 1;
             }
             if (! exists $$json_ref{'utility'} or $$json_ref{'utility'} ne $utility) {
-                printf "In the following utility config, found in %s, the value for key \"utility\" ", $this_utility_config;
-                printf "does not match the utility name, '%s'\n", $utility;
-                printf "Please correct the utility config\n";
+                log_print sprintf "In the following utility config, found in %s, the value for key \"utility\" ", $this_utility_config;
+                log_print sprintf "does not match the utility name, '%s'\n", $utility;
+                log_print "Please correct the utility config\n";
                 my $coder = JSON::XS->new->canonical->pretty;
-                printf "%s", $coder->encode($json_ref);
+                log_print $coder->encode($json_ref);
                 exit 1;
             }
             $utility_configs{$$json_ref{'utility'}} = $json_ref;
         } else {
-            printf "Could not determine utility location for '%s'\n", $utility;
+            log_print sprintf "Could not determine utility location for '%s'\n", $utility;
             exit 1;
         }
     }
@@ -1903,7 +1903,7 @@ sub make_run_dirs() {
     mkdir($roadblock_followers_dir);
     # If there are no endpoints, assume 1 endpoint using the 'local' extension
     if (scalar @endpoints == 0) {
-        printf "ERROR: you must declare endpoints\n";
+        log_print "ERROR: you must declare endpoints\n";
         exit 1;
     }
 }
@@ -1912,7 +1912,7 @@ sub load_settings_info() {
     my $rickshaw_settings_filename = $rickshaw_project_dir . "/rickshaw-settings.json";
     (my $rc, $jsonsettings) = load_json_settings($rickshaw_settings_filename);
     if ($rc != 0) {
-        printf "load_settings_info(): load_json_settings() failed for %s\n", $rickshaw_settings_filename;
+        log_print sprintf "load_settings_info(): load_json_settings() failed for %s\n", $rickshaw_settings_filename;
         exit 1;
     }
 
@@ -1920,87 +1920,87 @@ sub load_settings_info() {
     if (exists $run{'registries-json'}) {
         ($rc, $registries_settings) = load_json_settings($run{'registries-json'});
         if ($rc != 0) {
-            printf "load_settings_info(): load_json_settings() failed for %s\n", $run{'registries-json'};
+            log_print sprintf "load_settings_info(): load_json_settings() failed for %s\n", $run{'registries-json'};
             exit 1;
         }
 
         my $tmp_load;
         ($rc, $tmp_load) = get_json_setting("engines.public.quay.expiration-length", $registries_settings);
         if ($rc == 1) {
-            print "load_settings_info(): Enabling registries settings migration\n";
+            log_print "load_settings_info(): Enabling registries settings migration\n";
             $regisitries_migration_needed = 1;
         }
     }
 
     ($rc, $default_rb_timeout) = get_json_setting("roadblock.timeouts.default", $jsonsettings);
     if ($rc != 0) {
-        print "load_settings_info(): failed to load default roadblock timeout\n";
+        log_print "load_settings_info(): failed to load default roadblock timeout\n";
         exit 1;
     } else {
-        printf "load_settings_info(): loaded default roadblock timeout: %d\n", $default_rb_timeout;
+        log_print sprintf "load_settings_info(): loaded default roadblock timeout: %d\n", $default_rb_timeout;
     }
 
     ($rc, $endpoint_deploy_timeout) = get_json_setting("roadblock.timeouts.endpoint-deploy", $jsonsettings);
     if ($rc != 0) {
-        print "load_settings_info(): failed to load endpoint-deploy roadblock timeout\n";
+        log_print "load_settings_info(): failed to load endpoint-deploy roadblock timeout\n";
         exit 1;
     } else {
-        printf "load_settings_info(): loaded endpoint-deploy roadblock timeout: %d\n", $endpoint_deploy_timeout;
+        log_print sprintf "load_settings_info(): loaded endpoint-deploy roadblock timeout: %d\n", $endpoint_deploy_timeout;
     }
 
     ($rc, $collect_sysinfo_timeout) = get_json_setting("roadblock.timeouts.collect-sysinfo", $jsonsettings);
     if ($rc != 0) {
-        print "load_settings_info(): failed to load collect-sysinfo roadblock timeout\n";
+        log_print "load_settings_info(): failed to load collect-sysinfo roadblock timeout\n";
         exit 1;
     } else {
-        printf "load_settings_info(): loaded collect-sysinfo roadblock timeout: %d\n", $collect_sysinfo_timeout;
+        log_print sprintf "load_settings_info(): loaded collect-sysinfo roadblock timeout: %d\n", $collect_sysinfo_timeout;
     }
 
     ($rc, $engine_script_start_timeout) = get_json_setting("roadblock.timeouts.engine-start", $jsonsettings);
     if ($rc != 0) {
-        print "load_settings_info(): failed to load engine-start roadblock timeout\n";
+        log_print "load_settings_info(): failed to load engine-start roadblock timeout\n";
         exit 1;
     } else {
-        printf "load_settings_info(): loaded engine script-start roadblock timeout: %d\n", $engine_script_start_timeout;
+        log_print sprintf "load_settings_info(): loaded engine script-start roadblock timeout: %d\n", $engine_script_start_timeout;
     }
 
     ($rc, $endpoint_move_data_rb_timeout) = get_json_setting("roadblock.timeouts.move-data", $jsonsettings);
     if ($rc != 0 ) {
-        print "load_settings_info(): failed to load move-data roadblock timeout\n";
+        log_print "load_settings_info(): failed to load move-data roadblock timeout\n";
         exit 1;
     } else {
-        printf "load_settings_info(): loaded endpoint move-data roadblock timeout: %d\n", $endpoint_move_data_rb_timeout;
+        log_print sprintf "load_settings_info(): loaded endpoint move-data roadblock timeout: %d\n", $endpoint_move_data_rb_timeout;
     }
 
     ($rc, $workshop_force_builds) = get_json_setting("workshop.force-builds", $jsonsettings);
     if ($rc != 0) {
-        print "load_settings_info(): failed to load workshop force\n";
+        log_print "load_settings_info(): failed to load workshop force\n";
         exit 1;
     } else {
-        printf "load_settings_info(): loaded workshop force builds: %s\n", $workshop_force_builds;
+        log_print sprintf "load_settings_info(): loaded workshop force builds: %s\n", $workshop_force_builds;
     }
 
     if ($regisitries_migration_needed) {
         my $tmp_quay_refresh_expiration;
         ($rc, $tmp_quay_refresh_expiration) = get_json_setting("quay.refresh-expiration.token-file", $jsonsettings);
         if ($rc == 0) {
-            print "load_settings_info(): migrating quay.refresh-expiration.token-file\n";
+            log_print "load_settings_info(): migrating quay.refresh-expiration.token-file\n";
             $$registries_settings{'engines'}{'public'}{'quay'}{'refresh-expiration'}{'token-file'} = $tmp_quay_refresh_expiration;
         }
 
         ($rc, $tmp_quay_refresh_expiration) = get_json_setting("quay.refresh-expiration.api-url", $jsonsettings);
         if ($rc == 0) {
-            print "load_settings_info(): migrating quay.refresh-expiration.api-url\n";
+            log_print "load_settings_info(): migrating quay.refresh-expiration.api-url\n";
             $$registries_settings{'engines'}{'public'}{'quay'}{'refresh-expiration'}{'api-url'} = $tmp_quay_refresh_expiration;
         }
     }
 
     ($rc, $default_tool_userenv) = get_json_setting("userenvs.default.tools", $jsonsettings);
     if ($rc != 0) {
-        print "load_settings_info(): failed to load workshop force\n";
+        log_print "load_settings_info(): failed to load workshop force\n";
         exit 1;
     } else {
-        printf "load_settings_info(): loaded default tool userenv: %s\n", $default_tool_userenv;
+        log_print sprintf "load_settings_info(): loaded default tool userenv: %s\n", $default_tool_userenv;
     }
 
     if ($regisitries_migration_needed) {
@@ -2008,7 +2008,7 @@ sub load_settings_info() {
         ($rc, $tmp_quay_image_expiration) = get_json_setting("quay.image-expiration", $jsonsettings);
 
         if ($rc == 0) {
-            print "load_settings_info(): migrating quay.image-expiration\n";
+            log_print "load_settings_info(): migrating quay.image-expiration\n";
             $$registries_settings{'engines'}{'public'}{'quay'}{'expiration-length'} = $tmp_quay_image_expiration;
         }
     }
@@ -2016,13 +2016,13 @@ sub load_settings_info() {
     if ($regisitries_migration_needed) {
         # perform the registries migration
 
-        printf "load_settings_info(): modifying %s\n", $run{'registries-json'};
+        log_print sprintf "load_settings_info(): modifying %s\n", $run{'registries-json'};
 
         my $json_coder = JSON::XS->new;
 
         my $registries_settings_json = $json_coder->encode($registries_settings);
         if (! defined $registries_settings_json) {
-            print "load_settings_info(): failed to encode registries settings json\n";
+            log_print "load_settings_info(): failed to encode registries settings json\n";
             exit 1;
         }
 
@@ -2034,11 +2034,11 @@ sub load_settings_info() {
 
             close $registries_json_fh;
         } else {
-            printf "load_settings_info(): failed to open %s for writing after migrating quay data\n", $run{'registries-json'};
+            log_print sprintf "load_settings_info(): failed to open %s for writing after migrating quay data\n", $run{'registries-json'};
             exit 1;
         }
 
-        printf "load_settings_json(): resetting quay values in %s\n", $rickshaw_settings_filename;
+        log_print sprintf "load_settings_json(): resetting quay values in %s\n", $rickshaw_settings_filename;
 
         # use "native" jq to prevent the JSON from being reordered
         my $jq_cmd = "jq --indent 4 --argjson token_file null --argjson api_url null --arg expiration_length '2w'" .
@@ -2049,8 +2049,8 @@ sub load_settings_info() {
 
         (my $cmd, my $output, $rc) = run_cmd($jq_cmd);
         if ($rc != 0) {
-            print "load_settings_json(): failed to generate updated rickshaw settings json:\n";
-            print $output;
+            log_print "load_settings_json(): failed to generate updated rickshaw settings json:\n";
+            log_print $output;
             exit 1;
         }
 
@@ -2060,7 +2060,7 @@ sub load_settings_info() {
 
             close $rickshaw_json_fh;
         } else {
-            printf "load_settings_info(): failed to open %s for writing after migrating quay data\n", $rickshaw_settings_filename;
+            log_print sprintf "load_settings_info(): failed to open %s for writing after migrating quay data\n", $rickshaw_settings_filename;
             exit 1;
         }
     }
@@ -2071,57 +2071,57 @@ sub load_settings_info() {
     my $tmp_settings_value;
     ($rc, $tmp_settings_value) = get_json_setting("engines.public.url", $registries_settings);
     if ($rc != 0) {
-        print "load_settings_info(): failed to load public engines repo url\n";
+        log_print "load_settings_info(): failed to load public engines repo url\n";
         exit 1;
     } else {
         $run{'registries'}{'public'}{'repo'} = $tmp_settings_value;
-        printf "load_settings_info(): loaded public registry repository: %s\n", $run{'registries'}{'public'}{'repo'};
+        log_print sprintf "load_settings_info(): loaded public registry repository: %s\n", $run{'registries'}{'public'}{'repo'};
         decode_repo_urls("public");
     }
 
     ($rc, $tmp_settings_value) = get_json_setting("engines.private.url", $registries_settings);
     if ($rc != 0) {
-        print "load_settings_info(): no private engine registry defined\n";
+        log_print "load_settings_info(): no private engine registry defined\n";
     } else {
         $run{'registries'}{'private'} = ();
         $run{'registries'}{'private'}{'repo'} = $tmp_settings_value;
-        printf "load_settings_info(): loaded private registry repository: %s\n", $run{'registries'}{'private'}{'repo'};
+        log_print sprintf "load_settings_info(): loaded private registry repository: %s\n", $run{'registries'}{'private'}{'repo'};
         decode_repo_urls("private");
     }
 
     ($rc, $tmp_settings_value) = get_json_setting("engines.public.push-token", $registries_settings);
     if ($rc != 0) {
-        print "load_settings_info(): failed to load public engines push token\n";
+        log_print "load_settings_info(): failed to load public engines push token\n";
         exit 1;
     } else {
         $run{'registries'}{'public'}{'push-token'} = $tmp_settings_value;
-        printf "load_settings_info(): loaded public registry push token: %s\n", $run{'registries'}{'public'}{'push-token'};
+        log_print sprintf "load_settings_info(): loaded public registry push token: %s\n", $run{'registries'}{'public'}{'push-token'};
     }
 
     if (exists $run{'registries'}{'private'}) {
         ($rc, $tmp_settings_value) = get_json_setting("engines.private.tokens.push", $registries_settings);
         if ($rc != 0) {
-            print "load_settings_info(): failed to load private engines push token\n";
+            log_print "load_settings_info(): failed to load private engines push token\n";
             exit 1;
         } else {
             $run{'registries'}{'private'}{'push-token'} = $tmp_settings_value;
-            printf "load_settings_info(): loaded private registry push token: %s\n", $run{'registries'}{'private'}{'push-token'};
+            log_print sprintf "load_settings_info(): loaded private registry push token: %s\n", $run{'registries'}{'private'}{'push-token'};
         }
 
         ($rc, $tmp_settings_value) = get_json_setting("engines.private.tokens.pull", $registries_settings);
         if ($rc != 0) {
-            print "load_settings_info(): failed to load private engines pull token\n";
+            log_print "load_settings_info(): failed to load private engines pull token\n";
             exit 1;
         } else {
             $run{'registries'}{'private'}{'pull-token'} = $tmp_settings_value;
-            printf "load_settings_info(): loaded private registry pull token: %s\n", $run{'registries'}{'private'}{'pull-token'};
+            log_print sprintf "load_settings_info(): loaded private registry pull token: %s\n", $run{'registries'}{'private'}{'pull-token'};
         }
     }
 
     ($rc, $tmp_settings_value) = get_json_setting("engines.public.tls-verify", $registries_settings);
     if (($rc == 0) && (defined $tmp_settings_value)) {
         $run{'registries'}{'public'}{'tls-verify'} = $tmp_settings_value;
-        printf "load_settings_info(): loaded public registry tls-verify: %s\n", $run{'registries'}{'public'}{'tls-verify'};
+        log_print sprintf "load_settings_info(): loaded public registry tls-verify: %s\n", $run{'registries'}{'public'}{'tls-verify'};
     } else {
         $run{'registries'}{'public'}{'tls-verify'} = "true";
     }
@@ -2130,7 +2130,7 @@ sub load_settings_info() {
         ($rc, $tmp_settings_value) = get_json_setting("engines.private.tls-verify", $registries_settings);
         if (($rc == 0) && (defined $tmp_settings_value)) {
             $run{'registries'}{'private'}{'tls-verify'} = $tmp_settings_value;
-            printf "load_settings_info(): loaded private registry tls-verify: %s\n", $run{'registries'}{'private'}{'tls-verify'};
+            log_print sprintf "load_settings_info(): loaded private registry tls-verify: %s\n", $run{'registries'}{'private'}{'tls-verify'};
         } else {
             $run{'registries'}{'private'}{'tls-verify'} = "true";
         }
@@ -2141,7 +2141,7 @@ sub load_settings_info() {
     ($rc, $tmp_settings_value) = get_json_setting("engines.public.quay.expiration-length", $registries_settings);
     if (($rc == 0) && (defined $tmp_settings_value)) {
         $run{'registries'}{'public'}{'quay-expiration-length'} = $tmp_settings_value;
-        printf "load_settings_info(): loaded public registry quay expiration length: %s\n", $run{'registries'}{'public'}{'quay-expiration-length'};
+        log_print sprintf "load_settings_info(): loaded public registry quay expiration length: %s\n", $run{'registries'}{'public'}{'quay-expiration-length'};
     } else {
         $run{'registries'}{'public'}{'quay-expiration-length'} = $default_quay_expiration_length;
     }
@@ -2150,7 +2150,7 @@ sub load_settings_info() {
         ($rc, $tmp_settings_value) = get_json_setting("engines.private.quay.expiration-length", $registries_settings);
         if (($rc == 0) && (defined $tmp_settings_value)) {
             $run{'registries'}{'private'}{'quay-expiration-length'} = $tmp_settings_value;
-            printf "load_settings_info(): loaded private registry quay expiration length: %s\n", $run{'registries'}{'private'}{'quay-expiration-length'};
+            log_print sprintf "load_settings_info(): loaded private registry quay expiration length: %s\n", $run{'registries'}{'private'}{'quay-expiration-length'};
         } else {
             $run{'registries'}{'private'}{'quay-expiration-length'} = $default_quay_expiration_length;
         }
@@ -2159,15 +2159,15 @@ sub load_settings_info() {
     ($rc, $tmp_settings_value) = get_json_setting("engines.public.quay.refresh-expiration.token-file", $registries_settings);
     if (($rc == 0) && (defined $tmp_settings_value)) {
         $run{'registries'}{'public'}{'quay-refresh-expiration-token-file'} = $tmp_settings_value;
-        printf "load_settings_info(): loaded public registry quay refresh expiration token file: %s\n", $run{'registries'}{'public'}{'quay-refresh-expiration-token-file'};
+        log_print sprintf "load_settings_info(): loaded public registry quay refresh expiration token file: %s\n", $run{'registries'}{'public'}{'quay-refresh-expiration-token-file'};
 
         if (open(TOKEN, "<", $run{'registries'}{'public'}{'quay-refresh-expiration-token-file'})) {
             $quay_refresh_expiration_tokens{'public'} = <TOKEN>;
             chomp($quay_refresh_expiration_tokens{'public'});
             close TOKEN;
-            print "load_settings_file(): loaded public registry quay refresh expiration token\n";
+            log_print "load_settings_file(): loaded public registry quay refresh expiration token\n";
         } else {
-            printf "load_settings_file(): failed to load public registry quay refresh expiration token!\n";
+            log_print "load_settings_file(): failed to load public registry quay refresh expiration token!\n";
             exit 1;
         }
     }
@@ -2176,15 +2176,15 @@ sub load_settings_info() {
         ($rc, $tmp_settings_value) = get_json_setting("engines.private.quay.refresh-expiration.token-file", $registries_settings);
         if (($rc == 0) && (defined $tmp_settings_value)) {
             $run{'registries'}{'private'}{'quay-refresh-expiration-token-file'} = $tmp_settings_value;
-            printf "load_settings_info(): loaded private registry quay refresh expiration token file: %s\n", $run{'registries'}{'private'}{'quay-refresh-expiration-token-file'};
+            log_print sprintf "load_settings_info(): loaded private registry quay refresh expiration token file: %s\n", $run{'registries'}{'private'}{'quay-refresh-expiration-token-file'};
 
             if (open(TOKEN, "<", $run{'registries'}{'private'}{'quay-refresh-expiration-token-file'})) {
                 $quay_refresh_expiration_tokens{'private'} = <TOKEN>;
                 chomp($quay_refresh_expiration_tokens{'private'});
                 close TOKEN;
-                print "load_settings_file(): loaded private registry quay refresh expiration token\n";
+                log_print "load_settings_file(): loaded private registry quay refresh expiration token\n";
             } else {
-                printf "load_settings_file(): failed to load private registry quay refresh expiration token!\n";
+                log_print "load_settings_file(): failed to load private registry quay refresh expiration token!\n";
                 exit 1;
             }
         }
@@ -2193,31 +2193,31 @@ sub load_settings_info() {
     ($rc, $tmp_settings_value) = get_json_setting("engines.public.quay.refresh-expiration.api-url", $registries_settings);
     if (($rc == 0) && (defined $tmp_settings_value)) {
         $run{'registries'}{'public'}{'quay-refresh-expiration-api-url'} = $tmp_settings_value;
-        printf "load_settings_info(): loaded public registry quay refresh expiration api url: %s\n", $run{'registries'}{'public'}{'quay-refresh-expiration-api-url'};
+        log_print sprintf "load_settings_info(): loaded public registry quay refresh expiration api url: %s\n", $run{'registries'}{'public'}{'quay-refresh-expiration-api-url'};
     }
 
     if (exists $run{'registries'}{'private'}) {
         ($rc, $tmp_settings_value) = get_json_setting("engines.private.quay.refresh-expiration.api-url", $registries_settings);
         if (($rc == 0) && (defined $tmp_settings_value)) {
             $run{'registries'}{'private'}{'quay-refresh-expiration-api-url'} = $tmp_settings_value;
-            printf "load_settings_info(): loaded private registry quay refresh expiration api url: %s\n", $run{'registries'}{'private'}{'quay-refresh-expiration-api-url'};
+            log_print sprintf "load_settings_info(): loaded private registry quay refresh expiration api url: %s\n", $run{'registries'}{'private'}{'quay-refresh-expiration-api-url'};
         }
     }
     
-    printf "Finished loading json settings\n";
+    log_print sprintf "Finished loading json settings\n";
 }
 
 sub save_config_info() {
     if (put_json_file($config_dir . "/rickshaw-run.json", \%run) > 0) {
-        printf "save_config_info(): put_json_file() failed for %s\n", $config_dir . "/rickshaw-run.json";
+        log_print sprintf "save_config_info(): put_json_file() failed for %s\n", $config_dir . "/rickshaw-run.json";
         exit 1;
     }
 
     if (put_json_file($config_dir . "/rickshaw-settings.json", $jsonsettings) > 0) {
-        printf "save_config_info(): put_json_file() failed for %s\n", $config_dir . "/rickshaw-settings.json";
+        log_print sprintf "save_config_info(): put_json_file() failed for %s\n", $config_dir . "/rickshaw-settings.json";
         exit 1;
     }
-    printf "Finished saving json settings to %s\n", $config_dir . "/rickshaw-run.json";
+    log_print sprintf "Finished saving json settings to %s\n", $config_dir . "/rickshaw-run.json";
 }
 
 sub endpoint_validation_worker_thread() {
@@ -2242,9 +2242,9 @@ sub endpoint_validation_worker_thread() {
             (my $cmd, my $output, my $cmd_rc) = run_cmd($job->{'command'});
             $endpoint_outputs->{$job->{'endpoint'}} = $output;
             if ($cmd_rc > 0) {
-                printf "[ERROR] Endpoint " . $job->{'endpoint'} .
-                       " validation returned non-zero exit code " . $cmd_rc . "\n" .
-                       $output . "\n";
+                log_print "[ERROR] Endpoint " . $job->{'endpoint'} .
+                          " validation returned non-zero exit code " . $cmd_rc . "\n" .
+                          $output . "\n";
                 $job_errors_lock->down();
                 $$job_errors += 1;
                 $job_errors_lock->up();
@@ -2278,7 +2278,7 @@ sub validate_endpoints() {
     my %endpoint_outputs : shared;
     my $collectors_present = 0;
     my %deprecated_endpoints;
-    printf "Confirming the endpoints will satisfy the benchmark requirements:\n";
+    log_print "Confirming the endpoints will satisfy the benchmark requirements:\n";
 
     # enqueue one validation job per endpoint
     foreach my $endpoint (@endpoints) {
@@ -2311,19 +2311,19 @@ sub validate_endpoints() {
     }
 
     if ((keys %deprecated_endpoints) > 0) {
-        print "#################################################################################\n";
+        log_print "#################################################################################\n";
         foreach my $key (keys %deprecated_endpoints) {
-            printf "ATTENTION: The %s endpoint is deprecated.  The endpoint's deprecation message is:\n", $key;
+            log_print sprintf "ATTENTION: The %s endpoint is deprecated.  The endpoint's deprecation message is:\n", $key;
             if (open(DEPRECATION, "<", $deprecated_endpoints{$key})) {
                 while (<DEPRECATION>) {
-                    print $_;
+                    log_print $_;
                 }
             } else {
-                printf "ERROR: Failed to open deprecation message file '%s' for endpoint '%s'!\n", $deprecated_endpoints{$key}, $key;
+                log_print sprintf "ERROR: Failed to open deprecation message file '%s' for endpoint '%s'!\n", $deprecated_endpoints{$key}, $key;
                 exit 1;
             }
         }
-        print "#################################################################################\n";
+        log_print "#################################################################################\n";
     }
 
     my $num_threads = $available_cpus;
@@ -2378,7 +2378,7 @@ sub validate_endpoints() {
             print EPV $endpoint_outputs{$$endpoint{'label'}};
             close EPV;
         } else {
-            printf "ERROR: Could not open %s for writing!\n", $validation_file;
+            log_print sprintf "ERROR: Could not open %s for writing!\n", $validation_file;
             exit 1;
         }
     }
@@ -2436,22 +2436,22 @@ sub validate_endpoints() {
                     $image_ids{$bench}{$$endpoint{'userenv'}} = \%userenv_info;
                 }
             } else {
-                printf "[ERROR] output from endpoint validation incorrect for %s:\n%s\n", $$endpoint{'label'}, $line;
+                log_print sprintf "[ERROR] output from endpoint validation incorrect for %s:\n%s\n", $$endpoint{'label'}, $line;
                 exit 1;
             }
         }
     }
     if (! defined $min_id || ! defined $max_id) {
-        print "[ERROR] Could not determine number of clients and/or server engines to create!  Did you specify at least 'client:N' in your endpoint arguments?\n";
+        log_print "[ERROR] Could not determine number of clients and/or server engines to create!  Did you specify at least 'client:N' in your endpoint arguments?\n";
         exit 1;
     }
     if ($min_id != 1) {
-        printf "[ERROR]lowest ID found in clients and servers is %d, must be 1\n", $min_id;
+        log_print sprintf "[ERROR]lowest ID found in clients and servers is %d, must be 1\n", $min_id;
         exit 1;
     }
 
 
-    print "Number of benchmarks: " . scalar(keys(%bench_configs)) . "\n";
+    log_print "Number of benchmarks: " . scalar(keys(%bench_configs)) . "\n";
     if (scalar keys %bench_configs == 1) {
         # There us only one benchmark type used, and there may not be a --benchmark-ids provided,
         # so we need to match clients to servers here.
@@ -2480,14 +2480,14 @@ sub validate_endpoints() {
             } elsif (exists $bench_configs{$this_benchmark}{'client'}{'client-server-ratio'} and $bench_configs{$this_benchmark}{'client'}{'client-server-ratio'} eq "1:N") {
                 debug_log(sprintf "Did not find same client ID for server ID %d, but client-server-ratio is 1:N\n", $id);
             } else {
-                printf "[ERROR]client ID %d is not defined in ID range %d - %d\n", $id, $min_id, $max_id;
+                log_print sprintf "[ERROR]client ID %d is not defined in ID range %d - %d\n", $id, $min_id, $max_id;
                 exit 1;
             }
             if (exists $bench_configs{$this_benchmark}{'server'}) {
                 debug_log(sprintf "checking for server ID %d\n", $id);
                 if (! defined $clients_servers{'server'}[$id - 1]) {
                     if ($server_required) {
-                        printf "[ERROR]server ID %d is not defined in ID range %d - %d\n",
+                        log_print sprintf "[ERROR]server ID %d is not defined in ID range %d - %d\n",
                             $id, $min_id, $max_id;
                         exit 1;
                     } else {
@@ -2499,16 +2499,16 @@ sub validate_endpoints() {
             } else {
                 debug_log(sprintf "checking for no server IDs\n");
                 if (defined $clients_servers{'server'}[$id - 1]) {
-                    printf "[ERROR]server ID %d is defined in ID range %d - %d, but this benchmark " .
+                    log_print sprintf "[ERROR]server ID %d is defined in ID range %d - %d, but this benchmark " .
                         "does not use servers\n", $id, $min_id, $max_id;
                     exit 1;
                 }
             }
         }
-        printf "There will be %d client(s)", $clients_present;
-        printf " and %d server(s)", $servers_present if exists $bench_configs{$this_benchmark}{'server'} && $servers_present;
-        printf " and %d collector(s)", $collectors_present if $collectors_present;
-        printf "\n";
+        log_print sprintf "There will be %d client(s)", $clients_present;
+        log_print sprintf " and %d server(s)", $servers_present if exists $bench_configs{$this_benchmark}{'server'} && $servers_present;
+        log_print sprintf " and %d collector(s)", $collectors_present if $collectors_present;
+        log_print "\n";
         # --bench-ids is not used/needed when only 1 benchmark is used, so we need to populate it now
         # with what was discovered with endpoint validation
         $run{'bench-ids'} = $this_benchmark . ":" . $min_id . "-" . $max_id;
@@ -2517,7 +2517,7 @@ sub validate_endpoints() {
         # Assumes --bench-ids is already defined by user, which is required
         # when multi-benchmarks are used.
         assign_bench_ids();
-        printf "Check for multi-benchmark IDs here\n";
+        log_print "Check for multi-benchmark IDs here\n";
     }
 
     $endpoint_roadblock_opt = " --roadblock-id=" . $run{'id'} .
@@ -2525,11 +2525,11 @@ sub validate_endpoints() {
     $workshop_roadblock_opt = " --requirements " . $run{'roadblock-dir'} .
         "/workshop.json ";
     $run{'endpoints'} = \@endpoints;
-    print "Endpoints validated\n";
+    log_print "Endpoints validated\n";
 }
 
 sub build_test_order() {
-    printf "Building test execution order\n";
+    log_print "Building test execution order\n";
     # Build test execution order (and the iteration/sample dirs)
     if ($run{'test-order'} eq 's') {
         for (my $iid = 1; $iid <= scalar @{ $run{'iterations'} }; $iid++) {
@@ -2566,16 +2566,16 @@ sub build_test_order() {
             }
         }
         if (scalar(@tests) != $total_samples) {
-            printf "[ERROR]Expected %d tests but found %d --> is the random test-order algorithm broken?\n", $total_samples, scalar(@tests);
+            log_print sprintf "[ERROR]Expected %d tests but found %d --> is the random test-order algorithm broken?\n", $total_samples, scalar(@tests);
             exit 1;
         }
     } else {
-        printf "[ERROR]Value for --test-order [%s] is not valid\n", $run{'test-order'};
+        log_print sprintf "[ERROR]Value for --test-order [%s] is not valid\n", $run{'test-order'};
         usage;
         exit 1;
     }
     if (put_json_file($config_dir . "/test-order.json", \@tests) > 0) {
-        printf "build_test_order(): put_json_file() failed for %s\n", $config_dir . "/test-order.json";
+        log_print sprintf "build_test_order(): put_json_file() failed for %s\n", $config_dir . "/test-order.json";
     }
 }
 
@@ -2699,16 +2699,16 @@ sub prepare_bench_tool_engines() {
             # NOTE: for multi-bench, this will require some new logic.  One may have a benchmark
             # which uses a pre-script but does not use ID 1.  Instead we will need to run from the 
             # first ID for that benchmark.
-            printf "generating pre-script cmd\n";
+            log_print "generating pre-script cmd\n";
             my $cmd = $bench_configs{$this_benchmark}{"controller"}{"pre-script"} . " " . dump_params($run{'iterations'}[0]{'params'}, 1, "client");
             $cmd =~ s/\%bench-dir\%/$bench_dirs{$this_benchmark}/g;
             $cmd =~ s/\%run-dir\%/$run_dir/g;
             debug_log(sprintf "controller pre-script command: [%s]\n", $cmd);
             ($cmd, my $pre_cmd_output, my $cmd_rc) = run_cmd($cmd);
             if ($cmd_rc != 0) {
-                printf "controller pre-script failed with return code = %d\n", $cmd_rc;
-                printf "controller pre-script command: %s\n", $cmd;
-                printf "controller pre-script output:\n%s", join("\n", $pre_cmd_output);
+                log_print sprintf "controller pre-script failed with return code = %d\n", $cmd_rc;
+                log_print sprintf "controller pre-script command: %s\n", $cmd;
+                log_print sprintf "controller pre-script output:\n%s", join("\n", $pre_cmd_output);
                 exit $cmd_rc;
             }
             debug_log(sprintf "controller pre-script output:\n%s", join("\n", $pre_cmd_output));
@@ -2787,15 +2787,15 @@ sub prepare_bench_tool_engines() {
     # already collecting that data from a different source (and a client
     # and/or server would be collecting duplicate data).  For this reason tool
     # cmd files are built specifically for each client and server.
-    print "Generating tool cmds\n";
+    log_print "Generating tool cmds\n";
     foreach my $cs_type (keys %clients_servers) {
         next if ($cs_type eq "profiler"); # Currently we do not generate specific tools cmds for each profiler
         for my $start_stop ("start", "stop") {
             foreach my $cs_ref (@{ $clients_servers{$cs_type} }) {
-		if (! defined $$cs_ref{'id'}) {
-			printf "cs_ref{'id'} for client_servers{%s} is not defined, skipping.\n", $cs_type;
-			next;
-		}
+                if (! defined $$cs_ref{'id'}) {
+                        log_print sprintf "cs_ref{'id'} for client_servers{%s} is not defined, skipping.\n", $cs_type;
+                        next;
+                }
                 my $cs_tool_cmds_dir = $tool_cmds_dir . "/" . $cs_type . "/" . $$cs_ref{'id'};
                 make_path($cs_tool_cmds_dir);
                 my $tool_cmd_file = $cs_tool_cmds_dir . "/" . $start_stop;
@@ -2826,10 +2826,10 @@ sub prepare_bench_tool_engines() {
             if ($cs_type eq "client") {
                 push(@cmd_type_files, "infra");
             }
-	    if (! defined $$cs_ref{'id'}) {
-		printf "cs_type: [%s] cs_ref{'id'} not defined, skipping\n", $cs_type;
+            if (! defined $$cs_ref{'id'}) {
+                log_print sprintf "cs_type: [%s] cs_ref{'id'} not defined, skipping\n", $cs_type;
                 next;
-	    }
+            }
             my $cs_id = $$cs_ref{'id'};
             my $this_cmds_dir = $engine_bench_cmds_dir . "/" . $cs_type . "/" . $cs_id;
             #make_path($this_cmds_dir) || die "Could not mkdir " . $this_cmds_dir;
@@ -2881,10 +2881,10 @@ sub prepare_bench_tool_engines() {
     foreach my $cs_type (keys %clients_servers, @all_collector_types) {
         if ($cs_type =~ /^client|server?/) {
             foreach my $cs_ref (@{ $clients_servers{$cs_type} }) {
-	        if (! defined $$cs_ref{'id'}) {
-		    printf "cs_type: [%s] cs_ref{'id'} not defined, skipping\n", $cs_type;
+                if (! defined $$cs_ref{'id'}) {
+                    log_print sprintf "cs_type: [%s] cs_ref{'id'} not defined, skipping\n", $cs_type;
                     next;
-	        }
+                }
                 my $cs_id = $$cs_ref{'id'};
                 my $benchmark = $ids_to_benchmark{$cs_id};
                 build_files_list($cs_type, $cs_id, $benchmark);
@@ -2913,14 +2913,14 @@ sub deploy_endpoints() {
     # Deploy ths endpoints so they are ready to run benchmark and tools.
     # Each endpoint is responible for launching a osruntime for each client and server.
     my %remote_hosts;
-    print "\nDeploying endpoints\n";
+    log_print "\nDeploying endpoints\n";
     $endpoint_deploy_timeout += scalar @endpoints * 120;
     foreach my $engine (keys %clients_servers) {
         $endpoint_deploy_timeout += scalar @{ $clients_servers{$engine} } * 15;
         $engine_script_start_timeout += scalar @{ $clients_servers{$engine} } * 15;
     }
-    printf "endpoint-deploy-timeout adjusted to %d seconds\n", $endpoint_deploy_timeout;
-    printf "engine-script-timeout adjusted to %d seconds\n", $endpoint_deploy_timeout;
+    log_print sprintf "endpoint-deploy-timeout adjusted to %d seconds\n", $endpoint_deploy_timeout;
+    log_print sprintf "engine-script-timeout adjusted to %d seconds\n", $endpoint_deploy_timeout;
     debug_log(sprintf "\nendpoint output:\n");
     for (my $i = 0; $i < scalar @endpoints; $i++) {
         my $type = $endpoints[$i]{'type'};
@@ -2935,15 +2935,15 @@ sub deploy_endpoints() {
                 my $index = find_index(\@tools_params, "tool", $bench_or_tool);
                 if ($index > -1) {
                     $userenv = $tools_params[$index]{'userenv'};
-                    #print Dumper \$tools_params[$index];
+                    #log_print Dumper \$tools_params[$index];
                     #printf "userenv: [%s]\n", $userenv;
                 } else {
                     $userenv = $endpoints[$i]{'userenv'};
                 }
                 #printf "userenv: [%s]\n", $userenv;
                 if (! exists($image_ids{$bench_or_tool}{$userenv}{'image'})) {
-                    printf "ERROR: image for bench or tool: [%s] for userenv: [%s] could not be found in image_ids:\n", $bench_or_tool, $endpoints[$i]{'userenv'};
-                    print Dumper \%image_ids;
+                    log_print sprintf "ERROR: image for bench or tool: [%s] for userenv: [%s] could not be found in image_ids:\n", $bench_or_tool, $endpoints[$i]{'userenv'};
+                    log_print Dumper \%image_ids;
                     exit 1;
                 }
                 $endpoint_image_opt .= "," . $bench_or_tool . "::" . $image_ids{$bench_or_tool}{$userenv}{'image'}
@@ -2990,7 +2990,7 @@ sub deploy_endpoints() {
             # Endpoints should return for each client and server started:
             # - the ID of the client/server
             # - the roadblock client ID
-            printf "Going to run endpoint command for %s:\n%s\n\n", $label, $cmd;
+            log_print sprintf "Going to run endpoint command for %s:\n%s\n\n", $label, $cmd;
             if ($endpoint_roadblock_opt eq "") {
                 # There is only one client and no synchronization, so we wait for the endpoint to finish
                 debug_log(sprintf "going to run and wait for: %s\n", $cmd);
@@ -3002,7 +3002,7 @@ sub deploy_endpoints() {
                 }
             }
         } else {
-            printf "[ERROR]could not find endpoint ./endpoints/%s\n", $type;
+            log_print sprintf "[ERROR]could not find endpoint ./endpoints/%s\n", $type;
             exit 1;
         }
     }
@@ -3087,16 +3087,16 @@ sub process_roadblocks() {
 }
 
 sub wait_for_endpoints() {
-    print "Waiting for endpoints to exit\n";
+    log_print "Waiting for endpoints to exit\n";
     wait();
-    print "All endpoints have exited\n";
+    log_print "All endpoints have exited\n";
 
-    print "Compressing endpoint logs:\n";
+    log_print "Compressing endpoint logs:\n";
     for (my $i = 0; $i < scalar(@endpoints); $i++) {
         my $label = $endpoints[$i]{'label'};
         my $endpoint_log = $base_endpoint_run_dir . "/" . $label . "/endpoint-stderrout.txt";
         my $xz_cmd = "xz --verbose --best --threads=0 " . $endpoint_log;
-        printf "\t%s\n", $label;
+        log_print sprintf "\t%s\n", $label;
         ($xz_cmd, my $xz_output, my $xz_rc) = run_cmd($xz_cmd);
         if ($xz_rc == 0) {
             $xz_cmd = "xz --verbose --list " . $endpoint_log . ".xz";
@@ -3109,21 +3109,21 @@ sub wait_for_endpoints() {
                         my @fields = split(/\s+/, $xz_output[$i]);
                         my $ratio = $fields[2];
                         my $savings = (1.0 - $ratio) * 100.0;
-                        printf "\t\t%.2f%% reduction\n", $savings;
+                        log_print sprintf "\t\t%.2f%% reduction\n", $savings;
                         last;
                     }
                 }
             } else {
-                print "\t\tfailed to query\n";
+                log_print "\t\tfailed to query\n";
             }
         } else {
-            print "\t\tfailed to compress\n";
+            log_print "\t\tfailed to compress\n";
         }
     }
 }
 
 sub organize_run_data() {
-    printf "Moving per-client/server/tool data into common iterations and tool-data directories\n";
+    log_print "Moving per-client/server/tool data into common iterations and tool-data directories\n";
     # Organize the data from the clients/servers into a common directory structure, organized by
     # iteration, then by sample, then finally by client/server.  This is needed to have
     # the benchmark's postprocessing script work.
@@ -3138,13 +3138,13 @@ sub organize_run_data() {
             if ($archive =~ /^(\w+)-(.+)-data\.tgz$/) {
                 debug_log("found archive $archive\n");
             } else {
-                printf "archive %s is not recognized\n";
+                log_print sprintf "archive %s is not recognized\n", $archive;
                 next;
             }
             my $archive_full_path = $engine_archives_dir . "/" . $archive;
             my $cs_type = $1;
             my $cs_id = $2;
-            printf "cs_type: %s, cs_id: %s\n", $cs_type, $cs_id;
+            log_print sprintf "cs_type: %s, cs_id: %s\n", $cs_type, $cs_id;
             my $tar_cmd = "tar zmxf " . $archive_full_path;
             ($tar_cmd, my $tar_output, my $tar_cmd_rc) = run_cmd($tar_cmd);
             if ($1 =~ /^(client|server)$/) {
@@ -3176,7 +3176,7 @@ sub organize_run_data() {
                     ($mv_cmd, my $mv_output, my $mv_cmd_rc) = run_cmd($mv_cmd);
                 } else {
                     if (! $cs_type eq "profiler") {
-                        printf "WARNING: did not find expected sub-directories in %s\n", $pushd_dir . "/" . "tool-data";
+                        log_print sprintf "WARNING: did not find expected sub-directories in %s\n", $pushd_dir . "/" . "tool-data";
                     }
                 }
             }
@@ -3209,30 +3209,30 @@ sub evaluate_test_roadblock {
     if ($roadblock_rc != 0) {
         # something bad happened...
         if ($roadblock_rc == $roadblock_exit_timeout) {
-            printf "[ERROR] roadblock '%s' timed out, attempting to exit and cleanly finish the run\n", $roadblock_name;
+            log_print sprintf "[ERROR] roadblock '%s' timed out, attempting to exit and cleanly finish the run\n", $roadblock_name;
 
             remove_dropped_followers($active_followers, $dropped_followers);
 
             $quit = 1;
         } elsif ($roadblock_rc == $roadblock_exit_abort or $roadblock_rc == $roadblock_exit_abort_waiting) {
             if ($abort == 0) {
-                printf "[WARNING] roadblock '%s' received an abort, stopping sample\n", $roadblock_name;
+                log_print sprintf "[WARNING] roadblock '%s' received an abort, stopping sample\n", $roadblock_name;
                 $$sample_info->{'attempt-fail'} = 1;
 
                 $$sample_info->{'failures'}++;
-                printf "sample failures is now: %d\n", $$sample_info->{'failures'};
+                log_print sprintf "sample failures is now: %d\n", $$sample_info->{'failures'};
 
                 if ($$sample_info->{'failures'} >= $run{'max-sample-failures'}) {
                     $$sample_info->{'complete'} = 1;
-                    printf "[ERROR] A maximum of %d failures for iteration %d has been reached\n",
-                        $$sample_info->{'failures'},
-                        $$sample_info->{'iteration-id'};
+                    log_print sprintf "[ERROR] A maximum of %d failures for iteration %d has been reached\n",
+                                      $$sample_info->{'failures'},
+                                      $$sample_info->{'iteration-id'};
                 }
 
                 $abort = 1;
             }
         } else {
-            printf "[ERROR] roadblock '%s' has reached an unknown state with RC=%d\n", $roadblock_name, $roadblock_rc;
+            log_print sprintf "[ERROR] roadblock '%s' has reached an unknown state with RC=%d\n", $roadblock_name, $roadblock_rc;
 
             $abort = 1;
             $quit = 1;
@@ -3246,7 +3246,7 @@ sub roadblock_exit_on_error {
     my $roadblock_rc = shift;
 
     if ($roadblock_rc != 0) {
-        printf "roadblock_exit_on_error()\n";
+        log_print "roadblock_exit_on_error()\n";
         exit $roadblock_rc;
     }
 }
@@ -3278,7 +3278,7 @@ sub remove_followers {
     for (my $i=0; $i<@{$dropped_followers}; $i++) {
         if (exists $followers{$$dropped_followers[$i]}) {
             if ($drop_msg) {
-                printf "Dropping follower '%s' in an attempt to gracefully continue\n", $$dropped_followers[$i];
+                log_print sprintf "Dropping follower '%s' in an attempt to gracefully continue\n", $$dropped_followers[$i];
             }
             delete $followers{$$dropped_followers[$i]};
         }
@@ -3320,14 +3320,14 @@ $cs_conf_file = $config_dir . "/cs-conf.json";
 print "Preparing userenvs:\n";
 debug_log (sprintf "image_ids (before):\n" . Dumper \%image_ids);
 foreach my $bench_or_tool (sort (keys %image_ids)) {
-    printf "Working on %s benchmark or tool\n", $bench_or_tool;
+    log_print sprintf "Working on %s benchmark or tool\n", $bench_or_tool;
     foreach my $userenv (sort (keys %{ $image_ids{$bench_or_tool} })) {
-        printf "Working on %s userenv\n", $userenv;
+        log_print sprintf "Working on %s userenv\n", $userenv;
         my $image = source_container_image($userenv, $bench_or_tool, $arch);
         if (!defined $image) {
             die "Could not get valid image [" . $image_ids{$bench_or_tool}{$userenv}{'image'} . "] for container image build for userenv [" . $userenv . "] and benchmark [" . $bench_or_tool . "]\n";
         }
-        printf "Image is: %s\n", $image;
+        log_print sprintf "Image is: %s\n", $image;
         $image_ids{$bench_or_tool}{$userenv}{'image'} = $image;
     }
 }
@@ -3346,11 +3346,11 @@ $run{'rickshaw-run'}{'schema'}{'version'} = "2020.03.18";
 $run{'max-sample-failures'} += 0;
 $run{'num-samples'} += 0;
 if (put_json_file($run_file, \%run, $run_schema_file) > 0) {
-    printf "main(): put_json_file() failed for %s\n", $run_file;
-    print Dumper \%run;
+    log_print sprintf "main(): put_json_file() failed for %s\n", $run_file;
+    log_print Dumper \%run;
 }
 if (defined $abort_test_id) {
-    printf "WARNING: test %s was aborted. and all subsequent tests were not attempted.  " .
-           "Run is incomplete\n", $abort_test_id;
+    log_print sprintf "WARNING: test %s was aborted. and all subsequent tests were not attempted.  " .
+                      "Run is incomplete\n", $abort_test_id;
     exit 1;
 }

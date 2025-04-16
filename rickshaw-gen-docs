@@ -81,16 +81,16 @@ my %all_metric_desc_uuid;
 my $doc_dir;
 
 sub usage {
-    print "\nusage:\n\n";
-    print "--base-run-dir <dir>  (this is a result-file in json that rickshaw-post-process generates)\n";
-    print "--max-jobs <num>  (maximum number of background jobs)\n";
-    print "--ver <v7dev|v8dev|v9dev>  (common data model version)\n";
+    log_print "\nusage:\n\n";
+    log_print "--base-run-dir <dir>  (this is a result-file in json that rickshaw-post-process generates)\n";
+    log_print "--max-jobs <num>  (maximum number of background jobs)\n";
+    log_print "--ver <v7dev|v8dev|v9dev>  (common data model version)\n";
 }
 
 sub cdm_sanity_check {
     debug_log(sprintf "cdm ver is: [%s]\n", $cdm{'ver'});
     if ($cdm{'ver'} !~ /^v[789]dev$/) {
-        printf "This cdm version [%s] is not supported, exiting\n", $cdm{'ver'};
+        log_print sprintf "This cdm version [%s] is not supported, exiting\n", $cdm{'ver'};
         exit 1;
     }
 }
@@ -132,7 +132,7 @@ sub add_persistent_uuid {
         if (exists $$doc_ref{$old_field_name}) {
             # Already exists, nothing to do
             if (not defined $$doc_ref{$old_field_name}) {
-                print "WHY is this null?" . Dumper $doc_ref;
+                log_print "WHY is this null?" . Dumper $doc_ref;
                 exit 1;
             }
         } else {
@@ -191,8 +191,8 @@ sub create_es_doc {
         if (exists $result{$field} and defined $result{$field}) {
             $es_doc{'run'}{$field} = $result{$field};
         } elsif ($field =~ /benchmark|source/) {
-            printf "ERROR: field name %s was not found in rickshaw-result.json:\n", $field;
-            print Dumper \%result;
+            log_print sprintf "ERROR: field name %s was not found in rickshaw-result.json:\n", $field;
+            log_print Dumper \%result;
         }
     }
     if ($doc_type eq "tag") {
@@ -206,23 +206,23 @@ sub create_es_doc {
                         if (exists $result{'tags'}[$tag_idx]{$field} and defined $result{'tags'}[$tag_idx]{$field}) {
                             $es_doc{'tag'}{$field} = $result{'tags'}[$tag_idx]{$field};
                         } else {
-                            printf "ERROR: field name %s for tag %d was not found in rickshaw-result.json:\n", $field, $tag_idx;
-                            printf Dumper $result{'tags'}[$tag_idx];
+                            log_print sprintf "ERROR: field name %s for tag %d was not found in rickshaw-result.json:\n", $field, $tag_idx;
+                            log_print Dumper $result{'tags'}[$tag_idx];
                             exit 1;
                         }
                     }
                 } else {
-                    printf "ERROR: tag at index %d is not an array/list in rickshaw-result.json, exiting:";
-                    print Dumper \%result;
+                    log_print print "ERROR: tag at index %d is not an array/list in rickshaw-result.json, exiting:";
+                    log_print Dumper \%result;
                     exit 1;
                 }
             } else {
-                printf "ERROR: tags array/list is missing from the rickshaw-result.json, exiting:\n";
-                print Dumper \%result;
+                log_print "ERROR: tags array/list is missing from the rickshaw-result.json, exiting:\n";
+                log_print Dumper \%result;
                 exit 1;
             }
         } else {
-            print "ERROR: create_es_doc(%s,) tag index missing, exiting\n", $doc_type;
+            log_print sprintf "ERROR: create_es_doc(%s,) tag index missing, exiting\n", $doc_type;
         }
     } elsif ($doc_type eq "param") {
         if (defined $iter_idx) {
@@ -238,27 +238,27 @@ sub create_es_doc {
                             if (exists $result{'iterations'}[$iter_idx]{'params'}[$param_idx]{$field} and defined $result{'iterations'}[$iter_idx]{'params'}[$param_idx]{$field}) {
                                 $es_doc{'param'}{$field} = $result{'iterations'}[$iter_idx]{'params'}[$param_idx]{$field};
                             } else {
-                                printf "ERROR: field name %s for param %d in iteration %d was not found in rickshaw-result.json:\n", $field, $param_idx, $iter_idx;
-                                print Dumper $result{'iterations'}[$iter_idx]{'params'}[$param_idx];
+                                log_print sprintf "ERROR: field name %s for param %d in iteration %d was not found in rickshaw-result.json:\n", $field, $param_idx, $iter_idx;
+                                log_print Dumper $result{'iterations'}[$iter_idx]{'params'}[$param_idx];
                                 exit 1;
                             }
                         }
                     } else {
-                        printf "ERROR: param at index %d is not an object/hash, exiting", $iter_idx;
-                        print Dumper $result{'iterations'}[$iter_idx]{'params'};
+                        log_print sprintf "ERROR: param at index %d is not an object/hash, exiting", $iter_idx;
+                        log_print Dumper $result{'iterations'}[$iter_idx]{'params'};
                         exit 1;
                     }
                 } else {
-                    printf "ERROR: param array/list at index %d does not exist in rickshaw-result.json, exiting", $iter_idx;
-                    print Dumper $result{'iterations'}[$iter_idx];
+                    log_print sprintf "ERROR: param array/list at index %d does not exist in rickshaw-result.json, exiting", $iter_idx;
+                    log_print Dumper $result{'iterations'}[$iter_idx];
                     exit 1;
                 }
             } else {
-                print "ERROR: create_es_doc(%s,%s,%s) param index missing, exiting\n", $doc_type, $iter_idx, "";
+                log_print sprintf "ERROR: create_es_doc(%s,%s,%s) param index missing, exiting\n", $doc_type, $iter_idx, "";
                 exit 1;
             }
         } else {
-            print "ERROR: create_es_doc(%s,%s,%s) iter index missing, exiting\n", $doc_type, "", $sample_idx;
+            log_print sprintf "ERROR: create_es_doc(%s,%s,%s) iter index missing, exiting\n", $doc_type, "", $sample_idx;
             exit 1;
         }
     } else { # All other doc types
@@ -278,17 +278,17 @@ sub create_es_doc {
                                     $es_doc{'period'}{$period_field} = $result{'iterations'}[$iter_idx]{'samples'}[$sample_idx]{'periods'}[$period_idx]{$period_field};
                                 }
                             } else {
-                                printf "ERROR: Period index %d (for sample index %d, iteration index %d) does not exist in rickshaw-result.json\n", $period_idx, $sample_idx, $iter_idx;
+                                log_print sprintf "ERROR: Period index %d (for sample index %d, iteration index %d) does not exist in rickshaw-result.json\n", $period_idx, $sample_idx, $iter_idx;
                                 exit 1;
                             }
                         }
                     } else {
-                        printf "ERROR: Sample index %d (for iteration index %d) does not exist in rickshaw-result.json\n", $sample_idx, $iter_idx;
+                        log_print sprintf "ERROR: Sample index %d (for iteration index %d) does not exist in rickshaw-result.json\n", $sample_idx, $iter_idx;
                         exit 1;
                     }
                 }
             } else {
-                printf "ERROR: Iteration index %d does not exist in rickshaw-result.json\n", $iter_idx;
+                log_print sprintf "ERROR: Iteration index %d does not exist in rickshaw-result.json\n", $iter_idx;
                 exit 1;
             }
         }
@@ -372,11 +372,11 @@ sub generate_metrics {
         $eng_env_file .= ".xz";
     }
     if (! -e $eng_env_file) {
-        printf "pwd: %s\nCould not find %s, will not use engine env vars for metadata\n", getcwd(), $eng_env_file;
+        log_print sprintf "pwd: %s\nCould not find %s, will not use engine env vars for metadata\n", getcwd(), $eng_env_file;
     } else {
         my $eng_env_fh = new IO::Uncompress::UnXz $eng_env_file, Transparent => 1 || die "[ERROR]could not open file " . $eng_env_file;
         # Cull out env vars which we want as metadata
-        #printf "Looking for engine env vars\n";
+        #log_print sprintf "Looking for engine env vars\n";
         my @varnames = ('HOSTNAME', 'tool_name', 'engine_type', 'engine_role', 'benchmark_group', 'benchmark_role', 'hosted_by', 'hypervisor_host', 'osruntime', 'endpoint_label', 'userenv');
         while (<$eng_env_fh>) {
             chomp;
@@ -403,19 +403,19 @@ sub generate_metrics {
         $metr_json_file .= ".xz";
     }
     if (! -e $metr_json_file) {
-        printf "pwd: %s\nCould not find %s, exiting\n", getcwd(), $metr_json_file;
+        log_print sprintf "pwd: %s\nCould not find %s, exiting\n", getcwd(), $metr_json_file;
         exit 1;
     }
     if (! -e $metr_csv_file) {
         $metr_csv_file .= ".xz";
     }
     if (! -e $metr_csv_file) {
-        printf "Could not find %s, exiting\n", $metr_csv_file;
+        log_print sprintf "Could not find %s, exiting\n", $metr_csv_file;
         exit 1;
     }
     ($file_rc, my $metr_ref) = get_json_file($metr_json_file);
     if ($file_rc > 0 or ! defined $metr_ref) {
-        print "Could not open the metric data  file\n";
+        log_print "Could not open the metric data file\n";
         exit 1;
     }
 
@@ -430,7 +430,7 @@ sub generate_metrics {
         debug_log(sprintf "Overwriting %s after persistent ID update\n", $metr_json_file);
         my $update_rc = put_json_file($metr_json_file, $metr_ref);
         if ($update_rc != 0) {
-            print "Could not add persistent IDs to %s\n", $metr_json_file;
+            log_print sprintf "Could not add persistent IDs to %s\n", $metr_json_file;
             exit 1;
         }
     }
@@ -441,7 +441,7 @@ sub generate_metrics {
     for my $this_metr ( @$metr_ref ) {
         my $idx = $$this_metr{'idx'};
         if (exists $all_metric_desc_uuid{ $$this_metr{$metric_id_field} }) {
-            printf "WARNING: already found metric_desc uuid: %s\n", $$this_metr{$metric_id_field};
+            log_print sprintf "WARNING: already found metric_desc uuid: %s\n", $$this_metr{$metric_id_field};
         }
         $all_metric_desc_uuid{ $$this_metr{$metric_id_field} } = 1;
         $uuid{$idx} = $$this_metr{$metric_id_field};
@@ -450,7 +450,7 @@ sub generate_metrics {
             defined $$this_metr{'desc'}{'source'} and defined $$this_metr{'desc'}{'type'}) {
             $metr_desc_doc{'metric_desc'} = $$this_metr{'desc'};
         } else {
-            printf "ERROR: A metric must have source, class, and type defined\n";
+            log_print "ERROR: A metric must have source, class, and type defined\n";
             exit 1;
         }
         $type{$idx} = $$this_metr{'desc'}{'type'};
@@ -471,8 +471,8 @@ sub generate_metrics {
 
         my @names_list = sort(keys(%{ $metr_desc_doc{'metric_desc'}{'names'} }));
         $metr_desc_doc{'metric_desc'}{'names-list'} = \@names_list;
-        #print "metric_desc_doc:\n";
-        #print Dumper \%metr_desc_doc;
+        #log_print "metric_desc_doc:\n";
+        #log_print Dumper \%metr_desc_doc;
         my $metr_desc_doc_json = $coder->encode(\%metr_desc_doc);
         # We do not use create_es_doc() here because that requires getting all info from the %result,
         # and %result (rickshaw-run.json) by design does not include any metric data, as it would be
@@ -529,7 +529,7 @@ sub generate_metrics {
         if (defined $pri_earliest_begin and defined $pri_latest_end) {
             return ($num_metric_docs_submitted, 1, $pri_earliest_begin, $pri_latest_end);
         } else {
-            printf "ERROR: generate_metrics() primary_metric found, but undefined earliest_begin and/or undefined latest_end, exiting\n";
+            log_print "ERROR: generate_metrics() primary_metric found, but undefined earliest_begin and/or undefined latest_end, exiting\n";
             exit 1;
         }
     } else {
@@ -553,7 +553,7 @@ while (scalar @ARGV > 0) {
             $val = shift @ARGV;
         }
     } else {
-        print "[ERROR]malformed cmdline parameter: %s\n";
+        log_print sprintf "[ERROR]malformed cmdline parameter: %s\n", $p;
         usage;
         exit 1;
     }
@@ -572,7 +572,7 @@ while (scalar @ARGV > 0) {
         $cdm{'ver'} = $val;
         cdm_sanity_check();
     } else {
-        printf "[ERROR]argument not valid: [%s]\n", $arg;
+        log_print sprintf "[ERROR]argument not valid: [%s]\n", $arg;
         usage;
         exit 1;
     }
@@ -632,13 +632,13 @@ if ($cdm{'ver'} eq 'v7dev') {
 debug_log(sprintf "Opening %s for normal processing\n", $run_file);
 ($file_rc, my $result_ref) = get_json_file($run_file, $result_schema_file);
 if ($file_rc > 0 or ! defined $result_ref) {
-    print "Could not open the rickshaw-run  file\n";
+    log_print "Could not open the rickshaw-run file\n";
     exit 1;
 }
 if (defined $result_ref) {
     %result = %{ $result_ref };
 } else {
-    printf "Could not find or load rickshaw-run.json in %s, exiting\n", $run_dir;
+    log_print sprintf "Could not find or load rickshaw-run.json in %s, exiting\n", $run_dir;
     exit 1;
 }
 
@@ -659,14 +659,14 @@ if (exists $result{'iterations'}) {
         debug_log(sprintf "Overwriting %s after persistent ID update\n", $run_file);
         my $update_rc = put_json_file($run_file, \%result, $result_schema_file);
         if ($update_rc > 0) {
-            print "Could not add persistent IDs to rickshaw-run file\n";
+            log_print "Could not add persistent IDs to rickshaw-run file\n";
             exit 1;
         }
     }
 }
 
 
-printf "Generating opensearch documents in %s\n", $doc_dir;
+log_print sprintf "Generating opensearch documents in %s\n", $doc_dir;
 
 if (exists $result{'run-id'} and defined $result{'run-id'}) {
     # Convert to 'id', which matches OpenSearch docs
@@ -676,12 +676,12 @@ if (exists $result{'run-id'} and defined $result{'run-id'}) {
 
 add_persistent_uuid(\%result, "run", \$update_run_json);
 
-printf "%s: %s\n", $run_id_field, $result{$run_id_field};
+log_print sprintf "%s: %s\n", $run_id_field, $result{$run_id_field};
 
 my $host = `hostname`;
 chomp $host;
 $result{'source'} = $host . "/" . $base_run_dir;
-printf "Run ID: %s\n", $result{$run_id_field};
+log_print sprintf "Run ID: %s\n", $result{$run_id_field};
 
 
 my @jobs;
@@ -696,7 +696,7 @@ if (-e $tool_dir and $do_tools == 1) {
                 for my $num (@numbers) {
                     my $cd_id = $collector . "-" . $num;
                     my $num_dir = $collector_dir . "/" . $num; # $run_dir/tool-data/[client|server|worker|master]/[0-N]
-                    printf "Tool document generation for %s starting\n", $cd_id;
+                    log_print sprintf "Tool document generation for %s starting\n", $cd_id;
                     if (opendir(NUMDIR, $num_dir)) {
                         my @tools = grep(/\w+/, readdir(NUMDIR));
                         for my $tool (@tools) {
@@ -716,7 +716,7 @@ if (-e $tool_dir and $do_tools == 1) {
                                         # we need to ensure only one of them was processed.
                                         next;
                                     }
-                                    printf "Working on tool_file: %s\n", $tool_file;
+                                    log_print sprintf "Working on tool_file: %s\n", $tool_file;
 
                                     my %job_args = ( 'tool-dir' => $tool_dir,
                                                     'tool-file' => $tool_file,
@@ -745,7 +745,7 @@ foreach my $job_args (@jobs) {
         exit 0;
     }
     if ($num_jobs >= $max_jobs) {
-        printf "Waiting for %d jobs to complete\n", $max_jobs;
+        log_print sprintf "Waiting for %d jobs to complete\n", $max_jobs;
         while (1) {
             my $wait_return = wait();
             if ($wait_return < 0) {
@@ -759,10 +759,10 @@ foreach my $job_args (@jobs) {
 
 
 if (exists $result{'iterations'}) {
-    print "Benchmark document generation starting\n";
+    log_print "Benchmark document generation starting\n";
     my $iter_num = 1;
     for my $iter (@{ $result{'iterations'} }) {
-        printf "working on iter num %d\n", $iter_num;
+        log_print sprintf "working on iter num %d\n", $iter_num;
         my $iter_idx = $iter_num - 1;
         $$iter{'samples'} = ();
         $$iter{'num'} = $iter_num;
@@ -779,10 +779,10 @@ if (exists $result{'iterations'}) {
         } elsif (-d $run_dir . "/" . $this_iter_dir . "-fail") {
             $iter_status = "fail";
             $this_iter_dir .= "-fail";
-            printf "Not going to process iteration %d because it failed\n", $iter_num;
+            log_print sprintf "Not going to process iteration %d because it failed\n", $iter_num;
         } else {
             $iter_status = "missing";
-            printf "Not going to process iteration %d because its directory cannot be found\n", $iter_num;
+            log_print sprintf "Not going to process iteration %d because its directory cannot be found\n", $iter_num;
         }
         $$iter{'status'} = $iter_status;
         if ($cdm{'ver'} eq "v6dev") {
@@ -805,7 +805,7 @@ if (exists $result{'iterations'}) {
                         debug_log(sprintf "Found existing sample persistent IDs file %s\n", $samp_persist_ids_file);
                         ($file_rc, $samp_persist_ids_ref) = get_json_file($samp_persist_ids_file, $sample_persistent_ids_schema_file);
                         if ($file_rc > 0 or ! defined $samp_persist_ids_ref) {
-                            print "Could not open sample persistent IDs file %s\n", $samp_persist_ids_file;
+                            log_print sprintf "Could not open sample persistent IDs file %s\n", $samp_persist_ids_file;
                             exit 1
                         }
                     } else {
@@ -866,17 +866,17 @@ if (exists $result{'iterations'}) {
                                         if ($file_rc > 0 or ! defined $data_ref) {
                                             if ($cs_id eq "client") {
                                                 # Always require client data
-                                                printf "Could not open the client post-process-data.json file, dir: %s\n", $cs_id_dir;
+                                                log_print sprintf "Could not open the client post-process-data.json file, dir: %s\n", $cs_id_dir;
                                                 exit 1;
                                             }
                                         } else {
                                             my %data = %$data_ref;
                                             if (! exists $data{'primary-metric'}) {
-                                                printf "ERROR: primary-metric not found in %s\n", $data_file;
+                                                log_print sprintf "ERROR: primary-metric not found in %s\n", $data_file;
                                                 exit 1;
                                             }
                                             if (! exists $data{'benchmark'}) {
-                                                printf "ERROR: benchmark not found in %s\n", $data_file;
+                                                log_print sprintf "ERROR: benchmark not found in %s\n", $data_file;
                                                 exit 1;
                                             }
                                             # The primary metric previously only included the "type" portion, but
@@ -999,7 +999,7 @@ if (exists $result{'iterations'}) {
                                                     }
                                                     if ($primary_metric_found) {
                                                         if (not defined $pm_earliest_begin or not defined $pm_latest_end) {
-                                                            print "Either earliest_begin and/or latest_end were not defined, exiting";
+                                                            log_print "Either earliest_begin and/or latest_end were not defined, exiting";
                                                             exit 1;
                                                         } else {
                                                             $earliest_begin = $pm_earliest_begin;
@@ -1007,7 +1007,7 @@ if (exists $result{'iterations'}) {
                                                         }
                                                     }
                                                     if (not defined $earliest_begin or not defined $latest_end) {
-                                                        print "Either earliest_begin and/or latest_end were not defined, exiting";
+                                                        log_print "Either earliest_begin and/or latest_end were not defined, exiting";
                                                         exit 1;
                                                     }
                                                     # Now if this client/server's earliest_begin is *later* than a defined begin for the consolidated period,
@@ -1047,7 +1047,7 @@ if (exists $result{'iterations'}) {
                         debug_log(sprintf "Added %d persistent IDs to %s\n", $update_samp_persist_ids_file, $samp_persist_ids_file);
                         my $file_rc = put_json_file($samp_persist_ids_file, $samp_persist_ids_ref, $sample_persistent_ids_schema_file);
                         if ($file_rc > 0) {
-                            printf "Could not save the sample persistent IDs file %s\n", $samp_persist_ids_file;
+                            log_print sprintf "Could not save the sample persistent IDs file %s\n", $samp_persist_ids_file;
                             exit 1;
                         }
                     } else {
@@ -1055,7 +1055,7 @@ if (exists $result{'iterations'}) {
                     }
                 } #samp_dirs
                 if (scalar @primary_metrics == 0) {
-                    printf "ERROR: No primary-metrics were found, exiting.\n";
+                    log_print "ERROR: No primary-metrics were found, exiting.\n";
                     exit 1;
                 }
                 $$iter{'primary-metric'} = join(",", @primary_metrics);
@@ -1063,17 +1063,17 @@ if (exists $result{'iterations'}) {
                 if (defined $primary_period) {
                     $$iter{'primary-period'} = $primary_period;
                 } else {
-                    printf "ERROR: no primary-period was found for %s\n", $this_iter_dir;
+                    log_print sprintf "ERROR: no primary-period was found for %s\n", $this_iter_dir;
                     exit 1;
                 }
                 create_es_doc("ndjson", "iteration", $iter_idx);
             } else {
-                printf "Skipping iteration %d\n", $iter_num;
+                log_print sprintf "Skipping iteration %d\n", $iter_num;
             } #opendir iter
         } #iter pass
         $iter_num++;
     } #iterations
-    print "Benchmark data generation complete\n";
+    log_print "Benchmark data generation complete\n";
 } #if iterations
 
 if (exists $result{'tags'}) {
@@ -1085,17 +1085,17 @@ if (exists $result{'tags'}) {
 }
 
 if (scalar @pids > 0) {
-    printf "Waiting for %d jobs to complete\n", scalar @pids;
+    log_print sprintf "Waiting for %d jobs to complete\n", scalar @pids;
     while (1) {
         my $wait_return = wait();
         if ($wait_return < 0) {
             last;
         }
     }
-    printf "%d jobs have completed\n\n", scalar @pids;
+    log_print sprintf "%d jobs have completed\n\n", scalar @pids;
 }
 
-print "Generating Opensearch documents\n";
+log_print "Generating Opensearch documents\n";
 create_es_doc("ndjson", "run");
 write_ndjson();
-print "Generating OpenSearch documents complete\n";
+log_print "Generating OpenSearch documents complete\n";
