@@ -59,8 +59,8 @@ my %bench_dirs;
 my $update_run_json = 0; # Track if we update %run and therefore need to write rickshaw-run.json
 
 sub usage {
-    print "\nusage:\n\n";
-    print "--base-run-dir  Directory where result data is located for a previous 'rickshaw-run'\n";
+    log_print "\nusage:\n\n";
+    log_print "--base-run-dir  Directory where result data is located for a previous 'rickshaw-run'\n";
 }
 
 sub dump_params {
@@ -142,7 +142,7 @@ while (scalar @ARGV > 0) {
             $val = shift @ARGV;
         }
     } else {
-        print "[ERROR]malformed cmdline parameter: %s\n";
+        log_print sprintf "[ERROR]malformed cmdline parameter: %s\n", $p;
         usage;
         exit 1;
     }
@@ -154,7 +154,7 @@ while (scalar @ARGV > 0) {
         debug_log(sprintf "argument: [%s]\n", $arg);
         $base_run_dir = $val;
     } else {
-        printf "[ERROR]argument not valid: [%s]\n", $arg;
+        log_print sprintf "[ERROR]argument not valid: [%s]\n", $arg;
         usage;
         exit 1;
     }
@@ -184,7 +184,7 @@ if ($fixup_status != 0) {
 debug_log(sprintf "Opening %s for normal processing\n", $run_file);
 ($file_rc, my $run_ref) = get_json_file($run_file, $run_schema_file);
 if ($file_rc > 0 or ! defined $run_ref) {
-    print "Could not open the rickshaw-run.json file\n";
+    log_print "Could not open the rickshaw-run.json file\n";
     exit 1;
 } else {
     %run = %{ $run_ref };
@@ -198,7 +198,7 @@ foreach my $this_bench_dir ( split(/,/, $run{'bench-dir'}) ) {
     if (-e $bench_config_file) {
         (my $rc, my $bench_config_ref) = get_json_file($bench_config_file, $bench_schema_file);
         if ($rc > 0 or ! defined $bench_config_ref) {
-            print "Could not open the bench config file\n";
+            log_print "Could not open the bench config file\n";
             exit 1;
         }
         if (exists $$bench_config_ref{'benchmark'}) {
@@ -206,11 +206,11 @@ foreach my $this_bench_dir ( split(/,/, $run{'bench-dir'}) ) {
             $bench_dirs{$benchmark_name} = $this_bench_dir;
             $bench_configs{$benchmark_name} = $bench_config_ref;
         } else {
-            print "[ERROR]benchmark was not defined in %s\n", $bench_config_file;
+            log_print sprintf "[ERROR]benchmark was not defined in %s\n", $bench_config_file;
             exit 1;
         }
     } else {
-        printf "[ERROR]benchmark subproject config file %s was not found\n", $bench_config_file;
+        log_print sprintf "[ERROR]benchmark subproject config file %s was not found\n", $bench_config_file;
         exit 1;
     }
 }
@@ -240,7 +240,7 @@ foreach my $benchmark_and_id ( split(/,/, $run{'bench-ids'}) ) {
             push(@{ $benchmark_to_ids{$bench} }, $id_range);
             $ids_to_benchmark{$id_range} = $bench;
         } else {
-            printf "ID range or number not recognized: %s\n", $id_range;
+            log_print sprintf "ID range or number not recognized: %s\n", $id_range;
         }
     }
 }
@@ -256,17 +256,17 @@ while(<PROCCPUINFO>) {
 close(PROCCPUINFO);
 
 if ($max_forked_jobs > 0) {
-    printf "Will fork a maximum of %d jobs at a time\n", $max_forked_jobs;
+    log_print sprintf "Will fork a maximum of %d jobs at a time\n", $max_forked_jobs;
 } else {
     die("[ERROR] Could not determine the maximum number of jobs to fork at a time\n");
 }
 
-printf "Launching a post-process job for each iteration x sample x [client|server] for %s\n", $run{'benchmark'};
+log_print sprintf "Launching a post-process job for each iteration x sample x [client|server] for %s\n", $run{'benchmark'};
 for (my $i = 1; $i <= scalar @{ $run{'iterations'} }; $i++) {
     my $iter_dh;
     my $this_iter_dir = $iter_subdir . "/iteration-" . $i;
     if (! -d $run_dir . "/" . $this_iter_dir) {
-        printf "The directory [%s] does not exist\n", $run_dir . "/" . $this_iter_dir;
+        log_print sprintf "The directory [%s] does not exist\n", $run_dir . "/" . $this_iter_dir;
         next;
     }
     if (opendir($iter_dh, $run_dir . "/" . $this_iter_dir)) {
@@ -280,7 +280,7 @@ for (my $i = 1; $i <= scalar @{ $run{'iterations'} }; $i++) {
             my %sample; # sample data from all clients/servers
             my @cons_periods; # consolidated periods across clients/servers get merged here
             my $this_samp_dir = $this_iter_dir . "/" .  $samp_dir;
-            printf "Working on " . $this_samp_dir . "\n";
+            log_print "Working on " . $this_samp_dir . "\n";
             if (opendir(my $samp_dh, $run_dir . "/" . $this_samp_dir)) {
                 my @cs_names = grep(/^(client|server)$/, readdir($samp_dh));
                 for my $cs_name (@cs_names) {
@@ -299,9 +299,9 @@ for (my $i = 1; $i <= scalar @{ $run{'iterations'} }; $i++) {
                             my $cs_id_dir = $cs_name_dir . "/" . $cs_id;
                             if (-d $run_dir . "/" . $cs_id_dir) {
                                 if (scalar @pids >= $max_forked_jobs) {
-                                    printf "Waiting for %d post-processing jobs to complete before starting more\n", scalar @pids;
+                                    log_print sprintf "Waiting for %d post-processing jobs to complete before starting more\n", scalar @pids;
                                     while(wait() > -1) {}
-                                    printf "Starting more jobs...\n";
+                                    log_print "Starting more jobs...\n";
                                     @pids = ();
                                 }
                                 if (my $pid = fork) {
@@ -312,13 +312,13 @@ for (my $i = 1; $i <= scalar @{ $run{'iterations'} }; $i++) {
                                     debug_log(sprintf "About to run: [%s]\n", $full_cmd);
                                     my $rc = system($full_cmd);
                                     if ($rc == -1) {
-                                        printf "Failed to execute '%s%s'!\n", $pp_cmd, $iter_params;
+                                        log_print sprintf "Failed to execute '%s%s'!\n", $pp_cmd, $iter_params;
                                     } elsif ($rc & 127) {
-                                        printf "'%s %s' died with signal %d, %s coredump!\n", $pp_cmd, $iter_params, ($rc & 127), ($rc & 128) ? 'with' : 'without';
+                                        log_print sprintf "'%s %s' died with signal %d, %s coredump!\n", $pp_cmd, $iter_params, ($rc & 127), ($rc & 128) ? 'with' : 'without';
                                     } else {
                                         $rc = $rc >> 8;
                                         if ($rc != 0) {
-                                        printf "'%s %s' exited with non-zero value %d\n", $pp_cmd, $iter_params, $rc;
+                                            log_print sprintf "'%s %s' exited with non-zero value %d\n", $pp_cmd, $iter_params, $rc;
                                         }
                                     }
                                     exit;
@@ -329,14 +329,14 @@ for (my $i = 1; $i <= scalar @{ $run{'iterations'} }; $i++) {
                 }
             }
             if (wait() > -1) {
-                printf "Waiting for %d post-processing jobs to complete\n", scalar @pids;
+                log_print sprintf "Waiting for %d post-processing jobs to complete\n", scalar @pids;
                 while (wait() > -1) {}
             }
-            print "Post-processing complete\n";
+            log_print "Post-processing complete\n";
         }
         if (scalar @samp_dirs < $run{'num-samples'}) {
-            printf "Iteration %d, [%s] is considered failed because there were not enough passing samples (%d)\n",
-                   $i, $this_iter_dir, $run{'num-samples'};
+            log_print sprintf "Iteration %d, [%s] is considered failed because there were not enough passing samples (%d)\n",
+                              $i, $this_iter_dir, $run{'num-samples'};
             system("/bin/mv " . $run_dir . "/" . $this_iter_dir . " " . $run_dir . "/" . $this_iter_dir . "-fail");
         }
     }
@@ -347,7 +347,7 @@ if ($update_run_json > 0) {
     debug_log(sprintf "run data changed, so writing %s\n", $run_file);
     my $update_rc = put_json_file($run_file, \%run, $run_schema_file);
     if ($update_rc > 0) {
-        print "Could not update rickshaw-run file\n";
+        log_print "Could not update rickshaw-run file\n";
         exit 1;
     }
 }

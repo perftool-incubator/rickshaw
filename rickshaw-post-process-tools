@@ -75,8 +75,8 @@ my $result_file; # 'rickshaw-result.json' containing all configuration and resul
 my $file_rc;
 
 sub usage {
-    print "\nusage:\n\n";
-    print "--base-run-dir  Directory where result data is located for a previous 'rickshaw-run'\n";
+    log_print "\nusage:\n\n";
+    log_print "--base-run-dir  Directory where result data is located for a previous 'rickshaw-run'\n";
 }
 
 sub dump_params {
@@ -122,7 +122,7 @@ while (scalar @ARGV > 0) {
             $val = shift @ARGV;
         }
     } else {
-        print "[ERROR]malformed cmdline parameter: %s\n";
+        log_print sprintf "[ERROR]malformed cmdline parameter: %s\n", $p;
         usage;
         exit 1;
     }
@@ -134,7 +134,7 @@ while (scalar @ARGV > 0) {
         debug_log(sprintf "argument: [%s]\n", $arg);
         $base_run_dir = $val;
     } else {
-        printf "[ERROR]argument not valid: [%s]\n", $arg;
+        log_print sprintf "[ERROR]argument not valid: [%s]\n", $arg;
         usage;
         exit 1;
     }
@@ -164,7 +164,7 @@ if ($fixup_status != 0) {
 debug_log(sprintf "Opening %s for normal processing\n", $run_file);
 ($file_rc, my $run_ref) = get_json_file($run_file, $run_schema_file);
 if ($file_rc > 0 or ! defined $run_ref) {
-    print "Could not open the tool config file\n";
+    log_print "Could not open the tool config file\n";
     exit 1;
 } else {
     %run = %{ $run_ref };
@@ -176,11 +176,11 @@ if (! exists $run{'tools-dir'}) {
     {
         my $dir = pushd($rickshaw_project_dir . "/../../../subprojects/tools/");
         $run{'tools-dir'} = getcwd();
-        printf "Assuming tools-dir is %s\n", $run{'tools-dir'};
+        log_print sprintf "Assuming tools-dir is %s\n", $run{'tools-dir'};
     }
 }
 
-printf "Launching a post-process job for each tool * each collector\n";
+log_print sprintf "Launching a post-process job for each tool * each collector\n";
 my %tools_config;
 my @pids;
 my $tool_dir = "tool-data";
@@ -195,22 +195,22 @@ if (opendir(TOOLDIR, $run_dir . "/" . $tool_dir)) {
                 my $engine_dir = $collector_dir . "/" . $engine; # $run_dir/tool-data/[client|server|worker|master]/[0-N]
                 if (opendir(ENGDIR, $run_dir . "/" . $engine_dir)) {
                     my @tools = grep(/\w+/, readdir(ENGDIR));
-                    printf "Working on tool dir %s\n", $engine_dir;
+                    log_print sprintf "Working on tool dir %s\n", $engine_dir;
                     for my $tool (@tools) {
                         if (! exists($tools_config{$tool})) {
                             # Load a tool configuration for every tool the user is asking for
                             my $tool_config = $run{'tools-dir'} . "/" . $tool . "/rickshaw.json";
                             ($file_rc, my $json_ref) = get_json_file($tool_config, $tool_schema_file);
                             if ($file_rc > 0 or ! defined $json_ref) {
-                                print "Could not open the tool config file\n";
+                                log_print "Could not open the tool config file\n";
                                 exit 1;
                             }
                             if (! exists $$json_ref{'tool'} or $$json_ref{'tool'} ne $tool) {
-                                printf "In the following tool config, found in %s, the value for 'tool'";
-                                printf "does not match the tool name, '%s'\n", $tool_config, $tool;
-                                printf "Either correct the tool config, or remove this tool from your test\n";
+                                log_print sprintf "In the following tool config, found in %s, the value for 'tool'", $tool_config;
+                                log_print sprintf "does not match the tool name, '%s'\n", $tool;
+                                log_print "Either correct the tool config, or remove this tool from your test\n";
                                 my $coder = JSON::XS->new->canonical->pretty;
-                                printf "%s", $coder->encode($json_ref);
+                                log_print $coder->encode($json_ref);
                                 exit 1;
                             }
                             $tools_config{$$json_ref{'tool'}} = $json_ref;
@@ -234,6 +234,6 @@ if (opendir(TOOLDIR, $run_dir . "/" . $tool_dir)) {
         }
     }
 }
-printf "Waiting for %d post-processing jobs to complete\n", scalar @pids;
+log_print sprintf "Waiting for %d post-processing jobs to complete\n", scalar @pids;
 while (wait() > -1) {}
-print "Post-processing complete\n";
+log_print "Post-processing complete\n";
