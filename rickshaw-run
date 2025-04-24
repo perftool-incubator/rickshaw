@@ -2457,6 +2457,7 @@ sub validate_endpoints() {
         # endpoint handles::
         # client <int> [int]
         # server <int> [int]
+        $$endpoint{'userenvs'} = [];
         foreach my $line (@output) {
             chomp $line;
             if ($line =~ /(client|server|profiler)\s+(.+)$/) {
@@ -2479,12 +2480,13 @@ sub validate_endpoints() {
                     }
                 }
             } elsif ($line =~ /(userenv)\s+(.+)$/) {
-                $$endpoint{'userenv'} = $2;
-                debug_log(sprintf("Clients/servers for endpoint %s will have userenv %s\n",
-                    $$endpoint{'label'}, $$endpoint{'userenv'}));
+                my $userenv = $2;
+                push(@{$$endpoint{'userenvs'}}, $userenv);
+                debug_log(sprintf("[Some] clients/servers for endpoint %s will have userenv %s\n",
+                                  $$endpoint{'label'}, $userenv));
                 foreach my $bench (keys %bench_configs) {
                     my %userenv_info = ( 'image' => '' );
-                    $image_ids{$bench}{$$endpoint{'userenv'}} = \%userenv_info;
+                    $image_ids{$bench}{$userenv} = \%userenv_info;
                 }
             } else {
                 log_print sprintf "[ERROR] output from endpoint validation incorrect for %s:\n%s\n", $$endpoint{'label'}, $line;
@@ -2977,27 +2979,26 @@ sub deploy_endpoints() {
         my $type = $endpoints[$i]{'type'};
         my $opts = $endpoints[$i]{'opts'};
         my $label = $endpoints[$i]{'label'};
-        my $userenv;
         my $endpoint_image_opt = "";
         my $bench_ids_opt = "";
-        if (defined $endpoints[$i]{'userenv'}) {
-            foreach my $bench_or_tool (keys %image_ids) {
-                # Is this a tool?  Then get the userenv from tools_params
-                my $index = find_index(\@tools_params, "tool", $bench_or_tool);
-                if ($index > -1) {
-                    $userenv = $tools_params[$index]{'userenv'};
-                    #log_print Dumper \$tools_params[$index];
-                    #printf "userenv: [%s]\n", $userenv;
-                } else {
-                    $userenv = $endpoints[$i]{'userenv'};
-                }
-                #printf "userenv: [%s]\n", $userenv;
-                if (! exists($image_ids{$bench_or_tool}{$userenv}{'image'})) {
-                    log_print sprintf "ERROR: image for bench or tool: [%s] for userenv: [%s] could not be found in image_ids:\n", $bench_or_tool, $endpoints[$i]{'userenv'};
-                    log_print Dumper \%image_ids;
-                    exit 1;
-                }
-                $endpoint_image_opt .= "," . $bench_or_tool . "::" . $image_ids{$bench_or_tool}{$userenv}{'image'}
+        if (defined $endpoints[$i]{'userenvs'}) {
+            foreach my $userenv (@{$endpoints[$i]{'userenvs'}}) {
+                foreach my $bench_or_tool (keys %image_ids) {
+		    my $chosen_userenv;
+                    # Is this a tool?  Then get the userenv from tools_params
+                    my $index = find_index(\@tools_params, "tool", $bench_or_tool);
+                    if ($index > -1) {
+                        $chosen_userenv = $tools_params[$index]{'userenv'};
+	            } else {
+		        $chosen_userenv = $userenv;
+                    }
+                    if (! exists($image_ids{$bench_or_tool}{$chosen_userenv}{'image'})) {
+                        log_print sprintf "ERROR: image for bench or tool: [%s] for userenv: [%s] could not be found in image_ids:\n", $bench_or_tool, $chosen_userenv;
+                        log_print Dumper \%image_ids;
+                        exit 1;
+                    }
+                    $endpoint_image_opt .= "," . $bench_or_tool . "::" . $chosen_userenv . "::" . $image_ids{$bench_or_tool}{$chosen_userenv}{'image'};
+		}
             }
             $endpoint_image_opt =~ s/^,/ --image=/;
         }

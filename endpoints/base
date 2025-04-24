@@ -194,7 +194,8 @@ function process_opts() {
                 shift;
                 for bench_and_image in `echo $image | sed -e 's/,/ /g'`; do
                     bench=`echo $bench_and_image | awk -F:: '{print $1}'`
-                    image=`echo $bench_and_image | awk -F:: '{print $2}'`
+                    userenv=`echo $bench_and_image | awk -F:: '{print $2}'`
+                    image=`echo $bench_and_image | awk -F:: '{print $3}'`
                     bench_to_image[$bench]=$image
                 done
                 ;;
