@@ -1175,10 +1175,6 @@ if (exists $result{'iterations'}) {
                                                     my $pm_earliest_begin;
                                                     my $pm_latest_end;
                                                     my $base_metric_doc_ref = create_es_doc("metric_desc", $iter_idx, $sample_idx, $period_idx);
-<<<<<<< HEAD
-                                                    log_print "period: $$this_sample{'periods'}[$period_idx]{'name'}\n";
-=======
->>>>>>> f7a2913 (Move period doc creation after c/s processed)
                                                     my $primary_metric_found = 0;
                                                     for (my $j = 0; $j < scalar(@{ $data{'periods'}[$k]{'metric-files'} }); $j++) {
                                                         # Metric data is still in other file(s).  For each member in 'metric-files' array,
