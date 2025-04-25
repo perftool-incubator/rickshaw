@@ -1028,14 +1028,18 @@ if (exists $result{'iterations'}) {
                                                     if (! defined $result{'end'} or $result{'end'} < $$this_sample{'periods'}[$period_idx]{'end'}) {
                                                         $result{'end'} = $$this_sample{'periods'}[$period_idx]{'end'};
                                                     }
-
-                                                    create_es_doc("ndjson", "period", $iter_idx, $sample_idx, $period_idx);
                                                 }
                                             }
                                         }
                                     } #cs_ids
                                 } #opendir csnames
                             } #cs_names
+                            # Now that all clients and servers have been processed, and the data for the periods has been processed
+                            # (the begin and end are finalized based on all clients or servers generating metrics at the same time),
+                            # The period docs can be queued for this sample.
+                            for (my $period_idx = 0; $period_idx < scalar @{ $$this_sample{'periods'} }; $period_idx++) {
+                                create_es_doc("ndjson", "period", $iter_idx, $sample_idx, $period_idx);
+                            }
                             create_es_doc("ndjson", "sample", $iter_idx, $sample_idx);
                         } #opendir samp
                     } #samp pass

@@ -626,10 +626,8 @@ sub index_metrics {
                 if ($index_or_queue eq "index") {
                     # OpenSearch docs type metric_data do not contain other sections run, iteration, sample, period, metric_desc,
                     # as this would take up sunstantially more space for potentially millions of documents.
-                    #log_print sprint "going to index this ndjson:\n" . $ndjson;
                     http_ndjson_request("POST", "localhost:9200", "/cdm" . $cdm{'ver'} . "-metric_data/_bulk", $ndjson);
                 } else {
-                    log_print "going to *queue* this ndjson:\n" . $ndjson;
                     push(@queued_ndjson, $ndjson);
                 }
                 $ndjson = "";
@@ -1177,7 +1175,10 @@ if (exists $result{'iterations'}) {
                                                     my $pm_earliest_begin;
                                                     my $pm_latest_end;
                                                     my $base_metric_doc_ref = create_es_doc("metric_desc", $iter_idx, $sample_idx, $period_idx);
+<<<<<<< HEAD
                                                     log_print "period: $$this_sample{'periods'}[$period_idx]{'name'}\n";
+=======
+>>>>>>> f7a2913 (Move period doc creation after c/s processed)
                                                     my $primary_metric_found = 0;
                                                     for (my $j = 0; $j < scalar(@{ $data{'periods'}[$k]{'metric-files'} }); $j++) {
                                                         # Metric data is still in other file(s).  For each member in 'metric-files' array,
@@ -1260,14 +1261,18 @@ if (exists $result{'iterations'}) {
                                                     if (! defined $result{'end'} or $result{'end'} < $$this_sample{'periods'}[$period_idx]{'end'}) {
                                                         $result{'end'} = $$this_sample{'periods'}[$period_idx]{'end'};
                                                     }
-
-                                                    queue_es_doc("period", $run_dir . "/" . $this_samp_dir, $iter_idx, $sample_idx, $period_idx);
-                                                }
-                                            }
-                                        }
+                                                } #$data{'periods'}
+                                            } #if (defined $data{'periods'})
+                                        } #$file_rc == 0
                                     } #cs_ids
                                 } #opendir csnames
                             } #cs_names
+                            # Now that all clients and servers have been processed, and the data for the periods has been processed
+                            # (the begin and end are finalized based on all clients or servers generating metrics at the same time),
+                            # The period docs can be queued for this sample.
+                            for (my $period_idx = 0; $period_idx < scalar @{ $$this_sample{'periods'} }; $period_idx++) {
+                                queue_es_doc("period", $run_dir . "/" . $this_samp_dir, $iter_idx, $sample_idx, $period_idx);
+                            }
                             queue_es_doc("sample", $run_dir . "/" . $this_samp_dir, $iter_idx, $sample_idx);
                         } #opendir samp
                     } #samp pass
