@@ -86,6 +86,9 @@
         "settings": {
             "type": "object",
             "properties": {
+                "nodeSelector": {
+                    "type": "object"
+                },
                 "securityContext": {
                     "type": "object"
                 },
