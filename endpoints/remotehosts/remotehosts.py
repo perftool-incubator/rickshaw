@@ -240,8 +240,15 @@ def init_settings():
     settings["misc"]["image-map"] = dict()
     images = args.images.split(",")
     for image in images:
-        image_split = image.split("::", maxsplit=1)
-        settings["misc"]["image-map"][image_split[0]] = image_split[1]
+        image_split = image.split("::", maxsplit=2)
+        role = image_split[0]
+        userenv = image_split[1]
+        image = image_split[2]
+        if not role in settings["misc"]["image-map"]:
+            log.info("Adding role %s to image-map" % (role))
+            settings["misc"]["image-map"][role] = dict()
+        log.info("Adding %s to userenv %s for role %s to image-map" % (image, userenv, role))
+        settings["misc"]["image-map"][role][userenv] = image
 
     log_settings(mode = "misc")
 
@@ -661,12 +668,13 @@ def get_benchmark(benchmark_id):
 
     return None
 
-def get_image(image_id):
+def get_image(image_role, userenv):
     """
     Get the image that is used to run a specific benchmark/tool
 
     Args:
-        image_id (str): The tool or benchmark whose container image is being asked for
+        image_role (str): The tool or benchmark whose container image is being asked for
+        userenv (str): The userenv whose container image is being asked for
 
     Globals:
         settings (dict): the one data structure to rule then all
@@ -676,9 +684,13 @@ def get_image(image_id):
         or
         None: If no matching container image can be located
     """
-    for image_key in settings["misc"]["image-map"].keys():
-        if image_id == image_key:
-            return settings["misc"]["image-map"][image_key]
+    if image_role in settings["misc"]["image-map"]:
+        if userenv in settings["misc"]["image-map"][image_role]:
+            return settings["misc"]["image-map"][image_role][userenv]
+        else:
+            log.error("Could not find userenv %s in image-map[%s]" % (userenv, image_role));
+    else:
+        log.error("Could not find image_role %s in image-map" % (image_role))
 
     return None
 
@@ -804,13 +816,50 @@ def thread_logger(thread_id, msg, log_level = "info", remote_name = None, engine
         case _:
             raise ValueError("Uknown log_level '%s' in thread_logger" % (log_level))
 
-def get_engine_id_image(role, id):
+def get_profiler_userenv(id):
+    """
+    Get the userenv associated with a specific profiler (via it's ID)
+
+    Args:
+        id (str): The profiler engine's ID
+
+    Globals:
+        settings (dict): the one data structure to rule then all
+
+    Returns:
+        userenv (str): The userenv that the specified profiler engine ID should use
+        or
+        None: If no userenv was found for the specified profiler engine ID
+    """
+    profiler_name = None
+    for profiler in settings["engines"]["profiler-mapping"].keys():
+        if id in settings["engines"]["profiler-mapping"][profiler]["ids"]:
+            profiler_name = settings["engines"]["profiler-mapping"][profiler]["name"]
+
+    if profiler_name is None:
+        log.error("Could not find profiler name for id %s" % (id))
+    else:
+        if profiler_name in settings["misc"]["image-map"]:
+            if len(settings["misc"]["image-map"][profiler_name]) == 1:
+                for userenv in settings["misc"]["image-map"][profiler_name].keys():
+                    return userenv
+            else:
+                if len(settings["misc"]["image-map"][profiler_name]) == 0:
+                    log.error("Found no possible userenv for profiler %s" % (profiler_name))
+                else:
+                    log.error("Found more than one possible userenv for profiler %s" % (profiler_name))
+        log.error("Could not find profiler %s in image-map" % (profiler_name))
+
+    return None
+
+def get_engine_id_image(role, id, userenv):
     """
     Get the image associated with a specific engine role and ID
 
     Args:
         role (str): The engine's role
         id (str, int): The engine's ID
+        userenv (str): The engine's userenv
 
     Globals:
         None
@@ -828,7 +877,7 @@ def get_engine_id_image(role, id):
         case _:
             image_role = get_benchmark(id)
     if not image_role is None:
-        image = get_image(image_role)
+        image = get_image(image_role, userenv)
     return image
 
 def create_thread_pool(description, acronym, work, worker_threads_count, worker_thread_function):
@@ -919,9 +968,28 @@ def remotes_pull_images():
 
         for role in settings["engines"]["remotes"][remote]["roles"].keys():
             for id in settings["engines"]["remotes"][remote]["roles"][role]["ids"]:
-                image = get_engine_id_image(role, id)
+                userenv = None
+                image = None
+
+                if role == "profiler":
+                    userenv = get_profiler_userenv(id)
+                else:
+                    for remote_idx in settings["engines"]["remotes"][remote]["run-file-idx"]:
+                        for tmp_role in settings["run-file"]["endpoints"][args.endpoint_index]["remotes"][remote_idx]["engines"]:
+                            if tmp_role["role"] == role and id in tmp_role["ids"]:
+                                userenv = settings["run-file"]["endpoints"][args.endpoint_index]["remotes"][remote_idx]["config"]["settings"]["userenv"]
+                                break
+                        if userenv is not None:
+                            break
+
+                if userenv is None:
+                    log.error("Cound not find userenv for remote %s with role %s and id %s" % (remote, role, str(id)))
+                    print("could not find userenv for " + endpoint)
+                else:
+                    image = get_engine_id_image(role, id, userenv)
+
                 if image is None:
-                    log.error("Could not find image for remote %s with role %s and id %d" % (remote, role, str(id)))
+                    log.error("Could not find image for remote %s with role %s and id %s" % (remote, role, str(id)))
                 else:
                     settings["engines"]["remotes"][remote]["raw-images"].append(image)
 
@@ -1466,7 +1534,12 @@ def launch_engines_worker_thread(thread_id, work_queue, threads_rcs):
                     thread_logger(thread_name, "Creating engine '%s'" % (engine_name), remote_name = remote_name, engine_name = engine_name)
                     thread_logger(thread_name, "Container name will be '%s'" % (container_name), remote_name = remote_name, engine_name = engine_name)
 
-                    image = get_engine_id_image(engine["role"], engine_id)
+                    if engine["role"] == "profiler":
+                        userenv = get_profiler_userenv(engine_id)
+                    else:
+                        userenv = settings["run-file"]["endpoints"][args.endpoint_index]["remotes"][remote_idx]["config"]["settings"]["userenv"]
+
+                    image = get_engine_id_image(engine["role"], engine_id, userenv)
                     if image is None:
                         thread_logger(thread_name, "Could not determine image", log_level = "error", remote_name = remote_name, engine_name = engine_name)
                         continue
