@@ -1173,6 +1173,9 @@ def create_podman(thread_name, remote_name, engine_name, container_name, connect
         env_file.write("roadblock_id=" + args.roadblock_id + "\n")
         env_file.write("roadblock_passwd=" + args.roadblock_passwd + "\n")
         env_file.write("ssh_id=" + settings["misc"]["ssh-private-key"] + "\n")
+        if "env-vars" in podman_settings:
+            for env_var in podman_settings["env-vars"]:
+                env_file.write(env_var["var"] + "=" + env_var["value"])
 
     remote_env_file_name = settings["dirs"]["remote"]["cfg"] + "/" + engine_name + "_env.txt"
     result = connection.put(local_env_file_name, remote_env_file_name)
