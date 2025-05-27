@@ -47,7 +47,6 @@
             "controller-ip": "CONTROLLER_IP",
             "host": "CI_ENDPOINT_HOST",
             "user": "CI_ENDPOINT_USER",
-            "server": 1,
             "client": 1,
             "config": [
                 {

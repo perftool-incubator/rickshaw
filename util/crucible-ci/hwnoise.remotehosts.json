@@ -52,24 +52,12 @@
 	    "remotes": [
 		{
 		    "engines": [
-			{ "role": "client", "ids": [ 1 ] },
-			{ "role": "server", "ids": [ 1 ] }
+			{ "role": "client", "ids": [ 1 ] }
 		    ],
 		    "config": {
 			"host": "CI_ENDPOINT_HOST",
 			"settings": {
 			    "osruntime": "podman"
-			}
-		    }
-		},
-		{
-		    "engines": [
-			{ "role": "client", "ids": [ 2 ] }
-		    ],
-		    "config": {
-			"host": "CI_ENDPOINT_HOST",
-			"settings": {
-			    "osruntime": "chroot"
 			}
 		    }
 		}
