@@ -1537,3 +1537,342 @@ def process_options():
     args = parser.parse_args()
 
     return args
+
+def init_settings(settings, args):
+    """
+    Initialize the basic settings that are used throughout the script
+
+    Args:
+        settings (dict): the one data structure to rule then all
+        args (namespace): the script's CLI parameters
+
+    Globals:
+        log: a logger instance
+
+    Returns:
+        settings (dict): the one data structure to rule then all
+    """
+    log.info("Initializing settings based on CLI parameters")
+
+    settings["dirs"] = dict()
+
+    settings["dirs"]["local"] = {
+        "base": args.base_run_dir,
+        "conf": args.base_run_dir + "/config",
+        "run": args.base_run_dir + "/run"
+    }
+    settings["dirs"]["local"]["engine"] = settings["dirs"]["local"]["run"] + "/engine"
+    settings["dirs"]["local"]["endpoint"] = settings["dirs"]["local"]["run"] + "/endpoint/" + args.endpoint_label
+    settings["dirs"]["local"]["sysinfo"] = settings["dirs"]["local"]["run"] + "/sysinfo/endpoint/" + args.endpoint_label
+    settings["dirs"]["local"]["tool-cmds"] = settings["dirs"]["local"]["conf"] + "/tool-cmds"
+    settings["dirs"]["local"]["engine-conf"] = settings["dirs"]["local"]["conf"] + "/engine"
+    settings["dirs"]["local"]["engine-cmds"] = settings["dirs"]["local"]["engine-conf"] + "/bench-cmds"
+    settings["dirs"]["local"]["engine-logs"] = settings["dirs"]["local"]["engine"] + "/logs"
+    settings["dirs"]["local"]["roadblock-msgs"] = settings["dirs"]["local"]["endpoint"] + "/roadblock-msgs"
+
+    remote_base = "/var/lib/crucible"
+    settings["dirs"]["remote"] = {
+        "base": remote_base,
+        "run": remote_base + "/" + args.endpoint_label + "_" + args.run_id
+    }
+    settings["dirs"]["remote"]["cfg"] = settings["dirs"]["remote"]["run"] + "/cfg"
+    settings["dirs"]["remote"]["logs"] = settings["dirs"]["remote"]["run"] + "/logs"
+    settings["dirs"]["remote"]["data"] = settings["dirs"]["remote"]["run"] + "/data"
+    settings["dirs"]["remote"]["sysinfo"] = settings["dirs"]["remote"]["run"] + "/sysinfo"
+    settings["dirs"]["remote"]["tmp"] = settings["dirs"]["remote"]["data"] + "/tmp"
+
+    log_settings(settings, mode = "dirs")
+
+    log.info("Initializing misc settings")
+
+    settings["misc"] = dict()
+
+    settings["misc"]["debug-output"] = False
+    if args.log_level == "debug":
+        settings["misc"]["debug-output"] = True
+
+    log.info("Creating image map")
+    settings["misc"]["image-map"] = dict()
+    images = args.images.split(",")
+    for image in images:
+        image_split = image.split("::", maxsplit=2)
+        role = image_split[0]
+        userenv = image_split[1]
+        image = image_split[2]
+        if not role in settings["misc"]["image-map"]:
+            log.info("Adding role %s to image-map" % (role))
+            settings["misc"]["image-map"][role] = dict()
+        log.info("Adding %s to userenv %s for role %s to image-map" % (image, userenv, role))
+        settings["misc"]["image-map"][role][userenv] = image
+
+    log_settings(settings, mode = "misc")
+
+    return settings
+
+def log_settings(settings, mode = "all", endpoint_index = None):
+    """
+    Log the current requested contents of the settings data structure
+
+    Args:
+        settings (dict): the one data structure to rule them all
+        mode (str): which piece of the settings dict to log
+        endpoint_index (int): the index of the endpoint to log
+
+    Globals:
+        log: a logger instance
+
+    Returns:
+        None
+    """
+    match mode:
+        case "benchmark-mapping":
+            return log.info("settings[benchmark-mapping]:\n%s" % (dump_json(settings["engines"]["benchmark-mapping"])), stacklevel = 2)
+        case "engines":
+            return log.info("settings[engines]:\n%s" % (dump_json(settings["engines"])), stacklevel = 2)
+        case "misc":
+            return log.info("settings[misc]:\n%s" % (dump_json(settings["misc"])), stacklevel = 2)
+        case "dirs":
+            return log.info("settings[dirs]:\n%s" % (dump_json(settings["dirs"])), stacklevel = 2)
+        case "endpoint":
+            return log.info("settings[endpoint]:\n%s" % (dump_json(settings["run-file"]["endpoints"][endpoint_index])), stacklevel = 2)
+        case "rickshaw":
+            return log.info("settings[rickshaw]:\n%s" % (dump_json(settings["rickshaw"])), stacklevel = 2)
+        case "run-file":
+            return log.info("settings[run-file]:\n%s" % (dump_json(settings["run-file"])), stacklevel = 2)
+        case "all" | _:
+            return log.info("settings:\n%s" % (dump_json(settings)), stacklevel = 2)
+
+def load_settings(settings, endpoint_name = None, run_file = None, rickshaw_dir = None, endpoint_index = None, endpoint_normalizer_callback = None):
+    """
+    Load settings from config multiple config files
+
+    Args:
+        settings (dict): the one data structure to rule them all
+        endpoint_name (str): the name of the endpoint
+        run_file (str): the JSON run-file
+        rickshaw_dir (str): the path to the rickshaw directory
+        endpoint_index (str): the index into the run-file's endpoint object for this endpoint instance
+        endpoint_normalizer_callback (func): the endpoint specific function to call to normalize the endpoint settings
+
+    Globals:
+        log: a logger instance
+
+    Returns:
+        settings (dict): the one data structure to rule them all
+    """
+    log.info("Loading settings from config files")
+
+    rickshaw_settings_file = settings["dirs"]["local"]["conf"] + "/rickshaw-settings.json.xz"
+    settings["rickshaw"],err = load_json_file(rickshaw_settings_file, uselzma = True)
+    if settings["rickshaw"] is None:
+        log.error("Failed to load rickshaw-settings from %s with error '%s'" % (rickshaw_settings_file, err))
+        return None
+    else:
+        log.info("Loaded rickshaw-settings from %s" % (rickshaw_settings_file))
+
+    log_settings(settings, mode = "rickshaw")
+
+    settings["run-file"],err = load_json_file(run_file)
+    if settings["run-file"] is None:
+        log.error("Failed to load run-file from %s with error '%s'" % (run_file, err))
+        return None
+    else:
+        log.info("Loaded run-file from %s" % (run_file))
+
+    valid, err = validate_schema(settings["run-file"], rickshaw_dir + "/util/JSON/schema.json")
+    if not valid:
+        log.error("JSON validation failed for run-file")
+        return None
+    else:
+        log.info("First level JSON validation for run-file passed")
+
+    valid, err = validate_schema(settings["run-file"]["endpoints"][endpoint_index], rickshaw_dir + "/schema/" + endpoint_name + ".json")
+    if not valid:
+        log.error("JSON validation failed for remotehosts endpoint at index %d in run-file" % (endpoint_index))
+        return None
+    else:
+        log.info("Endpoint specific JSON validation for remotehosts endpoint at index %d in run-file passed" % (endpoint_index))
+
+    log_settings(settings, mode = "run-file")
+
+    log.info("Normalizing endpoint settings")
+    settings["run-file"]["endpoints"][endpoint_index] = endpoint_normalizer_callback(endpoint = settings["run-file"]["endpoints"][endpoint_index], rickshaw = settings["rickshaw"])
+    log_settings(settings, mode = "endpoint", endpoint_index = endpoint_index)
+
+    log.info("Building benchmark engine mapping")
+    if not "engines" in settings:
+        settings["engines"] = dict()
+    settings["engines"]["benchmark-mapping"] = build_benchmark_engine_mapping(settings["run-file"]["benchmarks"])
+    log_settings(settings, mode = "benchmark-mapping")
+
+    log.info("Loading SSH private key into misc settings")
+    settings["misc"]["ssh-private-key"] = ""
+    try:
+        with open(settings["dirs"]["local"]["conf"] + "/rickshaw_id.rsa", "r", encoding = "ascii") as ssh_private_key:
+            for line in ssh_private_key:
+                line = re.sub(r"\n", r"\\n", line)
+                settings["misc"]["ssh-private-key"] += line
+    except IOError as e:
+        log.error("Failed to load the SSH private key [%s]" % (e))
+        return None
+
+    log_settings(settings, mode = "misc")
+
+    return settings
+
+def create_local_dirs(settings):
+    """
+    Create the basic local directories
+
+    Args:
+        settings (dict): the one data structure to rule them all
+
+    Globals:
+        log: a logger instance
+
+    Returns:
+        0
+    """
+    log.info("Creating local directories")
+    my_make_dirs(settings["dirs"]["local"]["run"])
+    my_make_dirs(settings["dirs"]["local"]["engine-logs"])
+    my_make_dirs(settings["dirs"]["local"]["roadblock-msgs"])
+    my_make_dirs(settings["dirs"]["local"]["sysinfo"])
+    return 0
+
+def get_profiler(settings, profiler_id):
+    """
+    Get the profiler that a specific profiler engine should be running from the profiler mapping
+
+    Args:
+        settings (dict): the one data structure to rule then all
+        profiler_id (str): A tool/profiler engine's ID
+
+    Globals:
+        None
+
+    Returns:
+        str: The name of the tool to run if the profiler_id is found in the mapping
+        or
+        None: If the profiler_id is not found in the mapping
+    """
+    for profiler_key in settings["engines"]["profiler-mapping"].keys():
+        if profiler_id in settings["engines"]["profiler-mapping"][profiler_key]["ids"]:
+            return settings["engines"]["profiler-mapping"][profiler_key]["name"]
+
+    return None
+
+def get_benchmark(settings, benchmark_id):
+    """
+    Get the benchmark that a specific benchmark engine should be running from the benchmark mapping
+
+    Args:
+        settings (dict): the one data structure to rule then all
+        benchmark_id (str): A benchmark engine's ID
+
+    Globals:
+        None
+
+    Returns:
+        str: The name of the benchmark to run if the benchmark_id is found in the mapping
+        or
+        None: If the benchmark)id is not found in the mapping
+    """
+    for benchmark_key in settings["engines"]["benchmark-mapping"].keys():
+        if benchmark_id in settings["engines"]["benchmark-mapping"][benchmark_key]["ids"]:
+            return settings["engines"]["benchmark-mapping"][benchmark_key]["name"]
+
+    return None
+
+def get_image(settings, image_role, userenv):
+    """
+    Get the image that is used to run a specific benchmark/tool
+
+    Args:
+        settings (dict): the one data structure to rule then all
+        image_role (str): The tool or benchmark whose container image is being asked for
+        userenv (str): The userenv whose container image is being asked for
+
+    Globals:
+        log: a logger instance
+
+    Returns:
+        str: The container image that is used to run the specified tool or benchmark
+        or
+        None: If no matching container image can be located
+    """
+    if image_role in settings["misc"]["image-map"]:
+        if userenv in settings["misc"]["image-map"][image_role]:
+            return settings["misc"]["image-map"][image_role][userenv]
+        else:
+            log.error("Could not find userenv %s in image-map[%s]" % (userenv, image_role));
+    else:
+        log.error("Could not find image_role %s in image-map" % (image_role))
+
+    return None
+
+def get_engine_id_image(settings, role, id, userenv):
+    """
+    Get the image associated with a specific engine role and ID
+
+    Args:
+        settings (dict): the one data structure to rule then all
+        role (str): The engine's role
+        id (str, int): The engine's ID
+        userenv (str): The engine's userenv
+
+    Globals:
+        None
+
+    Returns:
+        image (str): The container image to use for the specified engine
+        or
+        None: If no container image was located for the specified engine
+    """
+
+    image = None
+    match role:
+        case "profiler" | "worker" | "master":
+            image_role = get_profiler(settings, id)
+        case _:
+            image_role = get_benchmark(settings, id)
+    if not image_role is None:
+        image = get_image(settings, image_role, userenv)
+    return image
+
+def get_profiler_userenv(settings, id):
+    """
+    Get the userenv associated with a specific profiler (via it's ID)
+
+    Args:
+        settings (dict): the one data structure to rule then all
+        id (str): The profiler engine's ID
+
+    Globals:
+        None
+
+    Returns:
+        userenv (str): The userenv that the specified profiler engine ID should use
+        or
+        None: If no userenv was found for the specified profiler engine ID
+    """
+    profiler_name = None
+    for profiler in settings["engines"]["profiler-mapping"].keys():
+        if id in settings["engines"]["profiler-mapping"][profiler]["ids"]:
+            profiler_name = settings["engines"]["profiler-mapping"][profiler]["name"]
+
+    if profiler_name is None:
+        log.error("Could not find profiler name for id %s" % (id))
+    else:
+        if profiler_name in settings["misc"]["image-map"]:
+            if len(settings["misc"]["image-map"][profiler_name]) == 1:
+                for userenv in settings["misc"]["image-map"][profiler_name].keys():
+                    return userenv
+            else:
+                if len(settings["misc"]["image-map"][profiler_name]) == 0:
+                    log.error("Found no possible userenv for profiler %s" % (profiler_name))
+                else:
+                    log.error("Found more than one possible userenv for profiler %s" % (profiler_name))
+        log.error("Could not find profiler %s in image-map" % (profiler_name))
+
+    return None
