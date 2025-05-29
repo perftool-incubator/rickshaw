@@ -2364,7 +2364,8 @@ sub validate_endpoints() {
                                      " --base-run-dir=" . $run{'base-run-dir'} .
                                      " --rickshaw-dir=" . $rickshaw_project_dir .
                                      " --validate" );
-        if ($$endpoint{'type'} eq "remotehosts") {
+        if (($$endpoint{'type'} eq "remotehosts") or
+            ($$endpoint{'type'} eq "kube")) {
             $ENV{'ROADBLOCK_HOME'} = $run{'roadblock-dir'};
 
             foreach my $arg (split(/,/, $$endpoint{'opts'})) {
@@ -3057,7 +3058,8 @@ sub deploy_endpoints() {
                     $endpoint_image_opt .
                     $endpoint_roadblock_opt .
                     " >" . $this_endpoint_run_dir . "/endpoint-stderrout.txt 2>&1";
-            if ($type eq "remotehosts") {
+            if (($type eq "remotehosts") or
+                ($type eq "kube")) {
                 $ENV{'ROADBLOCK_HOME'} = $run{'roadblock-dir'};
 
                 foreach my $arg (split(/,/, $opts)) {
