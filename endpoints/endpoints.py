@@ -943,7 +943,8 @@ def process_roadblocks(callbacks = None, roadblock_id = None, endpoint_label = N
     if rc != 0:
         return rc
     callback = "engine-init"
-    if callback in callbacks:
+    engine_init_msgs = None
+    if callback in callbacks and callbacks[callback] is not None:
         log.info("Calling endpoint specified callback for '%s'" % (callback))
         engine_init_msgs = callbacks[callback]()
     else:
@@ -984,7 +985,8 @@ def process_roadblocks(callbacks = None, roadblock_id = None, endpoint_label = N
     if rc != 0:
         return rc
     callback = "collect-sysinfo"
-    if callback in callbacks:
+    engine_init_msgs = None
+    if callback in callbacks and callbacks[callback] is not None:
         log.info("Calling endpoint specified callback for '%s'" % (callback))
         engine_init_msgs = callbacks[callback]()
     else:
@@ -1060,7 +1062,8 @@ def process_roadblocks(callbacks = None, roadblock_id = None, endpoint_label = N
                  redis_password = roadblock_password,
                  msgs_dir = roadblock_messages_dir)
     callback = "remote-cleanup"
-    if callback in callbacks:
+    engine_init_msgs = None
+    if callback in callbacks and callbacks[callback] is not None:
         log.info("Calling endpoint specified callback for '%s'" % (callback))
         engine_init_msgs = callbacks[callback]()
     else:
@@ -1241,7 +1244,8 @@ def process_bench_roadblocks(callbacks = None, roadblock_id = None, endpoint_lab
             quit,abort = evaluate_roadblock(quit, abort, rb_name, rc, iteration_sample, engine_rx_msgs_dir, max_sample_failures)
 
             callback = "test-start"
-            if callback in callbacks:
+            engine_init_msgs = None
+            if callback in callbacks and callbacks[callback] is not None:
                 log.info("Calling endpoint specified callback for '%s'" % (callback))
                 engine_init_msgs = callbacks[callback](roadblock_messages_dir, test_id, engine_tx_msgs_dir)
             else:
@@ -1361,7 +1365,8 @@ def process_bench_roadblocks(callbacks = None, roadblock_id = None, endpoint_lab
             quit,abort = evaluate_roadblock(quit, abort, rb_name, rc, iteration_sample, engine_rx_msgs_dir, max_sample_failures)
 
             callback = "test-stop"
-            if callback in callbacks:
+            engine_init_msgs = None
+            if callback in callbacks and callbacks[callback] is not None:
                 log.info("Calling endpoint specified callback for '%s'" % (callback))
                 engine_init_msgs = callbacks[callback]()
             else:
