@@ -2334,6 +2334,7 @@ sub validate_endpoints() {
     my %endpoint_outputs : shared;
     my $collectors_present = 0;
     my %deprecated_endpoints;
+    my %experimental_endpoints;
     log_print "Confirming the endpoints will satisfy the benchmark requirements:\n";
 
     # enqueue one validation job per endpoint
@@ -2345,6 +2346,15 @@ sub validate_endpoints() {
             if (! exists $deprecated_endpoints{$$endpoint{'type'}}) {
                 debug_log(sprintf "The %s endpoint has not previously been queued for deprecation announcement so doing so\n", $$endpoint{'type'});
                 $deprecated_endpoints{$$endpoint{'type'}} = $deprecation_file;
+            }
+        }
+        debug_log(sprintf "Checking %s endopint for experimental status\n", $$endpoint{'type'});
+        my $experimental_file = $rickshaw_project_dir . "/endpoints/" . $$endpoint{'type'} . "/experimental";
+        if (-e $experimental_file) {
+            debug_log(sprintf "The %s endpoint is experimental\n", $$endpoint{'type'});
+            if (! exists $experimental_endpoints{$$endpoint{'type'}}) {
+                debug_log(sprintf "The %s endpoint has not previously been queued for experimental announcement so doing so\n", $$endpoint{'type'});
+                $experimental_endpoints{$$endpoint{'type'}} = $experimental_file;
             }
         }
         my %job = ( 'endpoint'    => $$endpoint{'label'},
@@ -2380,6 +2390,23 @@ sub validate_endpoints() {
             }
         }
         log_print "#################################################################################\n";
+    }
+
+    if ((keys %experimental_endpoints) > 0) {
+        log_print "*********************************************************************************\n";
+        foreach my $key (keys %experimental_endpoints) {
+            log_print sprintf "ATTENTION: The %s endpoint is experimental and should be treated as such.  The endpoint's experimental message is:\n", $key;
+            if (open(EXPERIMENTAL, "<", $experimental_endpoints{$key})) {
+                while (<EXPERIMENTAL>) {
+                    log_print $_;
+                }
+                close(EXPERIMENTAL);
+            } else {
+                log_print sprintf "ERROR: Failed to open experimental message file '%s' for endpoint '%s'!\n", $experimental_endpoints{$key}, $key;
+                exit 1;
+            }
+        }
+        log_print "*********************************************************************************\n";
     }
 
     my $num_threads = $available_cpus;
