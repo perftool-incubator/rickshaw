@@ -1665,7 +1665,7 @@ def launch_engines():
 
 def engine_init():
     """
-    Construct messages to initialize the engines with metadata specific to them'
+    Construct messages to initialize the engines with metadata specific to them
 
     Args:
         None
