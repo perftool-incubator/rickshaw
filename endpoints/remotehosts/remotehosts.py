@@ -1156,10 +1156,9 @@ def create_podman(thread_name, remote_name, engine_name, container_name, connect
         env_file.write("cs_label=" + engine_name + "\n")
         env_file.write("cpu_partitioning=" + str(cpu_partitioning) + "\n")
         if cpu_partitioning == 1:
-            settings["engines"]["remotes"][remote]["cpu-partitions-idx-lock"].acquire()
-            cpu_partition_idx = settings["engines"]["remotes"][remote]["cpu-partitions-idx"]
-            settings["engines"]["remotes"][remote]["cpu-partitions-idx"] += 1
-            settings["engines"]["remotes"][remote]["cpu-partitions-idx-lock"].release()
+            with settings["engines"]["remotes"][remote]["cpu-partitions-idx-lock"]:
+                cpu_partition_idx = settings["engines"]["remotes"][remote]["cpu-partitions-idx"]
+                settings["engines"]["remotes"][remote]["cpu-partitions-idx"] += 1
 
             thread_logger(thread_name, "Allocated cpu-partition index %d" % (cpu_partition_idx), remote_name = remote_name, engine_name = engine_name)
             env_file.write("cpu_partition_index=" + str(cpu_partition_idx) + "\n")
@@ -1465,10 +1464,9 @@ def start_chroot(thread_name, remote_name, engine_name, container_name, connecti
     ])
 
     if cpu_partitioning == 1:
-        settings["engines"]["remotes"][remote]["cpu-partitions-idx-lock"].acquire()
-        cpu_partition_idx = settings["engines"]["remotes"][remote]["cpu-partitions-idx"]
-        settings["engines"]["remotes"][remote]["cpu-partitions-idx"] += 1
-        settings["engines"]["remotes"][remote]["cpu-partitions-idx-lock"].release()
+        with settings["engines"]["remotes"][remote]["cpu-partitions-idx-lock"]:
+            cpu_partition_idx = settings["engines"]["remotes"][remote]["cpu-partitions-idx"]
+            settings["engines"]["remotes"][remote]["cpu-partitions-idx"] += 1
 
         thread_logger(thread_name, "Allocated cpu-partition index %d" % (cpu_partition_idx), remote_name = remote_name, engine_name = engine_name)
         start_cmd.extend([
