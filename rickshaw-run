@@ -1258,8 +1258,13 @@ sub source_container_image {
                     }
                 }
 
+                my $time_buffer_days = 1;
+                #                  days                   hours/day   min/hour   seconds/min
+                my $time_buffer = ($time_buffer_days    * 24        * 60       * 60);
                 if ($current_expiration >= $refresh_expiration) {
                     log_print sprintf "\tThe current expiration (%d / %s) is greater than or equal to the refresh expiration so not refreshing\n", $current_expiration, quay_image_refresh_formatted_timestamp($current_expiration);
+                } elsif (($refresh_expiration - $current_expiration) <= $time_buffer) {
+                    log_print sprintf "\tSkipping refresh expiration because the current expiration (%d / %s) is less than %d day(s) (%d seconds) ago\n", $current_expiration, quay_image_refresh_formatted_timestamp($current_expiration), $time_buffer_days, $time_buffer;
                 } else {
                     my $refresh_cmd = 'curl --silent' .
                                       ' -X PUT -H "Authorization: Bearer ' . $quay_refresh_expiration_tokens{$registry_type} . '"' .
