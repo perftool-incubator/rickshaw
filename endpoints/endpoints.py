@@ -758,7 +758,7 @@ def my_make_dirs(mydir):
     Returns:
         None
     """
-    log.info("Creating directory %s (recurisvely if necessary)" % (mydir), stacklevel = 2)
+    log.info("Creating directory %s (recursively if necessary)" % (mydir), stacklevel = 2)
     return os.makedirs(mydir, exist_ok = True)
 
 def build_benchmark_engine_mapping(benchmarks):
