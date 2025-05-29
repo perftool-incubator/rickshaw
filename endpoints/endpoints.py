@@ -86,7 +86,7 @@ def run_local(command, validate = False, debug = False):
         debug (bool): Is debug output enabled during validation mode
 
     Globals:
-        None
+        log: a logger instance
 
     Returns:
         an Invoke run result
@@ -128,7 +128,7 @@ def remote_connection(host, user, validate = False):
        validate (bool): Is the function being called from validation mode (which means that logging cannot be used)
 
     Globals:
-        None
+        log: a logger instance
 
     Returns:
        an open Fabric Connection
