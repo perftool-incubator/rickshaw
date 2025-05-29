@@ -12,6 +12,7 @@ import os
 from pathlib import Path
 import re
 import sys
+import tempfile
 import time
 
 TOOLBOX_HOME = os.environ.get('TOOLBOX_HOME')
@@ -86,21 +87,97 @@ def run_remote(connection, command, validate = False, debug = False, stdin = Non
         command (str): The command to run
         validate (bool): Is the function being called from validation mode (which means that logging cannot be used)
         debug (bool): Is debug output enabled during validation mode
+        stdin (str): A string to supply as STDIN to the command being run
 
     Globals:
-        None
+        log: a logger instance
 
     Returns:
         Fabric run result (obj)
     """
-    debug_msg = "on remote '%s' as '%s' running command '%s'" % (connection.host, connection.user, command)
+    debug_msg = "on remote '%s' as '%s' running command '%s' with input '%s'" % (connection.host, connection.user, command, stdin)
     if validate:
         if debug:
             validate_debug(debug_msg)
     else:
         log.debug(debug_msg, stacklevel = 2)
 
-    return connection.run(command, hide = True, warn = True)
+    input_stream = None
+    if stdin is not None:
+        result = connection.run("mktemp", hide = True)
+        remote_temp_filename = None
+        if result.exited == 0:
+            remote_temp_filename = result.stdout.strip()
+
+            msg = "Obtained remote temporary filename: %s" % (remote_temp_filename)
+            if validate:
+                validate_debug(msg)
+            else:
+                log.debug(msg)
+        else:
+            log_result(result)
+            msg = "Failed to create remote temporary file"
+            if validate:
+                validate_error(msg)
+            else:
+                log.error(msg)
+            return None
+
+        local_temp_filename = None
+        with tempfile.NamedTemporaryFile(mode = "w+t", delete = False) as nft:
+            nft.write(stdin)
+            local_temp_filename = nft.name
+        if local_temp_filename is None:
+            msg = "Failed to create local temporary file"
+            if validate:
+                validate_error(msg)
+            else:
+                log.error(msg)
+            return None
+        else:
+            msg = "Created local temoorary file: %s" % (local_temp_filename)
+            if validate:
+                validate_debug(msg)
+            else:
+                log.debug(msg)
+
+        result = connection.put(local_temp_filename, remote_temp_filename)
+
+        command = "cat %s | %s" % (remote_temp_filename, command)
+
+        msg = "Modified command: %s" % (command)
+        if validate:
+            valiate_debug(msg)
+        else:
+            log.debug(msg)
+
+        real_result = connection.run(command, hide = True, warn = True)
+
+        msg = "Removing local temporary file: %s" % (local_temp_filename)
+        if validate:
+            validate_debug(msg)
+        else:
+            log.debug(msg)
+        os.remove(local_temp_filename)
+
+        # remove remote temp file
+        msg = "Removing remote temporary file: %s" % (remote_temp_filename)
+        if validate:
+            validate_debug(msg)
+        else:
+            log.debug(msg)
+        result = connection.run("rm -v %s" % (remote_temp_filename), hide = True)
+        if result.exited != 0:
+            log_result(result)
+            msg = "Failed to remove remote temporary file: %s" % (remote_temp_filename)
+            if validate:
+                validate_error(msg)
+            else:
+                log.error(msg)
+
+        return real_result
+    else:
+        return connection.run(command, hide = True, warn = True)
 
 def run_local(command, validate = False, debug = False):
     """
