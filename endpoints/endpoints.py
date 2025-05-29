@@ -899,15 +899,21 @@ def process_roadblocks(callbacks = None, roadblock_id = None, endpoint_label = N
     """
     log.info("Starting to process roadblocks")
 
-    new_followers_msg_payload = {
-        "new-followers": new_followers
-    }
-    new_followers_msg = create_roadblock_msg("all", "all", "user-object", new_followers_msg_payload)
+    new_followers_msg_file = None
+    if len(new_followers) > 0:
+        log.info("Informing roadblock leader of these new followers: %s" % (new_followers))
 
-    new_followers_msg_file = roadblock_messages_dir + "/new-followers.json"
-    log.info("Writing new followers message to %s" % (new_followers_msg_file))
-    with open(new_followers_msg_file, "w", encoding = "ascii") as new_followers_msg_file_fp:
-        new_followers_msg_file_fp.write(dump_json(new_followers_msg))
+        new_followers_msg_payload = {
+            "new-followers": new_followers
+        }
+        new_followers_msg = create_roadblock_msg("all", "all", "user-object", new_followers_msg_payload)
+
+        new_followers_msg_file = roadblock_messages_dir + "/new-followers.json"
+        log.info("Writing new followers message to %s" % (new_followers_msg_file))
+        with open(new_followers_msg_file, "w", encoding = "ascii") as new_followers_msg_file_fp:
+            new_followers_msg_file_fp.write(dump_json(new_followers_msg))
+    else:
+        log.info("No new followers to inform the roadblock leader about")
 
     rc = do_roadblock(roadblock_id = roadblock_id,
                       follower_id = endpoint_label,
