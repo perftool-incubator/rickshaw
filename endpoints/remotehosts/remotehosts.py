@@ -495,6 +495,7 @@ def build_unique_remote_configs():
         None
 
     Globals:
+        args (namespace): the script's CLI parameters
         log: a logger instance
         settings (dict): the one data structure to rule then all
 
