@@ -51,7 +51,33 @@ roadblock_exits = {
 
 log = logging.getLogger(__file__)
 
-def run_remote(connection, command, validate = False, debug = False):
+def log_result(result, level = None):
+    """
+    Create a log entry with a common format for Fabric/Invoke run results
+
+    Args:
+        result (Fabric/Invoke result): The result to create a log entry for
+        level(str): Optional string specifically stating how to classify the log entry rather than using the result's exit status
+                    Choices: info | error | debug
+
+    Globals:
+        log: a logger instance
+
+    Returns:
+        the return value from the resulting log function call
+    """
+    msg = "command '%s' exited with rc=%d:\nstdout=[\n%s]\nstderr=[\n%s]" % (result.command, result.exited, result.stdout, result.stderr)
+    if (level is None and result.exited == 0) or level == "info":
+        return log.info(msg, stacklevel = 2)
+    elif (level is None and result.exited != 0) or level == "error":
+        return log.error(msg, stacklevel = 2)
+    elif level == "debug":
+        return log.debug(msg, stacklevel = 2)
+    else:
+        log.error("Unknown level '%s' specified" % (level))
+        return log.error(msg, stacklevel = 2)
+
+def run_remote(connection, command, validate = False, debug = False, stdin = None):
     """
     Run a command on a remote server using an existing Fabric connection
 
