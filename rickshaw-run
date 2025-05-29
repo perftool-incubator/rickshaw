@@ -2384,6 +2384,7 @@ sub validate_endpoints() {
                 while (<DEPRECATION>) {
                     log_print $_;
                 }
+                close(DEPRECATION);
             } else {
                 log_print sprintf "ERROR: Failed to open deprecation message file '%s' for endpoint '%s'!\n", $deprecated_endpoints{$key}, $key;
                 exit 1;
