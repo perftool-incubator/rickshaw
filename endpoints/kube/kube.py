@@ -1521,14 +1521,14 @@ def main():
         return 1
 
     # KMR implement callbacks
-    remotehosts_callbacks = {
+    kube_callbacks = {
         "engine-init": engine_init,
         "collect-sysinfo": None,
         "test-start": None,
         "test-stop": None,
         "remote-cleanup": kube_cleanup
     }
-    rc = endpoints.process_roadblocks(callbacks = remotehosts_callbacks,
+    rc = endpoints.process_roadblocks(callbacks = kube_callbacks,
                                       roadblock_id = args.roadblock_id,
                                       endpoint_label = args.endpoint_label,
                                       endpoint_deploy_timeout = args.endpoint_deploy_timeout,
@@ -1543,7 +1543,7 @@ def main():
 
     log.info("Logging 'final' settings data structure")
     endpoints.log_settings(settings, mode = "settings")
-    log.info("remotehosts endpoint exiting")
+    log.info("kube endpoint exiting")
     return rc
 
 if __name__ == "__main__":
