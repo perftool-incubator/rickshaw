@@ -181,6 +181,9 @@
             "type": "object",
             "minProperties": 1,
             "properties": {
+                "cpu-partitioning": {
+                    "type": "boolean"
+                },
                 "nodeSelector": {
                     "type": "object",
                     "minProperties": 1
@@ -199,6 +202,10 @@
                         "burstable",
                         "guaranteed"
                     ]
+                },
+                "securityContext": {
+                    "type": "object",
+                    "minProperties": 1
                 },
                 "userenv": {
                     "type": "string",
