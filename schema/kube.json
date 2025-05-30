@@ -177,6 +177,10 @@
         "engines"
     ],
     "definitions": {
+        "memory": {
+            "type": "string",
+            "pattern": "^[1-9][0-9]*(Mi|Gi)$"
+        },
         "settings": {
             "type": "object",
             "minProperties": 1,
@@ -202,6 +206,58 @@
                         "burstable",
                         "guaranteed"
                     ]
+                },
+                "resources": {
+                    "type": "object",
+                    "minProperties": 1,
+                    "properties": {
+                        "cpu": {
+                            "type": "object",
+                            "minProperties": 1,
+                            "properties": {
+                                "limits": {
+                                    "type": "number",
+                                    "exclusiveMinimum": 0
+                                },
+                                "requests": {
+                                    "type": "number",
+                                    "exclusiveMinimum": 0
+                                }
+                            },
+                            "additionalProperties": false
+                        },
+                        "hugepages": {
+                            "type": "object",
+                            "properties": {
+                                "size": {
+                                    "$ref": "#/definitions/memory"
+                                },
+                                "type": {
+                                    "type": "string",
+                                    "pattern": "^hugepages-[1-9][0-9]*(Mi|Gi)$"
+                                }
+                            },
+                            "additionalProperties": false,
+                            "required": [
+                                "count",
+                                "size"
+                            ]
+                        },
+                        "memory": {
+                            "type": "object",
+                            "minProperties": 1,
+                            "properties": {
+                                "limits": {
+                                    "$ref": "#/definitions/memory"
+                                },
+                                "requests": {
+                                    "$ref": "#/definitions/memory"
+                                }
+                            },
+                            "additionalProperties": false
+                        }
+                    },
+                    "additionalProperties": false
                 },
                 "securityContext": {
                     "type": "object",

@@ -709,30 +709,28 @@ def create_pod_crd(role = None, id = None, node = None):
 
         # KMR handle hostNetwork
 
+        crd["spec"]["volumes"] = [
+            {
+                "name": "hostfs-firmware",
+                "hostPath": {
+                    "path": "/lib/firmware",
+                    "type": "Directory"
+                }
+            }
+        ]
+
         user_volumes = False
         if user_volumes:
             # KMR handle user volumes
             pass
-        else:
-            crd["spec"]["volumes"] = [
-                {
-                    "name": "hostfs-firmware",
-                    "hostPath": {
-                        "path": "/lib/firmware",
-                        "type": "Directory"
-                    }
-                }
-            ]
 
-            # KMR fixup hugepages
-            hugepages = False
-            if hugepages:
-                crd["spec"]["volumes"].append({
-                    "name": "hugepage",
-                    "emptyDir": {
-                        "medium": "HugePages"
-                    }
-                })
+        if "resources" in pod_settings and "hugepages" in pod_settings["resources"]:
+            crd["spec"]["volumes"].append({
+                "name": "hugepage",
+                "emptyDir": {
+                    "medium": "HugePages"
+                }
+            })
 
     container_names = []
     if role == "client" or role == "server":
@@ -849,26 +847,60 @@ def create_pod_crd(role = None, id = None, node = None):
             ]
 
         if role == "client" or role == "server":
-            # KMR handle resources
-
             if "securityContext" in pod_settings:
                 container["securityContext"] = copy.deepcopy(pod_settings["securityContext"])
+
+            container["volumeMounts"] = [
+                {
+                    "mountPath": "/lib/firmware",
+                    "name": "hostfs-firmware"
+                }
+            ]
 
             user_volumes = False
             if user_volumes:
                 # KMR handle user volumes
                 pass
-            else:
-                container["volumeMounts"] = [
-                    {
-                        "mountPath": "/lib/firmware",
-                        "name": "hostfs-firmware"
-                    }
-                ]
 
-                # KMR fixup huagepages
-                hugepages = False
-                if hugepages:
+            if "resources" in pod_settings:
+                has_limits = False
+                has_requests = False
+                if "cpu" in pod_settings["resources"]:
+                    if "limits" in pod_settings["resources"]["cpu"]:
+                        has_limits = True
+                    if "requests" in pod_settings["resources"]["cpu"]:
+                        has_requests = True
+                if "memory" in pod_settings["resources"]:
+                    if "limits" in pod_settings["resources"]["memory"]:
+                        has_limits = True
+                    if "requests" in pod_settings["resources"]["memory"]:
+                        has_requests = True
+                if "hugepages" in pod_settings["resources"]:
+                    has_limits = True
+                    has_requests = True
+
+                container["resources"] = dict()
+                if has_limits:
+                    container["resources"]["limits"] = dict()
+                if has_requests:
+                    container["resources"]["requests"] = dict()
+
+                if "cpu" in pod_settings["resources"]:
+                    if "limits" in pod_settings["resources"]["cpu"]:
+                        container["resources"]["limits"]["cpu"] = pod_settings["resources"]["cpu"]["limits"]
+                    if "requests" in pod_settings["resources"]["cpu"]:
+                        container["resources"]["requests"]["cpu"] = pod_settings["resources"]["cpu"]["requests"]
+
+                if "memory" in pod_settings["resources"]:
+                    if "limits" in pod_settings["resources"]["memory"]:
+                        container["resources"]["limits"]["memory"] = pod_settings["resources"]["memory"]["limits"]
+                    if "requests" in pod_settings["resources"]["memory"]:
+                        container["resources"]["requests"]["memory"] = pod_settings["resources"]["memory"]["requests"]
+
+                if "hugepages" in pod_settings["resources"]:
+                    container["resources"]["limits"][pod_settings["resources"]["hugepages"]["type"]] = pod_settings["resources"]["hugepages"]["size"]
+                    container["resources"]["requests"][pod_settings["resources"]["hugepages"]["type"]] = pod_settings["resources"]["hugepages"]["size"]
+
                     container["volumeMounts"].append({
                         "mountPath": "/dev/hugepages",
                         "name": "hugepage"
