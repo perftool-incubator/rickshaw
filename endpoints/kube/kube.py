@@ -937,7 +937,7 @@ def verify_pods_running(connection, pods):
                 log.info("Checking status of pod '%s'" % (pod_name))
                 running_containers = []
                 for container in pod["status"]["containerStatuses"]:
-                    log.info("Checking status of container '%s:\n%s'" % (container["name"], endpoints.dump_json(container["state"])))
+                    log.info("Checking status of container '%s:\n%s" % (container["name"], endpoints.dump_json(container["state"])))
                     if "running" in container["state"]:
                         log.info("Container '%s' is running" % (container["name"]))
                         running_containers.append(container["name"])
