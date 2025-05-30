@@ -851,7 +851,8 @@ def create_pod_crd(role = None, id = None, node = None):
         if role == "client" or role == "server":
             # KMR handle resources
 
-            # KMR handle securityContext
+            if "securityContext" in pod_settings:
+                container["securityContext"] = copy.deepcopy(pod_settings["securityContext"])
 
             user_volumes = False
             if user_volumes:
