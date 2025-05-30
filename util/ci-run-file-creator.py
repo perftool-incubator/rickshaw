@@ -322,7 +322,7 @@ def update_controller_ip():
                 else:
                     log.debug("No controller-ip to update for %s endpoint %d" % (args.endpoint, endpoint_idx))
         case "kube":
-            for endpoint_idx,endpoint in enumerate(run_file["endpoints"]);
+            for endpoint_idx,endpoint in enumerate(run_file["endpoints"]):
                 if "controller-ip-address" in endpoint:
                     log.info("Updating existing %s controller-ip-address for endpoint %d" % (args.endpoint, endpoint_idx))
                     endpoint["controller-ip-address"] = args.controller_ip
