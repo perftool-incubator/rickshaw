@@ -100,13 +100,6 @@
                 }
             ]
         },
-        "unique-project": {
-            "type": "boolean"
-        },
-        "unique-project-name": {
-            "type": "string",
-            "minLength": 1
-        },
         "user": {
             "type": "string",
             "minLength": 1
