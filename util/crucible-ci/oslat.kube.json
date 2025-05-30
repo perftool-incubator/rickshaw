@@ -1,0 +1,79 @@
+{
+    "benchmarks": [
+        {
+            "name": "oslat",
+            "ids": "1",
+            "mv-params": {
+                "global-options": [
+                    {
+                        "name": "common-params",
+                        "params": [
+                            { "arg": "duration", "vals": [ "10", "15" ], "role": "client" }
+                        ]
+                    }
+                ],
+                "sets": [
+                    {
+                        "include": "common-params"
+                    }
+                ]
+            }
+        }
+    ],
+    "tool-params": [
+        {
+            "tool": "sysstat"
+        },
+        {
+            "tool": "procstat"
+        },
+        {
+            "tool": "kernel",
+            "params": [
+                {
+                    "arg": "subtools",
+                    "val": "turbostat"
+                }
+            ]
+        }
+    ],
+    "tags": {
+        "description": "oslat-kube-run-file-json"
+    },
+    "endpoints": [
+	{
+	    "type": "kube",
+	    "controller-ip-address": "CONTROLLER_IP",
+	    "host": "CI_ENDPOINT_HOST",
+	    "user": "CI_ENDPOINT_USER",
+	    "engines": {
+		"server": 1,
+		"client": 1
+	    },
+	    "config": [
+		{
+		    "targets": [
+                        { "role": "client", "ids": 1 }
+		    ],
+                    "settings": {
+                        "securityContext": {
+                            "capabilities": {
+                                "add": [ "SYS_NICE", "IPC_LOCK" ]
+                            }
+                        }
+                    }
+		},
+		{
+                    "targets": "default",
+                    "settings": {
+                        "cpu-partitioning": true
+                    }
+		}
+	    ]
+	}
+    ],
+    "run-params": {
+	"num-samples": 1,
+	"test-order": "s"
+    }
+}

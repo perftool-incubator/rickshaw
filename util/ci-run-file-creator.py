@@ -57,7 +57,7 @@ def process_options():
                         dest = "endpoint",
                         help = "The endpoint to return a run-file for",
                         required = True,
-                        choices = [ "k8s", "remotehosts" ],
+                        choices = [ "k8s", "remotehosts", "kube" ],
                         type = str)
 
     parser.add_argument("--endpoint-sub-type",
@@ -158,7 +158,7 @@ def update_endpoint_sub_type():
     run_file["tags"]["endpoint-sub-type"] = args.endpoint_sub_type
 
     match args.endpoint:
-        case "remotehosts":
+        case "remotehosts" | "kube":
             if args.endpoint_sub_type != "NONE":
                 msg = "%s endpoint expected sub-type of 'NONE' (not '%s')" % (args.endpoint, args.endpoint_sub_type)
                 log.error(msg)
@@ -221,6 +221,45 @@ def update_userenvs():
                     else:
                         log.info("Creating %s userenv for endpoint %d since requested userenv is not default" % (args.endpoint, endpoint_idx))
                         endpoint["userenv"] = args.userenv
+        case "kube":
+            for endpoint_idx,endpoint in enumerate(run_file["endpoints"]):
+                if "config" in endpoint:
+                    default_present = False
+                    for cfg_entry,cfg_entry_idx in enumerate(endpoint["config"]):
+                        if isinstance(cfg_etry["targets"], str) and cfg_entry["targets"] == "default":
+                            default_present = True
+                        if "userenv" in cfg_entry["settings"]:
+                            if args.userenv == "default":
+                                log.info("Found existing %s userenv for config entry %d in endpoint %d but since requested userenv is default it is being removed" % (args.endpoint, cfg_entry_idx, endpoint_idx))
+                                del cfg_entry["settings"]["userenv"]
+                            else:
+                                log.info("Updating existing %s userenv for config entry %d in endpoint %d" % (args.endpoint, cfg_entry_idx, endpoint_idx))
+                                cfg_entry["settings"]["userenv"] = args.userenv
+                        else:
+                            if args.userenv == "default":
+                                log.info("No %s userenv found for config entry %d in endpoint %d and no update required since requested userenv is default" % (args.endpoint, cfg_entry_idx, endpoint_idx))
+                            else:
+                                log.info("Creating %s userenv setting for config entry %d in endpoint %d" % (args.endpoint, cfg_entry_idx, endpoint_idx))
+                                cfg_entry["settings"]["userenv"] = args.userenv
+                    if args.userenv != "default" and not default_present:
+                        log.info("A non default %s userenv was requested and no default target exists for endpoint %d so creating one" % (args.endpoint, endpoint_idx))
+                        endpoint["config"].append({
+                            "targets": "default",
+                            "settings": {
+                                "userenv": args.userenv
+                            }
+                        })
+                else:
+                     if args.userenv != "default":
+                         log.info("A non default %s userenv was requested and no config object exists for endpoint %s so creating one" % (args.endpoint, endpoint_idx))
+                         endpoint["config"] = [
+                             {
+                                 "targets": "default",
+                                 "settings": {
+                                     "userenv": args.userenv
+                                 }
+                             }
+                         ]
         case "remotehosts":
             endpoint = run_file["endpoints"][0]
             if "userenv" in endpoint["settings"]:
@@ -282,6 +321,13 @@ def update_controller_ip():
                     endpoint["controller-ip"] = args.controller_ip
                 else:
                     log.debug("No controller-ip to update for %s endpoint %d" % (args.endpoint, endpoint_idx))
+        case "kube":
+            for endpoint_idx,endpoint in enumerate(run_file["endpoints"]):
+                if "controller-ip-address" in endpoint:
+                    log.info("Updating existing %s controller-ip-address for endpoint %d" % (args.endpoint, endpoint_idx))
+                    endpoint["controller-ip-address"] = args.controller_ip
+                else:
+                    log.debug("No %s controller-ip-address to update for endpoint %d" % (args.endpoint, endpoint_idx))
         case "remotehosts":
             endpoint = run_file["endpoints"][0]
             if "controller-ip-address" in endpoint["settings"]:
@@ -325,7 +371,7 @@ def update_host():
     run_file["tags"]["host"] = args.host
 
     match args.endpoint:
-        case "k8s":
+        case "k8s" | "kube":
             for endpoint_idx,endpoint in enumerate(run_file["endpoints"]):
                 if "host" in endpoint:
                     log.info("Updating existing %s host for endpoint %d" % (args.endpoint, endpoint_idx))
@@ -366,7 +412,7 @@ def update_user():
     run_file["tags"]["user"] = args.user
 
     match args.endpoint:
-        case "k8s":
+        case "k8s" | "kube":
             for endpoint_idx,endpoint in enumerate(run_file["endpoints"]):
                 if "user" in endpoint:
                     log.info("Updating existing %s user for endpoint %d" % (args.endpoint, endpoint_idx))

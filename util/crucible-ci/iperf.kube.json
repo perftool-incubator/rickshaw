@@ -1,0 +1,65 @@
+{
+    "benchmarks": [
+        {
+            "name": "iperf",
+            "ids": "1-2",
+            "mv-params": {
+                "global-options": [
+                    {
+                        "name": "required",
+                        "params": [
+			    { "arg": "time", "vals": [ "10" ], "role": "client" },
+			    { "arg": "protocol", "vals": [ "tcp" ] },
+			    { "arg": "bitrate", "vals": [ "0" ] },
+			    { "arg": "ifname", "vals" : [ "default-route" ], "role": "server" }
+                        ]
+                    }
+                ],
+                "sets": [
+                    {
+                        "include": "required",
+                        "params": [
+			    { "arg": "length", "vals": [ "256", "1024" ] }
+                        ]
+                    }
+                ]
+            }
+        }
+    ],
+    "tool-params": [
+        {
+            "tool": "sysstat"
+        },
+        {
+            "tool": "procstat"
+        },
+        {
+            "tool": "kernel",
+            "params": [
+                {
+                    "arg": "subtools",
+                    "val": "turbostat"
+                }
+            ]
+        }
+    ],
+    "tags": {
+        "description": "iperf-kube-run-file-json"
+    },
+    "endpoints": [
+	{
+	    "type": "kube",
+	    "controller-ip-address": "CONTROLLER_IP",
+	    "host": "CI_ENDPOINT_HOST",
+	    "user": "CI_ENDPOINT_USER",
+	    "engines": {
+		"server": "1-2",
+		"client": "1-2"
+	    }
+	}
+    ],
+    "run-params": {
+	    "num-samples": 1,
+	    "test-order": "s"
+    }
+}

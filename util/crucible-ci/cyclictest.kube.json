@@ -1,0 +1,79 @@
+{
+    "benchmarks": [
+        {
+            "name": "cyclictest",
+            "ids": "1",
+            "mv-params": {
+                "global-options": [
+                    {
+			"name": "required",
+			"params": [
+                            { "arg": "duration", "vals": [ "10" ], "role": "client" },
+                            { "arg": "priority", "vals": [ "1", "2" ], "role": "client" },
+                            { "arg": "smi", "vals": [ "off" ], "role": "client" }
+			]
+                    }
+                ],
+                "sets": [
+                    {
+			"include": "required"
+                    }
+                ]
+            }
+        }
+    ],
+    "tool-params": [
+        {
+            "tool": "sysstat"
+        },
+        {
+            "tool": "procstat"
+        },
+        {
+            "tool": "kernel",
+            "params": [
+                {
+                    "arg": "subtools",
+                    "val": "turbostat"
+                }
+            ]
+        }
+    ],
+    "tags": {
+        "description": "cyclictest-kube-run-file-json"
+    },
+    "endpoints": [
+        {
+            "type": "kube",
+            "controller-ip-address": "CONTROLLER_IP",
+            "host": "CI_ENDPOINT_HOST",
+            "user": "CI_ENDPOINT_USER",
+	    "engines": {
+		"server": 1,
+		"client": "1-2"
+	    },
+            "config": [
+                {
+                    "targets": [
+                        { "role": "client", "ids": "1-2" }
+                    ],
+                    "settings": {
+                        "securityContext": {
+			    "privileged": true
+                        }
+                    }
+                },
+                {
+                    "targets": "default",
+                    "settings": {
+                        "cpu-partitioning": true
+                    }
+                }
+            ]
+        }
+    ],
+    "run-params": {
+	    "num-samples": 1,
+	    "test-order": "s"
+    }
+}

@@ -1,0 +1,58 @@
+{
+    "benchmarks": [
+        {
+            "name": "sleep",
+            "ids": "1-2",
+            "mv-params": {
+                "global-options": [
+                    {
+			"name": "required",
+			"params": [
+			    { "arg": "seconds", "vals": [ "10" ] }
+			]
+                    }
+                ],
+                "sets": [
+                    {
+			"include": "required"
+                    }
+                ]
+            }
+        }
+    ],
+    "tool-params": [
+        {
+            "tool": "sysstat"
+        },
+        {
+            "tool": "procstat"
+        },
+        {
+            "tool": "kernel",
+            "params": [
+                {
+                    "arg": "subtools",
+                    "val": "turbostat"
+                }
+            ]
+        }
+    ],
+    "tags": {
+        "description": "sleep-kube-run-file-json"
+    },
+    "endpoints": [
+	{
+	    "type": "kube",
+	    "controller-ip-address": "CONTROLLER_IP",
+	    "host": "CI_ENDPOINT_HOST",
+	    "user": "CI_ENDPOINT_USER",
+	    "engines": {
+		"client": "1-2"
+	    }
+	}
+    ],
+    "run-params": {
+	    "num-samples": 1,
+	    "test-order": "s"
+    }
+}

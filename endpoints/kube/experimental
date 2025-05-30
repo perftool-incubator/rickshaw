@@ -1,0 +1,4 @@
+The kube endpoint is currently undergoing active development and
+testing to ensure that it is ready for production usage.  While you
+can use it, please be aware that it may still have bugs and/or missing
+functionality that could impact it's usage.
