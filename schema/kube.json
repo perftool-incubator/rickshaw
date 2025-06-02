@@ -199,12 +199,12 @@
                         "pod"
                     ]
                 },
-                "qos-class": {
+                "qosClass": {
                     "type": "string",
                     "enum": [
-                        "best-effort",
-                        "burstable",
-                        "guaranteed"
+                        "BestEffort",
+                        "Burstable",
+                        "Guaranteed"
                     ]
                 },
                 "resources": {

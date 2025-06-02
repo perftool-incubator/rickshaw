@@ -911,13 +911,14 @@ def create_pod_crd(role = None, id = None, node = None):
     
     return crd, 0
 
-def verify_pods_running(connection, pods):
+def verify_pods_running(connection, pods, pod_details):
     """
     Take the list of pods and verify that they are running and collect information about them
 
     Args:
-       connection (Fabric): 
-       engines (list): 
+       connection (Fabric): The Fabric connection to use to run commands
+       pods (list): The list of pods that are to be verified to be in the running state
+       pod_details (dict): Additional metadata that can be used to verify that the pod is properly configured
 
     Globals:
        log
@@ -929,9 +930,11 @@ def verify_pods_running(connection, pods):
        None: error
     """
     log.info("Verifying that these pods are running: %s" % (pods))
+    log.info("Received these additional pod details:\n%s" % (endpoints.dump_json(pod_details)))
     pods_info = dict()
     verified_pods = []
     unverified_pods = []
+    invalid_pods = []
     unverified_pods.extend(pods)
 
     endpoint = settings["run-file"]["endpoints"][args.endpoint_index]
@@ -941,6 +944,7 @@ def verify_pods_running(connection, pods):
         log.info("Loop pass %d" % (count))
         log.info("Unverified pods: %s" % (unverified_pods))
         log.info("Verified pods:   %s" % (verified_pods))
+        log.info("Invalid pods:    %s" % (invalid_pods))
         count += 1
 
         log.info("Collecting pod status for namespace '%s'" % (endpoint["namespace"]["name"]))
@@ -968,29 +972,47 @@ def verify_pods_running(connection, pods):
             if pod_name in unverified_pods:
                 log.info("Checking status of pod '%s'" % (pod_name))
                 running_containers = []
+                valid_configuration = True
                 for container in pod["status"]["containerStatuses"]:
                     log.info("Checking status of container '%s:\n%s" % (container["name"], endpoints.dump_json(container["state"])))
                     if "running" in container["state"]:
                         log.info("Container '%s' is running" % (container["name"]))
                         running_containers.append(container["name"])
+
+                        if pod_details[pod_name]["role"] in [ "client", "server" ]:
+                            pod_settings = endpoint["engines"]["settings"][pod_details[pod_name]["role"]][pod_details[pod_name]["id"]]
+                            if "qosClass" in pod_settings:
+                                if pod_settings["qosClass"] != pod["status"]["qosClass"]:
+                                    log.error("Pod '%s' requested qosClass of '%s' but is running with qosClass of '%s'" % (pod_name, pod_settings["qosClass"], pod["status"]["qosClass"]))
+                                    valid_configuration = False
+                                else:
+                                    log.info("Verified pod '%s' has requested qosClass of '%s'" % (pod_name, pod["status"]["qosClass"]))
                     else:
                         log.info("Container '%s' is not running" % (container["name"]))
-                        # KMR log what the state is
 
                 if len(running_containers) == len(pod["status"]["containerStatuses"]):
-                    log.info("All containers in pod '%s' are running -> it is verified" % (pod_name))
-                    unverified_pods.remove(pod_name)
-                    verified_pods.append(pod_name)
-                    pods_info[pod_name] = {
-                        "name": pod_name,
-                        "node": pod["spec"]["nodeName"],
-                        "containers": copy.deepcopy(running_containers)
-                    }
+                    if valid_configuration:
+                        log.info("All containers in pod '%s' are running -> it is verified" % (pod_name))
+                        unverified_pods.remove(pod_name)
+                        verified_pods.append(pod_name)
+                        pods_info[pod_name] = {
+                            "name": pod_name,
+                            "node": pod["spec"]["nodeName"],
+                            "containers": copy.deepcopy(running_containers)
+                        }
+                    else:
+                        log.info("All containers in pod '%s' are running, but the pod or one of it's containers has an invalid configuration" % (pod_name))
+                        unverified_pods.remove(pod_name)
+                        invalid_pods.append(pod_name)
                 else:
                     log.info("There are %d containers in pod '%s' that are not yet running -> it is not verified" % ((len(pod["status"]["containerStatuses"]) - len(running_containers)), pod_name))
+                    if not valid_configuration:
+                        log.error("The pod '%s' or one of it's containers has an invalid configuration" % (pod_name))
 
             elif pod_name in verified_pods:
                 log.info("Skipping pod '%s' because it is already verified" % (pod_name))
+            elif pod_name in invalid_pods:
+                log.warning("Skipping pod '%s' because is is invalid" % (pod_name))
             else:
                 log.warning("Pod '%s' is untracked" % (pod_name))
 
@@ -1001,9 +1023,10 @@ def verify_pods_running(connection, pods):
 
     if len(verified_pods) != len(pods):
         log.error("Unable to verify all pods")
-        log.error("all        - %d: %s" % (pods))
+        log.error("all        - %d: %s" % (len(pods), pods))
         log.error("unverified - %d: %s" % (len(unverified_pods), unverified_pods))
         log.error("verified   - %d: %s" % (len(verified_pods), verified_pods))
+        log.error("invalid    - %d: %s" % (len(invalid_pods), invalid_pods))
     else:
         log.info("Verified all %d pods: %s" % (len(pods), pods))
 
@@ -1109,6 +1132,7 @@ def create_cs_pods(cpu_partitioning = None):
         log.info("Creating CRDs")
         failed_crds = []
         created_crds = []
+        engine_details = dict()
         for engine in engines:
             engine_name = "%s-%d" % (engine["role"], engine["id"])
             log.info("Creating CRD for '%s'" % (engine_name))
@@ -1121,6 +1145,10 @@ def create_cs_pods(cpu_partitioning = None):
             else:
                 log.info("Created CRD for '%s'" % (engine_name))
                 created_crds.append(engine_name)
+                engine_details[engine_name] = {
+                    "role": engine["role"],
+                    "id": engine["id"]
+                }
         settings["engines"]["endpoint"]["created"]["succeeded"].extend(created_crds)
         settings["engines"]["endpoint"]["created"]["failed"].extend(failed_crds)
         if len(created_crds) > 0:
@@ -1132,7 +1160,10 @@ def create_cs_pods(cpu_partitioning = None):
         if not "pods" in settings["engines"]["endpoint"]:
             settings["engines"]["endpoint"]["pods"] = dict()
 
-        pod_status = verify_pods_running(con, created_crds)
+        pod_status = verify_pods_running(con, created_crds, engine_details)
+        if pod_status is None:
+            log.error("Encountered fatal error while verifying pods")
+            return 2
         log.info("Reviewing pods")
         for pod in pod_status.keys():
             log.info("Pod '%s' is running on node '%s'" % (engine, pod_status[pod]["node"]))
@@ -1306,6 +1337,7 @@ def create_tools_pods():
         log.info("Creating CRDs")
         failed_crds = []
         created_crds = []
+        pod_details = dict()
         for pod in settings["engines"]["endpoint"]["classes"]["profiled-nodes"]:
             pod_name = "%s-%d" % (pod["role"], pod["id"])
             log.info("Creating CRD for pod '%s'" % (pod_name))
@@ -1318,6 +1350,10 @@ def create_tools_pods():
             else:
                 log.info("Created CRD for pod '%s'" % (pod_name))
                 created_crds.append(pod_name)
+                pod_details[pod_name] = {
+                    "role": pod["role"],
+                    "id": pod["id"]
+                }
         settings["engines"]["endpoint"]["created"]["succeeded"].extend(created_crds)
         settings["engines"]["endpoint"]["created"]["failed"].extend(failed_crds)
         if len(created_crds) > 0:
@@ -1329,7 +1365,10 @@ def create_tools_pods():
         if not "pods" in settings["engines"]["endpoint"]:
             settings["engines"]["endpoint"]["pods"] = dict()
 
-        pod_status = verify_pods_running(con, created_crds)
+        pod_status = verify_pods_running(con, created_crds, pod_details)
+        if pod_status is None:
+            log.error("Enclountered fatal error while verifying pods")
+            return 2
         log.info("Reviewing pods")
         for pod in pod_status.keys():
             log.info("Pod '%s' is running on node '%s'" % (pod, pod_status[pod]["node"]))
