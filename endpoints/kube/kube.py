@@ -1090,7 +1090,7 @@ def create_cs_pods(cpu_partitioning = None):
             engine_name = "%s-%d" % (engine["role"], engine["id"])
             log.info("Validating CRD for '%s'" % (engine_name))
             cmd = "%s create --filename - --dry-run=server --validate=strict" % (settings["misc"]["k8s-bin"])
-            result = endpoints.run_remote(con, cmd, debug = settings["misc"]["debug-output"], stdin = json.dumps(engine["crd"]))
+            result = endpoints.run_remote(con, cmd, debug = settings["misc"]["debug-output"], stdin = endpoints.dump_json(engine["crd"]))
             endpoints.log_result(result)
             if result.exited != 0:
                 log.error("Did not validate CRD for '%s'" % (engine_name))
@@ -1113,7 +1113,7 @@ def create_cs_pods(cpu_partitioning = None):
             engine_name = "%s-%d" % (engine["role"], engine["id"])
             log.info("Creating CRD for '%s'" % (engine_name))
             cmd = "%s create --filename -" % (settings["misc"]["k8s-bin"])
-            result = endpoints.run_remote(con, cmd, debug = settings["misc"]["debug-output"], stdin = json.dumps(engine["crd"]))
+            result = endpoints.run_remote(con, cmd, debug = settings["misc"]["debug-output"], stdin = endpoints.dump_json(engine["crd"]))
             endpoints.log_result(result)
             if result.exited != 0:
                 log.error("Did not create CRD for '%s'" % (engine_name))
@@ -1287,7 +1287,7 @@ def create_tools_pods():
             pod_name = "%s-%d" % (pod["role"], pod["id"])
             log.info("Validating CRD for pod '%s'" % (pod_name))
             cmd = "%s create --filename - --dry-run=server --validate=strict" % (settings["misc"]["k8s-bin"])
-            result = endpoints.run_remote(con, cmd, debug = settings["misc"]["debug-output"], stdin = json.dumps(pod["crd"]))
+            result = endpoints.run_remote(con, cmd, debug = settings["misc"]["debug-output"], stdin = endpoints.dump_json(pod["crd"]))
             endpoints.log_result(result)
             if result.exited != 0:
                 log.error("Did not validate CRD for pod '%s'" % (pod_name))
@@ -1310,7 +1310,7 @@ def create_tools_pods():
             pod_name = "%s-%d" % (pod["role"], pod["id"])
             log.info("Creating CRD for pod '%s'" % (pod_name))
             cmd = "%s create --filename -" % (settings["misc"]["k8s-bin"])
-            result = endpoints.run_remote(con, cmd, debug = settings["misc"]["debug-output"], stdin = json.dumps(pod["crd"]))
+            result = endpoints.run_remote(con, cmd, debug = settings["misc"]["debug-output"], stdin = endpoints.dump_json(pod["crd"]))
             endpoints.log_result(result)
             if result.exited != 0:
                 log.error("Did not create CRD for pod '%s'" % (pod_name))
