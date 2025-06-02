@@ -12,6 +12,7 @@ import os
 from pathlib import Path
 import re
 import sys
+import tempfile
 import time
 
 TOOLBOX_HOME = os.environ.get('TOOLBOX_HOME')
@@ -51,7 +52,33 @@ roadblock_exits = {
 
 log = logging.getLogger(__file__)
 
-def run_remote(connection, command, validate = False, debug = False):
+def log_result(result, level = None):
+    """
+    Create a log entry with a common format for Fabric/Invoke run results
+
+    Args:
+        result (Fabric/Invoke result): The result to create a log entry for
+        level(str): Optional string specifically stating how to classify the log entry rather than using the result's exit status
+                    Choices: info | error | debug
+
+    Globals:
+        log: a logger instance
+
+    Returns:
+        the return value from the resulting log function call
+    """
+    msg = "command '%s' exited with rc=%d:\nstdout=[\n%s]\nstderr=[\n%s]" % (result.command, result.exited, result.stdout, result.stderr)
+    if (level is None and result.exited == 0) or level == "info":
+        return log.info(msg, stacklevel = 2)
+    elif (level is None and result.exited != 0) or level == "error":
+        return log.error(msg, stacklevel = 2)
+    elif level == "debug":
+        return log.debug(msg, stacklevel = 2)
+    else:
+        log.error("Unknown level '%s' specified" % (level))
+        return log.error(msg, stacklevel = 2)
+
+def run_remote(connection, command, validate = False, debug = False, stdin = None):
     """
     Run a command on a remote server using an existing Fabric connection
 
@@ -60,21 +87,97 @@ def run_remote(connection, command, validate = False, debug = False):
         command (str): The command to run
         validate (bool): Is the function being called from validation mode (which means that logging cannot be used)
         debug (bool): Is debug output enabled during validation mode
+        stdin (str): A string to supply as STDIN to the command being run
 
     Globals:
-        None
+        log: a logger instance
 
     Returns:
         Fabric run result (obj)
     """
-    debug_msg = "on remote '%s' as '%s' running command '%s'" % (connection.host, connection.user, command)
+    debug_msg = "on remote '%s' as '%s' running command '%s' with input '%s'" % (connection.host, connection.user, command, stdin)
     if validate:
         if debug:
             validate_debug(debug_msg)
     else:
         log.debug(debug_msg, stacklevel = 2)
 
-    return connection.run(command, hide = True, warn = True)
+    input_stream = None
+    if stdin is not None:
+        result = connection.run("mktemp", hide = True)
+        remote_temp_filename = None
+        if result.exited == 0:
+            remote_temp_filename = result.stdout.strip()
+
+            msg = "Obtained remote temporary filename: %s" % (remote_temp_filename)
+            if validate:
+                validate_debug(msg)
+            else:
+                log.debug(msg)
+        else:
+            log_result(result)
+            msg = "Failed to create remote temporary file"
+            if validate:
+                validate_error(msg)
+            else:
+                log.error(msg)
+            return None
+
+        local_temp_filename = None
+        with tempfile.NamedTemporaryFile(mode = "w+t", delete = False) as nft:
+            nft.write(stdin)
+            local_temp_filename = nft.name
+        if local_temp_filename is None:
+            msg = "Failed to create local temporary file"
+            if validate:
+                validate_error(msg)
+            else:
+                log.error(msg)
+            return None
+        else:
+            msg = "Created local temoorary file: %s" % (local_temp_filename)
+            if validate:
+                validate_debug(msg)
+            else:
+                log.debug(msg)
+
+        result = connection.put(local_temp_filename, remote_temp_filename)
+
+        command = "cat %s | %s" % (remote_temp_filename, command)
+
+        msg = "Modified command: %s" % (command)
+        if validate:
+            valiate_debug(msg)
+        else:
+            log.debug(msg)
+
+        real_result = connection.run(command, hide = True, warn = True)
+
+        msg = "Removing local temporary file: %s" % (local_temp_filename)
+        if validate:
+            validate_debug(msg)
+        else:
+            log.debug(msg)
+        os.remove(local_temp_filename)
+
+        # remove remote temp file
+        msg = "Removing remote temporary file: %s" % (remote_temp_filename)
+        if validate:
+            validate_debug(msg)
+        else:
+            log.debug(msg)
+        result = connection.run("rm -v %s" % (remote_temp_filename), hide = True)
+        if result.exited != 0:
+            log_result(result)
+            msg = "Failed to remove remote temporary file: %s" % (remote_temp_filename)
+            if validate:
+                validate_error(msg)
+            else:
+                log.error(msg)
+
+        return real_result
+    else:
+        return connection.run(command, hide = True, warn = True)
 
 def run_local(command, validate = False, debug = False):
     """
@@ -86,7 +189,7 @@ def run_local(command, validate = False, debug = False):
         debug (bool): Is debug output enabled during validation mode
 
     Globals:
-        None
+        log: a logger instance
 
     Returns:
         an Invoke run result
@@ -128,7 +231,7 @@ def remote_connection(host, user, validate = False):
        validate (bool): Is the function being called from validation mode (which means that logging cannot be used)
 
     Globals:
-        None
+        log: a logger instance
 
     Returns:
        an open Fabric Connection
@@ -758,7 +861,7 @@ def my_make_dirs(mydir):
     Returns:
         None
     """
-    log.info("Creating directory %s (recurisvely if necessary)" % (mydir), stacklevel = 2)
+    log.info("Creating directory %s (recursively if necessary)" % (mydir), stacklevel = 2)
     return os.makedirs(mydir, exist_ok = True)
 
 def build_benchmark_engine_mapping(benchmarks):
@@ -899,15 +1002,21 @@ def process_roadblocks(callbacks = None, roadblock_id = None, endpoint_label = N
     """
     log.info("Starting to process roadblocks")
 
-    new_followers_msg_payload = {
-        "new-followers": new_followers
-    }
-    new_followers_msg = create_roadblock_msg("all", "all", "user-object", new_followers_msg_payload)
+    new_followers_msg_file = None
+    if len(new_followers) > 0:
+        log.info("Informing roadblock leader of these new followers: %s" % (new_followers))
 
-    new_followers_msg_file = roadblock_messages_dir + "/new-followers.json"
-    log.info("Writing new followers message to %s" % (new_followers_msg_file))
-    with open(new_followers_msg_file, "w", encoding = "ascii") as new_followers_msg_file_fp:
-        new_followers_msg_file_fp.write(dump_json(new_followers_msg))
+        new_followers_msg_payload = {
+            "new-followers": new_followers
+        }
+        new_followers_msg = create_roadblock_msg("all", "all", "user-object", new_followers_msg_payload)
+
+        new_followers_msg_file = roadblock_messages_dir + "/new-followers.json"
+        log.info("Writing new followers message to %s" % (new_followers_msg_file))
+        with open(new_followers_msg_file, "w", encoding = "ascii") as new_followers_msg_file_fp:
+            new_followers_msg_file_fp.write(dump_json(new_followers_msg))
+    else:
+        log.info("No new followers to inform the roadblock leader about")
 
     rc = do_roadblock(roadblock_id = roadblock_id,
                       follower_id = endpoint_label,
@@ -937,7 +1046,8 @@ def process_roadblocks(callbacks = None, roadblock_id = None, endpoint_label = N
     if rc != 0:
         return rc
     callback = "engine-init"
-    if callback in callbacks:
+    engine_init_msgs = None
+    if callback in callbacks and callbacks[callback] is not None:
         log.info("Calling endpoint specified callback for '%s'" % (callback))
         engine_init_msgs = callbacks[callback]()
     else:
@@ -978,7 +1088,8 @@ def process_roadblocks(callbacks = None, roadblock_id = None, endpoint_label = N
     if rc != 0:
         return rc
     callback = "collect-sysinfo"
-    if callback in callbacks:
+    engine_init_msgs = None
+    if callback in callbacks and callbacks[callback] is not None:
         log.info("Calling endpoint specified callback for '%s'" % (callback))
         engine_init_msgs = callbacks[callback]()
     else:
@@ -1054,7 +1165,8 @@ def process_roadblocks(callbacks = None, roadblock_id = None, endpoint_label = N
                  redis_password = roadblock_password,
                  msgs_dir = roadblock_messages_dir)
     callback = "remote-cleanup"
-    if callback in callbacks:
+    engine_init_msgs = None
+    if callback in callbacks and callbacks[callback] is not None:
         log.info("Calling endpoint specified callback for '%s'" % (callback))
         engine_init_msgs = callbacks[callback]()
     else:
@@ -1235,7 +1347,8 @@ def process_bench_roadblocks(callbacks = None, roadblock_id = None, endpoint_lab
             quit,abort = evaluate_roadblock(quit, abort, rb_name, rc, iteration_sample, engine_rx_msgs_dir, max_sample_failures)
 
             callback = "test-start"
-            if callback in callbacks:
+            engine_init_msgs = None
+            if callback in callbacks and callbacks[callback] is not None:
                 log.info("Calling endpoint specified callback for '%s'" % (callback))
                 engine_init_msgs = callbacks[callback](roadblock_messages_dir, test_id, engine_tx_msgs_dir)
             else:
@@ -1355,7 +1468,8 @@ def process_bench_roadblocks(callbacks = None, roadblock_id = None, endpoint_lab
             quit,abort = evaluate_roadblock(quit, abort, rb_name, rc, iteration_sample, engine_rx_msgs_dir, max_sample_failures)
 
             callback = "test-stop"
-            if callback in callbacks:
+            engine_init_msgs = None
+            if callback in callbacks and callbacks[callback] is not None:
                 log.info("Calling endpoint specified callback for '%s'" % (callback))
                 engine_init_msgs = callbacks[callback]()
             else:
@@ -1537,3 +1651,342 @@ def process_options():
     args = parser.parse_args()
 
     return args
+
+def init_settings(settings, args):
+    """
+    Initialize the basic settings that are used throughout the script
+
+    Args:
+        settings (dict): the one data structure to rule then all
+        args (namespace): the script's CLI parameters
+
+    Globals:
+        log: a logger instance
+
+    Returns:
+        settings (dict): the one data structure to rule then all
+    """
+    log.info("Initializing settings based on CLI parameters")
+
+    settings["dirs"] = dict()
+
+    settings["dirs"]["local"] = {
+        "base": args.base_run_dir,
+        "conf": args.base_run_dir + "/config",
+        "run": args.base_run_dir + "/run"
+    }
+    settings["dirs"]["local"]["engine"] = settings["dirs"]["local"]["run"] + "/engine"
+    settings["dirs"]["local"]["endpoint"] = settings["dirs"]["local"]["run"] + "/endpoint/" + args.endpoint_label
+    settings["dirs"]["local"]["sysinfo"] = settings["dirs"]["local"]["run"] + "/sysinfo/endpoint/" + args.endpoint_label
+    settings["dirs"]["local"]["tool-cmds"] = settings["dirs"]["local"]["conf"] + "/tool-cmds"
+    settings["dirs"]["local"]["engine-conf"] = settings["dirs"]["local"]["conf"] + "/engine"
+    settings["dirs"]["local"]["engine-cmds"] = settings["dirs"]["local"]["engine-conf"] + "/bench-cmds"
+    settings["dirs"]["local"]["engine-logs"] = settings["dirs"]["local"]["engine"] + "/logs"
+    settings["dirs"]["local"]["roadblock-msgs"] = settings["dirs"]["local"]["endpoint"] + "/roadblock-msgs"
+
+    remote_base = "/var/lib/crucible"
+    settings["dirs"]["remote"] = {
+        "base": remote_base,
+        "run": remote_base + "/" + args.endpoint_label + "_" + args.run_id
+    }
+    settings["dirs"]["remote"]["cfg"] = settings["dirs"]["remote"]["run"] + "/cfg"
+    settings["dirs"]["remote"]["logs"] = settings["dirs"]["remote"]["run"] + "/logs"
+    settings["dirs"]["remote"]["data"] = settings["dirs"]["remote"]["run"] + "/data"
+    settings["dirs"]["remote"]["sysinfo"] = settings["dirs"]["remote"]["run"] + "/sysinfo"
+    settings["dirs"]["remote"]["tmp"] = settings["dirs"]["remote"]["data"] + "/tmp"
+
+    log_settings(settings, mode = "dirs")
+
+    log.info("Initializing misc settings")
+
+    settings["misc"] = dict()
+
+    settings["misc"]["debug-output"] = False
+    if args.log_level == "debug":
+        settings["misc"]["debug-output"] = True
+
+    log.info("Creating image map")
+    settings["misc"]["image-map"] = dict()
+    images = args.images.split(",")
+    for image in images:
+        image_split = image.split("::", maxsplit=2)
+        role = image_split[0]
+        userenv = image_split[1]
+        image = image_split[2]
+        if not role in settings["misc"]["image-map"]:
+            log.info("Adding role %s to image-map" % (role))
+            settings["misc"]["image-map"][role] = dict()
+        log.info("Adding %s to userenv %s for role %s to image-map" % (image, userenv, role))
+        settings["misc"]["image-map"][role][userenv] = image
+
+    log_settings(settings, mode = "misc")
+
+    return settings
+
+def log_settings(settings, mode = "all", endpoint_index = None):
+    """
+    Log the current requested contents of the settings data structure
+
+    Args:
+        settings (dict): the one data structure to rule them all
+        mode (str): which piece of the settings dict to log
+        endpoint_index (int): the index of the endpoint to log
+
+    Globals:
+        log: a logger instance
+
+    Returns:
+        None
+    """
+    match mode:
+        case "benchmark-mapping":
+            return log.info("settings[benchmark-mapping]:\n%s" % (dump_json(settings["engines"]["benchmark-mapping"])), stacklevel = 2)
+        case "engines":
+            return log.info("settings[engines]:\n%s" % (dump_json(settings["engines"])), stacklevel = 2)
+        case "misc":
+            return log.info("settings[misc]:\n%s" % (dump_json(settings["misc"])), stacklevel = 2)
+        case "dirs":
+            return log.info("settings[dirs]:\n%s" % (dump_json(settings["dirs"])), stacklevel = 2)
+        case "endpoint":
+            return log.info("settings[endpoint]:\n%s" % (dump_json(settings["run-file"]["endpoints"][endpoint_index])), stacklevel = 2)
+        case "rickshaw":
+            return log.info("settings[rickshaw]:\n%s" % (dump_json(settings["rickshaw"])), stacklevel = 2)
+        case "run-file":
+            return log.info("settings[run-file]:\n%s" % (dump_json(settings["run-file"])), stacklevel = 2)
+        case "all" | _:
+            return log.info("settings:\n%s" % (dump_json(settings)), stacklevel = 2)
+
+def load_settings(settings, endpoint_name = None, run_file = None, rickshaw_dir = None, endpoint_index = None, endpoint_normalizer_callback = None):
+    """
+    Load settings from config multiple config files
+
+    Args:
+        settings (dict): the one data structure to rule them all
+        endpoint_name (str): the name of the endpoint
+        run_file (str): the JSON run-file
+        rickshaw_dir (str): the path to the rickshaw directory
+        endpoint_index (str): the index into the run-file's endpoint object for this endpoint instance
+        endpoint_normalizer_callback (func): the endpoint specific function to call to normalize the endpoint settings
+
+    Globals:
+        log: a logger instance
+
+    Returns:
+        settings (dict): the one data structure to rule them all
+    """
+    log.info("Loading settings from config files")
+
+    rickshaw_settings_file = settings["dirs"]["local"]["conf"] + "/rickshaw-settings.json.xz"
+    settings["rickshaw"],err = load_json_file(rickshaw_settings_file, uselzma = True)
+    if settings["rickshaw"] is None:
+        log.error("Failed to load rickshaw-settings from %s with error '%s'" % (rickshaw_settings_file, err))
+        return None
+    else:
+        log.info("Loaded rickshaw-settings from %s" % (rickshaw_settings_file))
+
+    log_settings(settings, mode = "rickshaw")
+
+    settings["run-file"],err = load_json_file(run_file)
+    if settings["run-file"] is None:
+        log.error("Failed to load run-file from %s with error '%s'" % (run_file, err))
+        return None
+    else:
+        log.info("Loaded run-file from %s" % (run_file))
+
+    valid, err = validate_schema(settings["run-file"], rickshaw_dir + "/util/JSON/schema.json")
+    if not valid:
+        log.error("JSON validation failed for run-file")
+        return None
+    else:
+        log.info("First level JSON validation for run-file passed")
+
+    valid, err = validate_schema(settings["run-file"]["endpoints"][endpoint_index], rickshaw_dir + "/schema/" + endpoint_name + ".json")
+    if not valid:
+        log.error("JSON validation failed for remotehosts endpoint at index %d in run-file" % (endpoint_index))
+        return None
+    else:
+        log.info("Endpoint specific JSON validation for remotehosts endpoint at index %d in run-file passed" % (endpoint_index))
+
+    log_settings(settings, mode = "run-file")
+
+    log.info("Normalizing endpoint settings")
+    settings["run-file"]["endpoints"][endpoint_index] = endpoint_normalizer_callback(endpoint = settings["run-file"]["endpoints"][endpoint_index], rickshaw = settings["rickshaw"])
+    log_settings(settings, mode = "endpoint", endpoint_index = endpoint_index)
+
+    log.info("Building benchmark engine mapping")
+    if not "engines" in settings:
+        settings["engines"] = dict()
+    settings["engines"]["benchmark-mapping"] = build_benchmark_engine_mapping(settings["run-file"]["benchmarks"])
+    log_settings(settings, mode = "benchmark-mapping")
+
+    log.info("Loading SSH private key into misc settings")
+    settings["misc"]["ssh-private-key"] = ""
+    try:
+        with open(settings["dirs"]["local"]["conf"] + "/rickshaw_id.rsa", "r", encoding = "ascii") as ssh_private_key:
+            for line in ssh_private_key:
+                line = re.sub(r"\n", r"\\n", line)
+                settings["misc"]["ssh-private-key"] += line
+    except IOError as e:
+        log.error("Failed to load the SSH private key [%s]" % (e))
+        return None
+
+    log_settings(settings, mode = "misc")
+
+    return settings
+
+def create_local_dirs(settings):
+    """
+    Create the basic local directories
+
+    Args:
+        settings (dict): the one data structure to rule them all
+
+    Globals:
+        log: a logger instance
+
+    Returns:
+        0
+    """
+    log.info("Creating local directories")
+    my_make_dirs(settings["dirs"]["local"]["run"])
+    my_make_dirs(settings["dirs"]["local"]["engine-logs"])
+    my_make_dirs(settings["dirs"]["local"]["roadblock-msgs"])
+    my_make_dirs(settings["dirs"]["local"]["sysinfo"])
+    return 0
+
+def get_profiler(settings, profiler_id):
+    """
+    Get the profiler that a specific profiler engine should be running from the profiler mapping
+
+    Args:
+        settings (dict): the one data structure to rule then all
+        profiler_id (str): A tool/profiler engine's ID
+
+    Globals:
+        None
+
+    Returns:
+        str: The name of the tool to run if the profiler_id is found in the mapping
+        or
+        None: If the profiler_id is not found in the mapping
+    """
+    for profiler_key in settings["engines"]["profiler-mapping"].keys():
+        if profiler_id in settings["engines"]["profiler-mapping"][profiler_key]["ids"]:
+            return settings["engines"]["profiler-mapping"][profiler_key]["name"]
+
+    return None
+
+def get_benchmark(settings, benchmark_id):
+    """
+    Get the benchmark that a specific benchmark engine should be running from the benchmark mapping
+
+    Args:
+        settings (dict): the one data structure to rule then all
+        benchmark_id (str): A benchmark engine's ID
+
+    Globals:
+        None
+
+    Returns:
+        str: The name of the benchmark to run if the benchmark_id is found in the mapping
+        or
+        None: If the benchmark)id is not found in the mapping
+    """
+    for benchmark_key in settings["engines"]["benchmark-mapping"].keys():
+        if benchmark_id in settings["engines"]["benchmark-mapping"][benchmark_key]["ids"]:
+            return settings["engines"]["benchmark-mapping"][benchmark_key]["name"]
+
+    return None
+
+def get_image(settings, image_role, userenv):
+    """
+    Get the image that is used to run a specific benchmark/tool
+
+    Args:
+        settings (dict): the one data structure to rule then all
+        image_role (str): The tool or benchmark whose container image is being asked for
+        userenv (str): The userenv whose container image is being asked for
+
+    Globals:
+        log: a logger instance
+
+    Returns:
+        str: The container image that is used to run the specified tool or benchmark
+        or
+        None: If no matching container image can be located
+    """
+    if image_role in settings["misc"]["image-map"]:
+        if userenv in settings["misc"]["image-map"][image_role]:
+            return settings["misc"]["image-map"][image_role][userenv]
+        else:
+            log.error("Could not find userenv %s in image-map[%s]" % (userenv, image_role));
+    else:
+        log.error("Could not find image_role %s in image-map" % (image_role))
+
+    return None
+
+def get_engine_id_image(settings, role, id, userenv):
+    """
+    Get the image associated with a specific engine role and ID
+
+    Args:
+        settings (dict): the one data structure to rule then all
+        role (str): The engine's role
+        id (str, int): The engine's ID
+        userenv (str): The engine's userenv
+
+    Globals:
+        None
+
+    Returns:
+        image (str): The container image to use for the specified engine
+        or
+        None: If no container image was located for the specified engine
+    """
+
+    image = None
+    match role:
+        case "profiler" | "worker" | "master":
+            image_role = get_profiler(settings, id)
+        case _:
+            image_role = get_benchmark(settings, id)
+    if not image_role is None:
+        image = get_image(settings, image_role, userenv)
+    return image
+
+def get_profiler_userenv(settings, id):
+    """
+    Get the userenv associated with a specific profiler (via it's ID)
+
+    Args:
+        settings (dict): the one data structure to rule then all
+        id (str): The profiler engine's ID
+
+    Globals:
+        None
+
+    Returns:
+        userenv (str): The userenv that the specified profiler engine ID should use
+        or
+        None: If no userenv was found for the specified profiler engine ID
+    """
+    profiler_name = None
+    for profiler in settings["engines"]["profiler-mapping"].keys():
+        if id in settings["engines"]["profiler-mapping"][profiler]["ids"]:
+            profiler_name = settings["engines"]["profiler-mapping"][profiler]["name"]
+
+    if profiler_name is None:
+        log.error("Could not find profiler name for id %s" % (id))
+    else:
+        if profiler_name in settings["misc"]["image-map"]:
+            if len(settings["misc"]["image-map"][profiler_name]) == 1:
+                for userenv in settings["misc"]["image-map"][profiler_name].keys():
+                    return userenv
+            else:
+                if len(settings["misc"]["image-map"][profiler_name]) == 0:
+                    log.error("Found no possible userenv for profiler %s" % (profiler_name))
+                else:
+                    log.error("Found more than one possible userenv for profiler %s" % (profiler_name))
+        log.error("Could not find profiler %s in image-map" % (profiler_name))
+
+    return None
