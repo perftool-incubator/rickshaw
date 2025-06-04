@@ -1442,8 +1442,8 @@ def kube_cleanup():
                                                                        engine)
                 result = endpoints.run_remote(con, cmd, debug = settings["misc"]["debug-output"])
                 if result.exited == 0:
-                    log_file = "%s/%s.txt" % (settings["dirs"]["local"]["engine-logs"], engine)
-                    with open(log_file, "w", encoding="ascii") as lfh:
+                    log_file = "%s/%s.txt.xz" % (settings["dirs"]["local"]["engine-logs"], engine)
+                    with lzma.open(log_file, "wt", encoding="ascii") as lfh:
                         lfh.write(result.stdout)
                     log.info("Wrote log for engine '%s' in pod '%s' to '%s'" % (engine, pod, log_file))
                 else:
