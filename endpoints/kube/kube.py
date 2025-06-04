@@ -8,11 +8,13 @@ import copy
 from fabric import Connection
 import jsonschema
 import logging
+import lzma
 import os
 from paramiko import ssh_exception
 from pathlib import Path
 import re
 import sys
+import tempfile
 import time
 
 script_path = os.path.abspath(__file__)
@@ -1534,6 +1536,137 @@ def engine_init():
 
     return env_vars_msg_file
 
+def collect_sysinfo():
+    """
+    Collect information about the K8S cluster/environment
+
+    Args:
+        None
+
+    Globals:
+        log: a logger instance
+        settings (dict): the one data structure to rule them all
+
+    Returns:
+        0
+    """
+    log.info("Collecting sysinfo")
+
+    with endpoints.remote_connection(settings["run-file"]["endpoints"][args.endpoint_index]["host"],
+                                     settings["run-file"]["endpoints"][args.endpoint_index]["user"], validate = False) as con:
+        cmd = "%s cluster-info" % (settings["misc"]["k8s-bin"])
+        result = endpoints.run_remote(con, cmd, debug = settings["misc"]["debug-output"])
+        if result.exited != 0:
+            log.error("Failed to collect basic cluster-info")
+            endpoints.log_result(result)
+        else:
+            out_file = settings["dirs"]["local"]["sysinfo"] + "/cluster-info.txt.xz"
+            with lzma.open(out_file, "wt", encoding="ascii") as ofh:
+                ofh.write(result.stdout)
+            log.info("Wrote basic cluster-info to '%s'" % (out_file))
+
+        cmd = "%s cluster-info dump" % (settings["misc"]["k8s-bin"])
+        result = endpoints.run_remote(con, cmd, debug = settings["misc"]["debug-output"])
+        if result.exited != 0:
+            log.error("Failed to collect cluster-info dump")
+            endpoints.log_result(result)
+        else:
+            out_file = settings["dirs"]["local"]["sysinfo"] + "/cluster-info.dump.json.xz"
+            with lzma.open(out_file, "wt", encoding="ascii") as ofh:
+                ofh.write("STDOUT:\n")
+                ofh.write(result.stdout)
+                ofh.write("STDERR:\n")
+                ofh.write(result.stderr)
+            log.info("Wrote cluster-info dump to '%s'" % (out_file))
+
+        collect_must_gather = False
+        if "sysinfo" in settings["run-file"]["endpoints"][args.endpoint_index]:
+            if "collect-must-gather" in settings["run-file"]["endpoints"][args.endpoint_index]["sysinfo"]:
+                if settings["run-file"]["endpoints"][args.endpoint_index]["sysinfo"]["collect-must-gather"]:
+                    collect_must_gather = True
+        if collect_must_gather:
+            log.info("Going to collect OpenShift must-gather as requested")
+
+            result = endpoints.run_remote(con, "mktemp --directory", debug = settings["misc"]["debug-output"])
+            if result.exited == 0:
+                remote_temp_directory = result.stdout.strip()
+                log.info("Created remote temporary directory '%s'" % (remote_temp_directory))
+
+                log.info("Running OpenShift must-gather and logging to remote directory '%s'" % (remote_temp_directory))
+                cmd = "%s adm must-gather --dest-dir=%s" % (settings["misc"]["k8s-bin"], remote_temp_directory)
+                result = endpoints.run_remote(con, cmd, debug = settings["misc"]["debug-output"])
+                out_file = settings["dirs"]["local"]["sysinfo"] + "/must-gather.txt.xz"
+                log.info("Logging OpenShift must-gather output to '%s'" % (out_file))
+                with lzma.open(out_file, "wt", encoding="ascii") as ofh:
+                    ofh.write("STDOUT:\n")
+                    ofh.write(result.stdout)
+                    ofh.write("STDERR:\n")
+                    ofh.write(result.stderr)
+                if result.exited != 0:
+                    log.error("OpenShift must-gather completed with errors")
+                else:
+                    log.info("OpenShift must-gather completed without errors")
+
+                result = endpoints.run_remote(con, "mktemp", debug = settings["misc"]["debug-output"])
+                if result.exited == 0:
+                    remote_temp_file = result.stdout.strip()
+
+                    log.info("Creating remote archive '%s' of OpenShift must-gather data" % (remote_temp_file))
+                    # choosing to use gzip compression here for what
+                    # is perceived to be maximum compatibility with
+                    # what is available on the remote side
+                    cmd = "tar --create --gzip --directory %s --file %s ." % (remote_temp_directory, remote_temp_file)
+                    result = endpoints.run_remote(con, cmd, debug = settings["misc"]["debug-output"])
+                    if result.exited != 0:
+                        log.error("Failed to create remote archive")
+                        endpoints.log_result(result)
+                    else:
+                        log.info("Created remote archive")
+
+                        fd, local_temp_filename = tempfile.mkstemp(prefix = "kube_", suffix=".tar.gz")
+                        log.info("Transferring remote temp file '%s' to local temp file '%s'" % (remote_temp_file, local_temp_filename))
+                        con.get(remote_temp_file, local_temp_filename)
+                        log.info("Transfer complete")
+
+                        log.info("Extracting must-gather data from temporary file '%s' to '%s'" % (local_temp_filename, settings["dirs"]["local"]["sysinfo"]))
+                        cmd = "tar --extract --gzip --directory %s --file %s" % (settings["dirs"]["local"]["sysinfo"], local_temp_filename)
+                        result = endpoints.run_local(cmd, debug = settings["misc"]["debug-output"])
+                        if result.exited == 0:
+                            log.info("Extracted must-gather data from temporary file")
+                        else:
+                            log.error("Failed to extract must-gather data from temporary file")
+                            endpoints.log_result(result)
+
+                        log.info("Removing must-gather temporary file '%s'" % (local_temp_filename))
+                        os.remove(local_temp_filename)
+
+                    log.info("Deleting remote temporary file '%s'" % (remote_temp_file))
+                    cmd = "rm %s" % (remote_temp_file)
+                    result = endpoints.run_remote(con, cmd, debug = settings["misc"]["debug-output"])
+                    if result.exited != 0:
+                        log.error("Failed to delete remote temporary file '%s'" % (remote_temp_file))
+                        endpoints.log_result(result)
+                    else:
+                        log.info("Deletion of remote temporary file '%s' succeeded" % (remote_temp_file))
+                else:
+                    log.error("Failed to create a remote temporary file")
+                    endpoints.log_result(result)
+
+                log.info("Delete remote temporary directory '%s'" % (remote_temp_directory))
+                cmd = "rm --recursive %s" % (remote_temp_directory)
+                result = endpoints.run_remote(con, cmd, debug = settings["misc"]["debug-output"])
+                if result.exited != 0:
+                    log.error("Failed to delete remote temporary directory '%s'" % (remote_temp_directory))
+                    endpoints.log_result(result)
+                else:
+                    log.info("Delete of remote temporary directory '%s' succeeded" % (remote_temp_directory))
+            else:
+                log.error("Failed to create temporary directory to store must-gather output")
+                endpoints.log_result(result)
+        else:
+            log.info("OpenShift must-gather collection not requested")
+
+    return 0
 
 def main():
     """
@@ -1594,7 +1727,7 @@ def main():
     # KMR implement callbacks
     kube_callbacks = {
         "engine-init": engine_init,
-        "collect-sysinfo": None,
+        "collect-sysinfo": collect_sysinfo,
         "test-start": None,
         "test-stop": None,
         "remote-cleanup": kube_cleanup

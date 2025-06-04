@@ -100,6 +100,15 @@
                 }
             ]
         },
+        "sysinfo": {
+            "type": "object",
+            "properties": {
+                "collect-must-gather": {
+                    "type": "boolean"
+                }
+            },
+            "additionalProperties": false
+        },
         "user": {
             "type": "string",
             "minLength": 1
