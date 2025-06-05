@@ -14,6 +14,7 @@ import re
 import sys
 import tempfile
 import time
+import ipaddress
 
 TOOLBOX_HOME = os.environ.get('TOOLBOX_HOME')
 if TOOLBOX_HOME is None:
@@ -496,18 +497,11 @@ def is_ip(ip_address):
         True or False
     """
     log.info("Checking to see if '%s' is an IP address" % (ip_address))
-
-    # check for IPv4
-    m = re.search(r"[1-9][0-9]{0,2}\.[1-9][0-9]{0,2}\.[1-9][0-9]{0,2}\.[1-9][0-9]{0,2}", ip_address)
-    if m:
+    try:
+        ipaddress.ip_address(ip_address)
         return True
-
-    # check for IPv6
-    m = re.search(r"[0-9a-fA-F]{1,4}:[0-9a-fA-F]{1,4}:[0-9a-fA-F]{1,4}:[0-9a-fA-F]{1,4}:[0-9a-fA-F]{1,4}:[0-9a-fA-F]{1,4}:[0-9a-fA-F]{1,4}:[0-9a-fA-F]", ip_address)
-    if m:
-        return True
-
-    return False
+    except ValueError:
+        return False
 
 def get_controller_ip(host):
     """
