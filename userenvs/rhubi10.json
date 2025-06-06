@@ -1,0 +1,139 @@
+{
+  "workshop": {
+    "schema": {
+      "version": "2024.08.07"
+    }
+  },
+  "userenv": {
+    "name": "rhubi10",
+    "label": "Red Hat UBI 10",
+    "origin": {
+      "image": "registry.access.redhat.com/ubi10/ubi",
+      "tag": "latest",
+      "build-policy": "missing"
+    },
+    "properties": {
+      "platform": [
+        {
+          "architecture": "x86_64"
+        },
+        {
+          "architecture": "aarch64"
+        }
+      ],
+      "packages": {
+        "type": "rpm",
+        "manager": "dnf"
+      }
+    }
+  },
+  "requirements": [
+    {
+      "name": "alma10-repos",
+      "type": "files",
+      "files_info": {
+        "files": [
+          {
+            "src": "https://raw.repo.almalinux.org/almalinux/RPM-GPG-KEY-AlmaLinux-10",
+            "dst": "/etc/pki/rpm-gpg/"
+          },
+          {
+            "src": "%rickshaw-dir%/userenvs/requirement-sources/alma10.repo",
+            "dst": "/etc/yum.repos.d"
+          }
+        ]
+      }
+    },
+    {
+      "name": "python3",
+      "type": "distro",
+      "distro_info": {
+        "packages": [
+          "python3",
+          "python3-pip",
+          "python3-devel"
+        ]
+      }
+    },
+    {
+      "name": "utils",
+      "type": "distro",
+      "distro_info": {
+        "packages": [
+          "curl",
+          "tar",
+          "cpio",
+          "gzip",
+          "jq",
+          "git",
+          "cpio",
+          "findutils",
+          "hostname",
+          "iputils",
+          "iproute",
+          "elfutils-libelf",
+          "openssl",
+          "xz",
+          "libcap",
+          "libzstd",
+          "numactl"
+        ]
+      }
+    },
+    {
+      "name": "core-compiling",
+      "type": "distro",
+      "distro_info": {
+        "packages": [
+          "diffutils",
+          "gcc",
+          "libtool",
+          "autoconf",
+          "automake",
+          "make",
+          "clang",
+          "slang-devel",
+          "libbabeltrace",
+          "elfutils-libelf-devel",
+          "elfutils-debuginfod",
+          "elfutils-debuginfod-client-devel",
+          "openssl-devel",
+          "xz-devel",
+          "libzstd-devel",
+          "libcap-devel",
+          "libnl3-devel",
+          "numactl-devel",
+          "libpfm",
+          "glibc-gconv-extra"
+        ]
+      }
+    },
+    {
+      "name": "numactl_src",
+      "type": "source",
+      "source_info": {
+        "url": "https://github.com/numactl/numactl/releases/download/v2.0.14/numactl-2.0.14.tar.gz",
+        "filename": "numactl.tar.gz",
+        "commands": {
+          "unpack": "tar -xzf numactl.tar.gz",
+          "get_dir": "tar -tzf numactl.tar.gz | head -n 1",
+          "commands": [
+            "./configure --prefix=/usr",
+            "make",
+            "make install",
+            "ldconfig --verbose"
+          ]
+        }
+      }
+    },
+    {
+      "name": "core-node",
+      "type": "distro",
+      "distro_info": {
+        "packages": [
+          "nodejs"
+        ]
+      }
+    }
+  ]
+}

@@ -1,0 +1,16 @@
+    {
+      "name": "alma10-repos",
+      "type": "files",
+      "files_info": {
+        "files": [
+          {
+            "src": "https://raw.repo.almalinux.org/almalinux/RPM-GPG-KEY-AlmaLinux-10",
+            "dst": "/etc/pki/rpm-gpg/"
+          },
+          {
+            "src": "%rickshaw-dir%/userenvs/requirement-sources/alma10.repo",
+            "dst": "/etc/yum.repos.d"
+          }
+        ]
+      }
+    }
