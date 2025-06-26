@@ -1,0 +1,11 @@
+    {
+      "name": "python3.12",
+      "type": "distro",
+      "distro_info": {
+        "packages": [
+          "python3.12",
+          "python3.12-pip",
+          "python3.12-devel"
+        ]
+      }
+    }
