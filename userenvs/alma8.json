@@ -29,13 +29,13 @@
   },
   "requirements": [
     {
-      "name": "python39",
+      "name": "python3.12",
       "type": "distro",
       "distro_info": {
         "packages": [
-          "python39",
-          "python39-pip",
-          "python39-devel"
+          "python3.12",
+          "python3.12-pip",
+          "python3.12-devel"
         ]
       }
     },
