@@ -18,7 +18,6 @@
           "libcap-devel",
           "libnl3-devel",
           "numactl-devel",
-          "java-1.8.0-openjdk",
           "libpfm"
         ]
       }
