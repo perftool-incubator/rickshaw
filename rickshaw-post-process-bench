@@ -254,6 +254,7 @@ while(<PROCCPUINFO>) {
     }
 }
 close(PROCCPUINFO);
+$max_forked_jobs/=2;
 
 if ($max_forked_jobs > 0) {
     log_print sprintf "Will fork a maximum of %d jobs at a time\n", $max_forked_jobs;
