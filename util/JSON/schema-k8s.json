@@ -18,7 +18,15 @@
             "type": "string"
         },
         "unique-project": {
-            "type": "integer"
+            "oneOf": [
+                {
+                    "type": "integer"
+                },
+                {
+                    "type": "string",
+                    "minLength": 1
+                }
+            ]
         },
         "kubeconfig": {
             "type": "integer"
