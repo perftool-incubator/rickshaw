@@ -5,10 +5,10 @@
     }
   },
   "userenv": {
-    "name": "rhubi8",
-    "label": "Red Hat UBI 8",
+    "name": "rhubi10",
+    "label": "Red Hat UBI 10",
     "origin": {
-      "image": "registry.access.redhat.com/ubi8/ubi",
+      "image": "registry.access.redhat.com/ubi10/ubi",
       "tag": "latest",
       "build-policy": "missing"
     },
@@ -23,31 +23,35 @@
       ],
       "packages": {
         "type": "rpm",
-        "manager": "yum"
+        "manager": "dnf"
       }
     }
   },
   "requirements": [
     {
-      "name": "alma8-repos",
+      "name": "alma10-repos",
       "type": "files",
       "files_info": {
         "files": [
           {
-            "src": "%rickshaw-dir%/userenvs/requirement-sources/alma8.repo",
+            "src": "https://raw.repo.almalinux.org/almalinux/RPM-GPG-KEY-AlmaLinux-10",
+            "dst": "/etc/pki/rpm-gpg/"
+          },
+          {
+            "src": "%rickshaw-dir%/userenvs/requirement-sources/alma10.repo",
             "dst": "/etc/yum.repos.d"
           }
         ]
       }
     },
     {
-      "name": "python3.12",
+      "name": "python3",
       "type": "distro",
       "distro_info": {
         "packages": [
-          "python3.12",
-          "python3.12-pip",
-          "python3.12-devel"
+          "python3",
+          "python3-pip",
+          "python3-devel"
         ]
       }
     },
