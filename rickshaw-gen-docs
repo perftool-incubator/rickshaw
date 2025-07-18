@@ -79,6 +79,8 @@ my $period_id_field;
 my $metric_id_field;
 my %all_metric_desc_uuid;
 my $doc_dir;
+my $year;
+my $month;
 
 sub usage {
     log_print "\nusage:\n\n";
@@ -107,17 +109,21 @@ sub get_index_base_name {
 sub get_index_name {
     cdm_sanity_check();
     my $doctype = shift;
+    my $year = shift;
+    my $month = shift;
     if ($cdm{'ver'} =~ /^v[78]dev$/) {
         return $doctype;
     } elsif ($cdm{'ver'} =~ /^v9dev$/) {
-        #TODO: return correct year.month(s)
-        return $doctype . '@2025.02';
+        return $doctype . '@' . $year . '.' . $month;
     }
 }
 
 sub get_index_full_name {
   my $doctype = shift;
-  return get_index_base_name() . get_index_name($doctype);
+  # year and month now required for CDM v9dev
+  my $year = shift;
+  my $month = shift;
+  return get_index_base_name() . get_index_name($doctype, $year, $month);
 }
 
 sub add_persistent_uuid {
@@ -297,7 +303,7 @@ sub create_es_doc {
         return \%es_doc;
     } else {
         my $es_doc_json = $coder->encode(\%es_doc);
-        $ndjson .= '{ "index": { "_index": "'. get_index_full_name($doc_type) . '" } }' . sprintf("\n");
+        $ndjson .= '{ "index": { "_index": "'. get_index_full_name($doc_type, $year, $month) . '" } }' . sprintf("\n");
         $ndjson .= $es_doc_json . sprintf("\n");
     }
 }
@@ -478,7 +484,7 @@ sub generate_metrics {
         # and %result (rickshaw-run.json) by design does not include any metric data, as it would be
         # way too large.
         debug_log(sprintf "Going to generate this metric_desc doc with uuid: " . $$this_metr{$metric_id_field} . "\n");
-        $ndjson .= '{ "index": { "_index": "' . get_index_full_name('metric_desc') . '" } }' . sprintf "\n";
+        $ndjson .= '{ "index": { "_index": "' . get_index_full_name('metric_desc', $year, $month) . '" } }' . sprintf "\n";
         $ndjson .= $metr_desc_doc_json . sprintf "\n";
         $num_metric_docs_submitted++;
     }
@@ -502,7 +508,7 @@ sub generate_metrics {
                 $metr_data_doc{'run'} = \%micro_run_doc;
             }
             my $metr_data_doc_json = $coder->encode(\%metr_data_doc);
-            $ndjson .= '{ "index": { "_index": "' . get_index_full_name('metric_data') . '" } }' . sprintf "\n";
+            $ndjson .= '{ "index": { "_index": "' . get_index_full_name('metric_data', $year, $month) . '" } }' . sprintf "\n";
             $ndjson .= $metr_data_doc_json . sprintf "\n";
 
             if (defined $primary_metric and $type{$idx} eq $primary_metric and $source{$idx} eq $benchmark) {
@@ -585,6 +591,10 @@ while (scalar @ARGV > 0) {
     my $cwd = getcwd();
     debug_log(sprintf "cwd [%s]\n", $cwd);
     $base_run_dir = $cwd;
+    if ($base_run_dir =~ /[^\/]+--(\d{4})-(\d{2})-\d{2}_\d{2}:\d{2}:\d{2}_UTC--[a-z0-9]+-[a-z0-9]+-[a-z0-9]+-[a-z0-9]+-[a-z0-9]+/) {
+        $year = $1;
+        $month = $2;
+    }
 }
 my $rickshaw_project_dir; # We need the project dir to load schemas to validate json
 {
