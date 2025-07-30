@@ -1,0 +1,23 @@
+  "userenv": {
+    "name": "stream10",
+    "label": "CentOS Stream 10",
+    "origin": {
+      "image": "quay.io/centos/centos",
+      "tag": "stream10",
+      "build-policy": "missing"
+    },
+    "properties": {
+      "platform": [
+        {
+          "architecture": "x86_64"
+        },
+        {
+          "architecture": "aarch64"
+        }
+      ],
+      "packages": {
+        "type": "rpm",
+        "manager": "dnf"
+      }
+    }
+  },
