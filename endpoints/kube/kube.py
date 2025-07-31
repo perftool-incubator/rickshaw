@@ -567,8 +567,9 @@ def compile_object_configs():
         if not role in settings["engines"]["endpoint"]["roles"]:
             settings["engines"]["endpoint"]["roles"][role] = []
 
-        for csid in endpoint["engines"][role]:
-            settings["engines"]["endpoint"]["roles"][role].append(csid)
+        if role in endpoint["engines"]:
+            for csid in endpoint["engines"][role]:
+                settings["engines"]["endpoint"]["roles"][role].append(csid)
 
     log.info("This endpoint will run these clients: %s" % (list(map(lambda x: "client-" + str(x), settings["engines"]["endpoint"]["roles"]["client"]))))
     log.info("This endpoint will run these servers: %s" % (list(map(lambda x: "server-" + str(x), settings["engines"]["endpoint"]["roles"]["server"]))))
@@ -579,21 +580,22 @@ def compile_object_configs():
     settings["engines"]["endpoint"]["classes"]["cpu-partitioning"]["with"] = []
     settings["engines"]["endpoint"]["classes"]["cpu-partitioning"]["without"] = []
     for role in roles:
-        csids = list(endpoint["engines"]["settings"][role].keys())
-        csids.sort()
-        for csid in csids:
-            engine = {
-                "role": role,
-                "id": int(csid)
-            }
+        if role in endpoint["engines"]["settings"]:
+            csids = list(endpoint["engines"]["settings"][role].keys())
+            csids.sort()
+            for csid in csids:
+                engine = {
+                    "role": role,
+                    "id": int(csid)
+                }
 
-            if not "first-engine" in settings["engines"]["endpoint"]:
-                settings["engines"]["endpoint"]["first-engine"] = copy.deepcopy(engine)
+                if not "first-engine" in settings["engines"]["endpoint"]:
+                    settings["engines"]["endpoint"]["first-engine"] = copy.deepcopy(engine)
 
-            if endpoint["engines"]["settings"][role][csid]["cpu-partitioning"]:
-                settings["engines"]["endpoint"]["classes"]["cpu-partitioning"]["with"].append(engine)
-            else:
-                settings["engines"]["endpoint"]["classes"]["cpu-partitioning"]["without"].append(engine)
+                if endpoint["engines"]["settings"][role][csid]["cpu-partitioning"]:
+                    settings["engines"]["endpoint"]["classes"]["cpu-partitioning"]["with"].append(engine)
+                else:
+                    settings["engines"]["endpoint"]["classes"]["cpu-partitioning"]["without"].append(engine)
 
     endpoints.log_settings(settings, mode = "engines")
 
