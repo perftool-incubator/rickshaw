@@ -218,10 +218,14 @@ echo "cpu-partitioning:"
 if [ "${cpu_partitioning}" == "1" ]; then
     echo "Enabled"
 
-    environment="process"
-    if [ "${endpoint}" == "k8s" ]; then
-	environment="container"
-    fi
+    case "${endpoint}" in
+        "k8s"|"kube")
+            environment="container"
+            ;;
+        *)
+            environment="process"
+            ;;
+    esac
 
     discover_cmd="/usr/local/bin/discover-cpu-partitioning.py --environment=${environment}"
     echo "Determining CPU isolation setup by running: ${discover_cmd}"
