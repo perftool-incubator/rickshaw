@@ -183,6 +183,7 @@ def get_jobs(logger):
                                     for endpoint in scenario["endpoints"]:
                                         job = {
                                             "benchmark": benchmark["name"],
+                                            "enabled": True,
                                             "endpoint": endpoint
                                         }
                                         logger.info("Adding job for endpoint '%s'" % (endpoint))
@@ -199,6 +200,26 @@ def get_jobs(logger):
                 logger.debug("Benchmark '%s' enabled is False" % (benchmark["name"]))
     else:
         logger.debug("Global enabled is False")
+
+    if len(raw_jobs) == 0:
+        # we need at least one job otherwise the github action workflow
+        # for this runnter-type will fail -- this should only happen if
+        # a specific benchmark is requested that does not require this
+        # runner type so lets hard code that benchmark
+
+        # the job will be disabled so that it does not actually run the
+        # integration test, it's just a "filler" to have something in
+        # the job matrix
+
+        # specifying the remotehosts endpoint since that should work on
+        # all current runner types (not that it really matters since it
+        # won't actually run)
+        job = {
+            "benchmark": args.benchmark,
+            "enabled": False,
+            "endpoint": "remotehosts"
+        }
+        raw_jobs.append(job)
 
     return raw_jobs
 
