@@ -106,7 +106,7 @@ def not_json_serializable(obj):
 
 def dump_json(obj):
     """
-    Convert a variable into a formatted JSON string
+    Convert a variable into a human readable formatted JSON string
 
     Args:
         obj: A variable of potentially many types to convert into a JSON string
@@ -118,6 +118,21 @@ def dump_json(obj):
         str: A formatted string containing the JSON representation of obj
     """
     return json.dumps(obj, indent = 4, separators=(',', ': '), sort_keys = True, default = not_json_serializable)
+
+def dump_raw_json(obj):
+    """
+    Convert a variable into a raw formatted JSON string suitable for ingest into another program
+
+    Args:
+        obj: A variable of potentially many types to convert into a JSON string
+
+    Globals:
+        None
+
+    Returns:
+        str: A string containing the JSON representation of obj
+    """
+    return json.dumps(obj, separators=(',', ':'), sort_keys = True, default = not_json_serializable)
 
 def get_jobs(logger):
     """
@@ -139,7 +154,7 @@ def get_jobs(logger):
     if input_json is None:
         logger.error("Failed to load input file: %s" % (ci_input_file))
         logger.error("Load error: %s" % (load_err))
-        return 1
+        return None
     else:
         logger.info("Loaded input file: %s" % (ci_input_file))
 
@@ -148,7 +163,7 @@ def get_jobs(logger):
     if not valid:
         logger.error("Failed to validate input file against schema file: %s" % (ci_schema_file))
         logger.error("Validation error: %s" % (valid_err))
-        return 1
+        return None
     else:
         logger.info("Validated input file against schema file: %s" % (ci_schema_file))
 
@@ -376,9 +391,13 @@ def main():
     jobs = list()
 
     raw_jobs = get_jobs(logger)
+    if raw_jobs is None:
+        return 1
     logger.info("Generated %d jobs:\n%s" % (len(raw_jobs), dump_json(raw_jobs)))
 
     userenvs = get_userenvs(logger)
+    if userenvs is None:
+        return 1
     logger.info("Generated %d userenvs\n%s" % (len(userenvs), "\n".join(userenvs)))
 
     # multiply the jobs * userenvs to get the final job list
@@ -396,7 +415,7 @@ def main():
         github_output = os.environ.get("GITHUB_OUTPUT")
         if github_output is not None:
             with open(github_output, "a") as fh:
-                fh.write("jobs=" + str(jobs) + "\n")
+                fh.write("jobs=" + dump_raw_json(jobs) + "\n")
             logger.info("Wrote GitHub output to %s" % (github_output))
         else:
             logger.error("The runtime-env is defined as GitHub but there is no GITHUB_OUTPUT environment variable")
