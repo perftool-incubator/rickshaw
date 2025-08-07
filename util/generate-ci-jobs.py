@@ -49,12 +49,6 @@ def process_options():
                         default = "normal",
                         choices = [ "normal", "debug" ])
 
-    parser.add_argument("--rickshaw-dir",
-                        dest = "rickshaw_dir",
-                        help = "Where is rickshaw directory that should be used as input",
-                        default = os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                        type = str)
-
     parser.add_argument("--runner-tags",
                         dest = "runner_tags",
                         help = "What tags are required for self-hosted runners",
@@ -149,7 +143,7 @@ def get_jobs(logger):
     """
     logger.info("Getting raw jobs")
 
-    ci_input_file = args.rickshaw_dir + "/util/crucible-ci.json"
+    ci_input_file = rickshaw_dir + "/util/crucible-ci.json"
     input_json, load_err = load_json_file(ci_input_file)
     if input_json is None:
         logger.error("Failed to load input file: %s" % (ci_input_file))
@@ -158,7 +152,7 @@ def get_jobs(logger):
     else:
         logger.info("Loaded input file: %s" % (ci_input_file))
 
-    ci_schema_file = args.rickshaw_dir + "/schema/crucible-ci.json"
+    ci_schema_file = rickshaw_dir + "/schema/crucible-ci.json"
     valid, valid_err = validate_schema(input_json, ci_schema_file)
     if not valid:
         logger.error("Failed to validate input file against schema file: %s" % (ci_schema_file))
@@ -259,7 +253,7 @@ def get_userenvs(logger):
     diff_cmd_validate="git log HEAD^1"
     diff_cmd="git diff --name-only HEAD^1 HEAD"
 
-    userenv_excludes_file = args.rickshaw_dir + "/userenvs/ci-excludes.txt"
+    userenv_excludes_file = rickshaw_dir + "/userenvs/ci-excludes.txt"
     logger.debug("Loading userenv excludes from: %s" % (userenv_excludes_file))
     with open(userenv_excludes_file, "r") as fh:
         for line in fh:
@@ -289,14 +283,14 @@ def get_userenvs(logger):
         logger.info("Rickshaw history is not available")
         include_all_testable_userenvs = True
 
-    start_path = Path(args.rickshaw_dir + "/userenvs")
+    start_path = Path(rickshaw_dir + "/userenvs")
     testable_userenv_paths = sorted(start_path.glob("*.json"))
     logger.debug("testable userenv paths:\n%s" % (testable_userenv_paths))
     testable_userenvs = list()
     for userenv in testable_userenv_paths:
         if not userenv.is_symlink():
             userenv_path = str(userenv)
-            userenv_path = userenv_path.removeprefix(args.rickshaw_dir + "/")
+            userenv_path = userenv_path.removeprefix(rickshaw_dir + "/")
             testable_userenvs.append(userenv_path)
     logger.debug("%d testable userenvs:\n%s" % (len(testable_userenvs), "\n".join(testable_userenvs)))
     if not include_all_testable_userenvs:
@@ -386,7 +380,7 @@ def main():
     logger = logging.getLogger(__file__)
 
     logger.info("Parameters: " + str(args))
-    os.chdir(args.rickshaw_dir)
+    os.chdir(rickshaw_dir)
 
     jobs = list()
 
@@ -426,5 +420,6 @@ def main():
 if __name__ == "__main__":
     args = process_options()
     logger = None
+    rickshaw_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
     exit(main())
