@@ -253,11 +253,15 @@ def get_userenvs(logger):
     diff_cmd_validate="git log HEAD^1"
     diff_cmd="git diff --name-only HEAD^1 HEAD"
 
-    userenv_excludes_file = rickshaw_dir + "/userenvs/ci-excludes.txt"
-    logger.debug("Loading userenv excludes from: %s" % (userenv_excludes_file))
-    with open(userenv_excludes_file, "r") as fh:
-        for line in fh:
-            userenv_excludes.append(line.strip())
+    try:
+        userenv_excludes_file = rickshaw_dir + "/userenvs/ci-excludes.txt"
+        logger.debug("Loading userenv excludes from: %s" % (userenv_excludes_file))
+        with open(userenv_excludes_file, "r") as fh:
+            for line in fh:
+                userenv_excludes.append(line.strip())
+    except FileNotFoundError:
+        logger.debug("Could not find %s, failling back on historical excludes list" % (userenv_excludes_file))
+        userenv_excludes.extend([ "stream8-flexran", "rhel-ai" ])
     logger.debug("List of %d userenv excludes:\n%s" % (len(userenv_excludes), "\n".join(userenv_excludes)))
 
     include_all_testable_userenvs = False
