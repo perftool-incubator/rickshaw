@@ -108,6 +108,22 @@
             ]
         },
         {
+            "name": "sleep",
+            "enabled": true,
+            "scenarios": [
+                {
+                    "enabled": true,
+                    "endpoints": [
+                        "k8s",
+                        "remotehosts"
+                    ],
+                    "runners": {
+                        "type": "github"
+                    }
+                }
+            ]
+        },
+        {
             "name": "uperf",
             "enabled": true,
             "scenarios": [
