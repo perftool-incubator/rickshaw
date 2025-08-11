@@ -1,0 +1,143 @@
+{
+    "config": {
+        "enabled": true
+    },
+    "benchmarks": [
+        {
+            "name": "cyclictest",
+            "enabled": true,
+            "scenarios": [
+                {
+                    "enabled": true,
+                    "endpoints": [
+                        "k8s"
+                    ],
+                    "runners": {
+                        "type": "github"
+                    }
+                },
+                {
+                    "enabled": true,
+                    "endpoints": [
+                        "remotehosts"
+                    ],
+                    "runners": {
+                        "type": "self-hosted",
+                        "tags": [
+                            "cpu-partitioning",
+                            "remotehosts"
+                        ]
+                    }
+                }
+            ]
+        },
+        {
+            "name": "fio",
+            "enabled": true,
+            "scenarios": [
+                {
+                    "enabled": true,
+                    "endpoints": [
+                        "k8s",
+                        "remotehosts"
+                    ],
+                    "runners": {
+                        "type": "github"
+                    }
+                }
+            ]
+        },
+        {
+            "name": "iperf",
+            "enabled": true,
+            "scenarios": [
+                {
+                    "enabled": true,
+                    "endpoints": [
+                        "k8s",
+                        "remotehosts"
+                    ],
+                    "runners": {
+                        "type": "github"
+                    }
+                }
+            ]
+        },
+        {
+            "name": "multi",
+            "enabled": true,
+            "scenarios": [
+                {
+                    "enabled": true,
+                    "endpoints": [
+                        "k8s",
+                        "remotehosts"
+                    ],
+                    "runners": {
+                        "type": "github"
+                    }
+                }
+            ]
+        },
+        {
+            "name": "oslat",
+            "enabled": true,
+            "scenarios": [
+                {
+                    "enabled": true,
+                    "endpoints": [
+                        "k8s"
+                    ],
+                    "runners": {
+                        "type": "github"
+                    }
+                },
+                {
+                    "enabled": true,
+                    "endpoints": [
+                        "remotehosts"
+                    ],
+                    "runners": {
+                        "type": "self-hosted",
+                        "tags": [
+                            "cpu-partitioning",
+                            "remotehosts"
+                        ]
+                    }
+                }
+            ]
+        },
+        {
+            "name": "sleep",
+            "enabled": true,
+            "scenarios": [
+                {
+                    "enabled": true,
+                    "endpoints": [
+                        "k8s",
+                        "remotehosts"
+                    ],
+                    "runners": {
+                        "type": "github"
+                    }
+                }
+            ]
+        },
+        {
+            "name": "uperf",
+            "enabled": true,
+            "scenarios": [
+                {
+                    "enabled": true,
+                    "endpoints": [
+                        "k8s",
+                        "remotehosts"
+                    ],
+                    "runners": {
+                        "type": "github"
+                    }
+                }
+            ]
+        }
+    ]
+}
