@@ -56,6 +56,7 @@
                     "settings": {
                         "securityContext": {
                             "capabilities": {
+				"privileged": true,
                                 "add": [ "SYS_NICE", "IPC_LOCK" ]
                             }
                         }
