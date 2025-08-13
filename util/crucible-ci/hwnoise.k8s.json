@@ -55,7 +55,7 @@
                     ],
                     "settings": {
                         "securityContext": {
-                            "privileged": true,
+                            "privileged": true
                         }
                     }
                 },
