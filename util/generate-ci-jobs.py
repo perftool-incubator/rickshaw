@@ -336,6 +336,13 @@ def get_userenvs(logger):
             for userenv in userenvs:
                 logger.info("Adding '%s' userenv" % (userenv))
                 final_userenvs.append(userenv)
+
+        if args.userenv_filter == "all":
+            # this userenv comes from the crucible-ci-userenvs repo
+            # and is used to test externally provided userenvs --
+            # ie. userenvs that do not come from Crucible/rickshaw
+            logger.info("Adding 'external' userenv")
+            final_userenvs.append("external")
     else:
         # this is the rickshaw PR behavior where only modified /
         # created userenvs are being tested when no other rickshaw
