@@ -705,7 +705,8 @@ def create_pod_crd(role = None, id = None, node = None):
         ]
 
     if role == "client" or role == "server":
-        # KMR handle PsecurityContext
+        if "securityContext" in pod_settings and "pod" in pod_settings["securityContext"]:
+            crd["spec"]["securityContext"] = copy.deepcopy(pod_settings["securityContext"]["pod"])
 
         # KMR handle runtimeClassName
 
@@ -851,8 +852,8 @@ def create_pod_crd(role = None, id = None, node = None):
             ]
 
         if role == "client" or role == "server":
-            if "securityContext" in pod_settings:
-                container["securityContext"] = copy.deepcopy(pod_settings["securityContext"])
+            if "securityContext" in pod_settings and "container" in pod_settings["securityContext"]:
+                container["securityContext"] = copy.deepcopy(pod_settings["securityContext"]["container"])
 
             container["volumeMounts"] = [
                 {

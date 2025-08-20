@@ -57,8 +57,10 @@
 		    ],
                     "settings": {
                         "securityContext": {
-                            "capabilities": {
-                                "add": [ "SYS_NICE", "IPC_LOCK" ]
+                            "container": {
+                                "capabilities": {
+                                    "add": [ "SYS_NICE", "IPC_LOCK" ]
+                                }
                             }
                         }
                     }

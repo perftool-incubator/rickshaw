@@ -270,7 +270,18 @@
                 },
                 "securityContext": {
                     "type": "object",
-                    "minProperties": 1
+                    "minProperties": 1,
+                    "properties": {
+                        "container": {
+                            "type": "object",
+                            "minProperties": 1
+                        },
+                        "pod": {
+                            "type": "object",
+                            "minProperties": 1
+                        }
+                    },
+                    "additionalProperties": false
                 },
                 "userenv": {
                     "type": "string",
