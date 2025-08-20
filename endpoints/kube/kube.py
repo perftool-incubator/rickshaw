@@ -708,7 +708,8 @@ def create_pod_crd(role = None, id = None, node = None):
         if "securityContext" in pod_settings and "pod" in pod_settings["securityContext"]:
             crd["spec"]["securityContext"] = copy.deepcopy(pod_settings["securityContext"]["pod"])
 
-        # KMR handle runtimeClassName
+        if "runtimeClassName" in pod_settings:
+            crd["spec"]["runtimeClassName"] = pod_settings["runtimeClassName"]
 
         # KMR handle nodeSelector
 
