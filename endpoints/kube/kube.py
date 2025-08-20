@@ -714,7 +714,8 @@ def create_pod_crd(role = None, id = None, node = None):
         if "nodeSelector" in pod_settings:
             crd["spec"]["nodeSelector"] = copy.deepcopy(pod_settings["nodeSelector"])
 
-        # KMR handle hostNetwork
+        if "hostNetwork" in pod_settings:
+            crd["spec"]["hostNetwork"] = pod_settings["hostNetwork"]
 
         crd["spec"]["volumes"] = [
             {

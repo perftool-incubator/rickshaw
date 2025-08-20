@@ -197,6 +197,9 @@
                 "cpu-partitioning": {
                     "type": "boolean"
                 },
+                "hostNetwork": {
+                    "type": "boolean"
+                },
                 "nodeSelector": {
                     "type": "object",
                     "minProperties": 1
