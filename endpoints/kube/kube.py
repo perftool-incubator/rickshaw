@@ -711,7 +711,8 @@ def create_pod_crd(role = None, id = None, node = None):
         if "runtimeClassName" in pod_settings:
             crd["spec"]["runtimeClassName"] = pod_settings["runtimeClassName"]
 
-        # KMR handle nodeSelector
+        if "nodeSelector" in pod_settings:
+            crd["spec"]["nodeSelector"] = copy.deepcopy(pod_settings["nodeSelector"])
 
         # KMR handle hostNetwork
 
