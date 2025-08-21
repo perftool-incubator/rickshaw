@@ -418,6 +418,10 @@ sub calc_image_md5 {
     my $benchmark_tool = shift;
     my $stage = shift;
     debug_log(sprintf "calc_image_md5(): userenv=%s benchmark/tool=%s stage=%d\n", $userenv, $benchmark_tool, $stage);
+
+    # create an MD5 context
+    my $md5 = Digest::MD5->new;
+
     my $workshop_sub_cmd;
     if (defined $req_args) {
         $workshop_sub_cmd = $workshop_base_cmd . " " . $userenv_arg . " " . $req_args;
@@ -471,6 +475,47 @@ sub calc_image_md5 {
         if ($dumped_file !~ /^\[VERBOSE\]|^replacing/) {
             debug_log(sprintf "calc_image_md5(): found file from workshop [%s]\n", $dumped_file);
 
+            # look for files that begin with things like 'http://' or
+            # 'https://' or similar
+            if ($dumped_file =~ /^[a-zA-Z]+:\/\//) {
+                debug_log(sprintf "calc_image_md5(): file appears to be remote, attemping to acquire [%s]\n", $dumped_file);
+                
+                # reset the MD5 context
+                $md5 = Digest::MD5->new;
+                $md5->add($dumped_file);
+                my $dumped_file_hash = $md5->hexdigest;
+
+                my $dumped_file_hash_filename = "/tmp/rickshaw-run." . $dumped_file_hash;
+
+                my $curl_cmd = 'curl --output ' . $dumped_file_hash_filename .
+                               ' --show-error --stderr - --fail-with-body' .
+                               ' "' . $dumped_file . '"';
+
+                debug_log(sprintf "calc_image_md5(): attempting to download file via curl [%s -> %s]\n", $dumped_file, $dumped_file_hash_filename);
+
+                ($curl_cmd, my $cmd_status, my $cmd_rc) = run_cmd($curl_cmd);
+                if ($cmd_rc == 0) {
+                    debug_log(sprintf "calc_image_md5(): download output:\n%s\n", $cmd_status);
+                    debug_log(sprintf "calc_image_md5(): download succeeded, replacing filename [%s -> %s]\n", $dumped_file, $dumped_file_hash_filename);
+                    $dumped_file = $dumped_file_hash_filename;
+                } else {
+                    log_print sprintf "calc_image_md5(): Failed to download '%s' for hash calculation:\n", $dumped_file;
+                    log_print sprintf "calc_image_md5(): Download command: %s\n", $curl_cmd;
+                    log_print sprintf "calc_image_md5(): Download output:\n%s\n", $cmd_status;
+                    if (open(DC, "<", $dumped_file_hash_filename)) {
+                        my $download_contents = "";
+                        while(<DC>) {
+                            $download_contents .= $_;
+                        }
+                        close DC;
+                        log_print sprintf "calc_image_md5(): Download contents:\n%s\n", $download_contents;
+                    } else {
+                        log_print "calc_image_md5(): No download contents available.\n";
+                    }
+                    exit 1;
+                }
+            }
+
             my $real_path = Cwd::realpath($dumped_file);
             if ($real_path ne $dumped_file) {
                 debug_log(sprintf "calc_image_md5(): file from workshop [%s] is a link to [%s]\n", $dumped_file, $real_path);
@@ -494,9 +539,8 @@ sub calc_image_md5 {
     debug_log(sprintf "calc_image_md5(): logging tag calculation data to %s\n", $tag_calc_data);
     my $tag_fh = open_write_text_file($tag_calc_data) || die "Failed to open " . $tag_calc_data . " for writing\n";
 
-    # compute an md5 hash of relevant information to identify the
-    # userenv
-    my $md5 = Digest::MD5->new;
+    # reset the MD5 context
+    $md5 = Digest::MD5->new;
 
     my $item_header = "# Item #########################################################################\n";
     my $item;
