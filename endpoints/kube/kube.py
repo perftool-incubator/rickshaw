@@ -727,10 +727,22 @@ def create_pod_crd(role = None, id = None, node = None):
             }
         ]
 
-        user_volumes = False
-        if user_volumes:
-            # KMR handle user volumes
-            pass
+        if "volumes" in pod_settings:
+            for volume in pod_settings["volumes"]:
+                new_volume = {
+                    "name": volume["name"]
+                }
+
+                # this loop should only execute once; the JSON schema
+                # defines the min and max properties as 1, but by
+                # writing it this way we don't have to handle the
+                # individual values (of which there are many) -- the
+                # loop is generic and should adapt to the different
+                # values automatically
+                for key in volume["volume"].keys():
+                    new_volume[key] = copy.deepcopy(volume["volume"][key])
+
+                crd["spec"]["volumes"].append(new_volume)
 
         if "resources" in pod_settings and "hugepages" in pod_settings["resources"]:
             crd["spec"]["volumes"].append({
@@ -865,10 +877,16 @@ def create_pod_crd(role = None, id = None, node = None):
                 }
             ]
 
-            user_volumes = False
-            if user_volumes:
-                # KMR handle user volumes
-                pass
+            if "volumes" in pod_settings:
+                for volume in pod_settings["volumes"]:
+                    new_volume_mount = {
+                        "name": volume["name"]
+                    }
+
+                    for key in volume["volumeMount"].keys():
+                        new_volume_mount[key] = copy.deepcopy(volume["volumeMount"][key])
+
+                    container["volumeMounts"].append(new_volume_mount)
 
             if "resources" in pod_settings:
                 has_limits = False
