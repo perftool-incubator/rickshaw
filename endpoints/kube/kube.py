@@ -1767,28 +1767,62 @@ def main():
                                        endpoint_index = args.endpoint_index,
                                        endpoint_normalizer_callback = normalize_endpoint_settings)
     if settings is None:
-        return 1
+        log.error("Enabling early abort due to error in endpoints.load_settings")
+        early_abort = True
 
-    if check_base_requirements() != 0:
-        return 1
+    if not early_abort:
+        if check_base_requirements() != 0:
+            log.error("Enabling early abort due to error in check_base_requirements")
+            early_abort = True
+    else:
+        log.warning("Skipping call to check_base_requirements due to early abort")
 
-    endpoints.create_local_dirs(settings)
+    if not early_abort:
+        endpoints.create_local_dirs(settings)
+    else:
+        log.warning("Skipping call to endpoints.create_local_dirs due to early abort")
 
-    if get_k8s_config() != 0:
-        return 1
+    if not early_abort:
+        if get_k8s_config() != 0:
+            log.error("Enabling early abort due to error in get_k8s_config")
+            early_abort = True
+    else:
+        log.warning("Skipping call to get_k8s_config due to early abort")
 
-    if init_k8s_namespace() != 0:
-        return 1
+    if not early_abort:
+        if init_k8s_namespace() != 0:
+            log.error("Enabling early abort due to error in init_k8s_namespace")
+            early_abort = True
+    else:
+        log.warning("Skipping call to init_k8s_namespace due to early abort")
 
-    if compile_object_configs() != 0:
-        return 1
+    if not early_abort:
+        if compile_object_configs() != 0:
+            log.error("Enabling early abort due to error in compile_object_configs")
+            early_abort = True
+    else:
+        log.warning("Skipping call to compile_object_configs due to early abort")
 
-    if create_cs_pods(cpu_partitioning = True) != 0:
-        return 1
-    if create_cs_pods(cpu_partitioning = False) != 0:
-        return 1
-    if create_tools_pods() != 0:
-        return 1
+    if not early_abort:
+        if create_cs_pods(cpu_partitioning = True) != 0:
+            log.error("Enabling early abort due to error in create_cs_pods(cpu_partitioning = True)")
+            early_abort = True
+    else:
+        log.warning("Skipping call to create_cs_pods(cpu_partitioning = True) due to early abort")
+
+    if not early_abort:
+        if create_cs_pods(cpu_partitioning = False) != 0:
+            log.error("Enabling early abort due to error in create_cs_pods(cpu_partitioning = False)")
+            early_abort = True
+    else:
+        log.warning("Skipping call to create_cs_pods(cpu_partitioning = False) due to early abort")
+
+    if not early_abort:
+        if create_tools_pods() != 0:
+            log.error("Enabling early abort due to error in create_tools_pods")
+            early_abort = True
+    else:
+        log.warning("Skipping call to create_tools_pods due to early abort")
 
     # KMR implement callbacks
     kube_callbacks = {
