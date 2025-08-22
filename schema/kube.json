@@ -168,6 +168,9 @@
                     },
                     "settings": {
                         "$ref": "#/definitions/settings"
+                    },
+                    "verifications": {
+                        "$ref": "#/definitions/verifications"
                     }
                 },
                 "additionalProperties": false,
@@ -209,14 +212,6 @@
                     "enum": [
                         "kata",
                         "pod"
-                    ]
-                },
-                "qosClass": {
-                    "type": "string",
-                    "enum": [
-                        "BestEffort",
-                        "Burstable",
-                        "Guaranteed"
                     ]
                 },
                 "resources": {
@@ -393,6 +388,21 @@
                     }
                 }
             ]
+        },
+        "verifications": {
+            "type": "object",
+            "minProperties": 1,
+            "properties": {
+                "qosClass": {
+                    "type": "string",
+                    "enum": [
+                        "BestEffort",
+                        "Burstable",
+                        "Guaranteed"
+                    ]
+                }
+            },
+            "additionalProperties": false
         }
     }
 }

@@ -37,7 +37,7 @@ else:
     sys.path.append(str(p))
 from toolbox.json import *
 
-endpoint_defaults = {
+endpoint_default_settings = {
     "controller-ip-address": None,
     "cpu-partitioning": False,
     "osruntime": "pod",
@@ -52,6 +52,8 @@ endpoint_defaults = {
     }
 }
 
+endpoint_default_verifications = dict()
+
 def normalize_endpoint_settings(endpoint, rickshaw):
     """
     Normalize the endpoint settings by determining where default settings need to be applied and expanding ID ranges
@@ -63,24 +65,26 @@ def normalize_endpoint_settings(endpoint, rickshaw):
     Globals:
         args (namespace): the script's CLI parameters
         log: a logger instance
-        endpoint_defaults (dict): the endpoint defaults
+        endpoint_default_settings (dict): the endpoint default settings
 
     Returns:
         endpoint (dict): The normalized endpoint dictionary
     """
-    endpoint["engines"]["defaults"] = {
-        "controller-ip-address": endpoint_defaults["controller-ip-address"],
-        "cpu-partitioning": endpoint_defaults["cpu-partitioning"],
-        "osruntime": endpoint_defaults["osruntime"],
+    endpoint["engines"]["defaults"] = dict()
+    endpoint["engines"]["defaults"]["settings"] = {
+        "controller-ip-address": endpoint_default_settings["controller-ip-address"],
+        "cpu-partitioning": endpoint_default_settings["cpu-partitioning"],
+        "osruntime": endpoint_default_settings["osruntime"],
         "userenv": rickshaw["userenvs"]["default"]["benchmarks"]
     }
+    endpoint["engines"]["defaults"]["verifications"] = dict()
 
     if not "disable-tools" in endpoint:
-        endpoint["disable-tools"] = copy.deepcopy(endpoint_defaults["disable-tools"])
+        endpoint["disable-tools"] = copy.deepcopy(endpoint_default_settings["disable-tools"])
     else:
-        for key in endpoint_defaults["disable-tools"].keys():
+        for key in endpoint_default_settings["disable-tools"].keys():
             if not key in endpoint["disable-tools"]:
-                endpoint["disable-tools"][key] = endpoint_defaults["disable-tools"][key]
+                endpoint["disable-tools"][key] = endpoint_default_settings["disable-tools"][key]
 
     if not "namespace" in endpoint:
         # the user didn't request any specific namespace settings so
@@ -89,12 +93,12 @@ def normalize_endpoint_settings(endpoint, rickshaw):
             "type": "crucible"
         }
     if endpoint["namespace"]["type"] == "unique":
-        prefix = endpoint_defaults["prefix"]["namespace"]
+        prefix = endpoint_default_settings["prefix"]["namespace"]
         if "prefix" in endpoint["namespace"]:
             prefix = endpoint["namespace"]["prefix"]
         endpoint["namespace"]["name"] = "%s__%s" % (prefix, args.run_id)
     elif endpoint["namespace"]["type"] == "crucible":
-        endpoint["namespace"]["name"] = endpoint_defaults["prefix"]["namespace"]
+        endpoint["namespace"]["name"] = endpoint_default_settings["prefix"]["namespace"]
     elif endpoint["namespace"]["type"] == "custom":
         # there should be nothing to do here as the namespace name
         # should already be defined
@@ -115,13 +119,16 @@ def normalize_endpoint_settings(endpoint, rickshaw):
                 found_defaults = True
                 default_cfg_block_idx = cfg_block_idx
                 for key in cfg_block["settings"].keys():
-                    endpoint["engines"]["defaults"][key] = cfg_block["settings"][key]
+                    endpoint["engines"]["defaults"]["settings"][key] = cfg_block["settings"][key]
+                if "verifications" in cfg_block:
+                    for key in cfg_block["verifications"].keys:
+                        endpoint["engines"]["defaults"]["verifications"][key] = cfg_block["verifications"][key]
     if not default_cfg_block_idx is None:
         del endpoint["config"][default_cfg_block_idx]
 
-    if endpoint["engines"]["defaults"]["controller-ip-address"] is None:
+    if endpoint["engines"]["defaults"]["settings"]["controller-ip-address"] is None:
         try:
-            endpoint["engines"]["defaults"]["controller-ip-address"] = endpoints.get_controller_ip(endpoint["host"])
+            endpoint["engines"]["defaults"]["settings"]["controller-ip-address"] = endpoints.get_controller_ip(endpoint["host"])
         except ValueError as e:
             msg = "While determining default controller IP address encountered exception '%s'" % (str(e))
             if args.validate:
@@ -155,6 +162,7 @@ def normalize_endpoint_settings(endpoint, rickshaw):
                 return None
 
     endpoint["engines"]["settings"] = dict()
+    endpoint["engines"]["verifications"] = dict()
     for cfg_block_idx,cfg_block in enumerate(endpoint["config"]):
         for target in cfg_block["targets"]:
             if not target["role"] in endpoint["engines"]:
@@ -168,6 +176,9 @@ def normalize_endpoint_settings(endpoint, rickshaw):
             if not target["role"] in endpoint["engines"]["settings"]:
                 endpoint["engines"]["settings"][target["role"]] = dict()
 
+            if not target["role"] in endpoint["engines"]["verifications"]:
+                endpoint["engines"]["verifications"][target["role"]] = dict()
+
             for engine_id in target["ids"]:
                 if not engine_id in endpoint["engines"][target["role"]]:
                     msg = "Found engine with ID %d and role '%s' in config block at index %d that is not owned by this endpoint" % (engine_id, target["role"], cfg_block_idx)
@@ -180,6 +191,9 @@ def normalize_endpoint_settings(endpoint, rickshaw):
                 if engine_id not in endpoint["engines"]["settings"][target["role"]]:
                     endpoint["engines"]["settings"][target["role"]][engine_id] = dict()
 
+                if engine_id not in endpoint["engines"]["verifications"][target["role"]]:
+                    endpoint["engines"]["verifications"][target["role"]][engine_id] = dict()
+
                 for key in cfg_block["settings"].keys():
                     if key in endpoint["engines"]["settings"][target["role"]][engine_id]:
                         msg = "Overriding previously defined value for key '%s' for engine ID %d with role '%s' while processing config block at index %d" % (key, engine_id, target["role"], cfg_block_idx)
@@ -189,15 +203,32 @@ def normalize_endpoint_settings(endpoint, rickshaw):
                             log.warning(msg)
                     endpoint["engines"]["settings"][target["role"]][engine_id][key] = cfg_block["settings"][key]
 
-                for key in endpoint["engines"]["defaults"].keys():
+                if "verifications" in cfg_block:
+                    for key in cfg_block["verifications"].keys():
+                        if key in endpoint["engines"]["verifications"][target["role"]][engine_id]:
+                            msg = "Overriding previously defined value for key '%s' for engine ID %s with role '%s' while processing config block at index %d" % (key, engine_id, target["role"], cfg_block_idx)
+                            if args.validate:
+                                endpoints.validate_warning(msg)
+                            else:
+                                log.warning(msg)
+                        endpoint["engines"]["verifications"][target["role"]][engine_id][key] = cfg_block["verifications"][key]
+
+                for key in endpoint["engines"]["defaults"]["settings"].keys():
                     if not key in endpoint["engines"]["settings"][target["role"]][engine_id]:
-                        endpoint["engines"]["settings"][target["role"]][engine_id][key] = endpoint["engines"]["defaults"][key]
+                        endpoint["engines"]["settings"][target["role"]][engine_id][key] = endpoint["engines"]["defaults"]["settings"][key]
+
+                for key in endpoint["engines"]["defaults"]["verifications"].keys():
+                    if not key in endpoint["engines"]["settings"][target["role"]][engine_id]:
+                        endpoint["engines"]["settings"][target["role"]][engine_id][key] = endpoint["engines"]["defaults"]["verifications"][key]
 
     for engine_role in [ "client", "server" ]:
         if engine_role in endpoint["engines"]:
             for engine_id in endpoint["engines"][engine_role]:
                 if engine_id not in endpoint["engines"]["settings"][engine_role]:
                     endpoint["engines"]["settings"][engine_role][engine_id] = endpoint["engines"]["defaults"]
+
+                if engine_id not in endpoint["engines"]["verifications"][engine_role]:
+                    endpoint["engines"]["settings"][engine_role][engine_id] = endpoint["engines"]["default-verifications"]
 
     return endpoint
 
@@ -634,7 +665,7 @@ def create_pod_crd(role = None, id = None, node = None):
     if role == "client" or role == "server":
         pod_settings = endpoint["engines"]["settings"][role][id]
     elif role == "worker" or role == "master":
-        pod_settings = endpoint["engines"]["defaults"]
+        pod_settings = endpoint["engines"]["defaults"]["settings"]
     if pod_settings is None:
         log.error("Could not find mapping for pod settings")
         return None,1
@@ -643,7 +674,7 @@ def create_pod_crd(role = None, id = None, node = None):
         "apiVersion": "v1",
         "kind": "Pod",
         "metadata": {
-            "name": "%s-%s" % (endpoint_defaults["prefix"]["pod"], name),
+            "name": "%s-%s" % (endpoint_default_settings["prefix"]["pod"], name),
             "namespace": endpoint["namespace"]["name"],
         },
         "spec": {
@@ -988,7 +1019,7 @@ def verify_pods_running(connection, pods, pod_details):
         for pod in pod_status["items"]:
             pod_name = pod["metadata"]["name"]
             # strip off the prefix
-            pod_name = re.sub(r"%s-" % (endpoint_defaults["prefix"]["pod"]), r"", pod_name)
+            pod_name = re.sub(r"%s-" % (endpoint_default_settings["prefix"]["pod"]), r"", pod_name)
             log.debug("Processing engine '%s'" % (pod_name))
 
             if pod_name not in pods:
@@ -1005,14 +1036,25 @@ def verify_pods_running(connection, pods, pod_details):
                         log.info("Container '%s' is running" % (container["name"]))
                         running_containers.append(container["name"])
 
+                        pod_verifications = None
                         if pod_details[pod_name]["role"] in [ "client", "server" ]:
-                            pod_settings = endpoint["engines"]["settings"][pod_details[pod_name]["role"]][pod_details[pod_name]["id"]]
-                            if "qosClass" in pod_settings:
-                                if pod_settings["qosClass"] != pod["status"]["qosClass"]:
-                                    log.error("Pod '%s' requested qosClass of '%s' but is running with qosClass of '%s'" % (pod_name, pod_settings["qosClass"], pod["status"]["qosClass"]))
+                            pod_verifications = endpoint["engines"]["verifications"][pod_details[pod_name]["role"]][pod_details[pod_name]["id"]]
+                        elif pod_details[pod_name]["role"] in [ "worker", "master" ]:
+                            pod_verifications = endpoint["engines"]["defaults"]["verifications"]
+
+                        if pod_verifications is None:
+                            log.error("Could not find mapping for pod verifications")
+                            valid_configuration = False
+                        else:
+                            if "qosClass" in pod_verifications:
+                                log.info("Pod has a qosClass verification defined")
+                                if pod_verifications["qosClass"] != pod["status"]["qosClass"]:
+                                    log.error("Pod '%s' desired qosClass of '%s' but is running with qosClass of '%s'" % (pod_name, pod_verifications["qosClass"], pod["status"]["qosClass"]))
                                     valid_configuration = False
                                 else:
-                                    log.info("Verified pod '%s' has requested qosClass of '%s'" % (pod_name, pod["status"]["qosClass"]))
+                                    log.info("Verified pod '%s' has desired qosClass of '%s'" % (pod_name, pod["status"]["qosClass"]))
+                            else:
+                                log.info("Pod does not have a qosClass verification defined")
                     else:
                         log.info("Container '%s' is not running" % (container["name"]))
 
@@ -1460,7 +1502,7 @@ def kube_cleanup():
             for engine in settings["engines"]["endpoint"]["pods"][pod]["containers"]:
                 log.info("Collecting log for engine '%s'" % (engine))
                 cmd = "%s logs %s-%s --namespace %s --container %s" % (settings["misc"]["k8s-bin"],
-                                                                       endpoint_defaults["prefix"]["pod"],
+                                                                       endpoint_default_settings["prefix"]["pod"],
                                                                        pod,
                                                                        endpoint["namespace"]["name"],
                                                                        engine)
