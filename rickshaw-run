@@ -1280,19 +1280,33 @@ sub source_container_image {
                     ($query_cmd, my $query_status, my $query_rc) = run_cmd($query_cmd);
                     chomp($query_status);
 
+                    my $failed_attempt = 0;
                     if ($query_rc == 0) {
                         my $coder = JSON::XS->new;
-                        my $query_ref = $coder->decode($query_status);
-
-                        if (defined $$query_ref{'tags'}[0]) {
-                            $current_expiration = $$query_ref{'tags'}[0]{'end_ts'};
-                            last;
+                        my $query_ref;
+                        eval {
+                            $query_ref = $coder->decode($query_status);
+                        };
+                        if ($@) {
+                            my $error_message = $@;
+                            log_print "Caught an exception while attempting to decode JSON: $error_message";
+                            log_print sprintf "JSON contents:\n%s\n", $query_status;
+                            $failed_attempt = 1;
                         } else {
-                            log_print "\tTag information returned from query is incomplete\n";
-                            log_print Dumper $query_ref;
-                            exit 1;
+                            if (defined $$query_ref{'tags'}[0]) {
+                                $current_expiration = $$query_ref{'tags'}[0]{'end_ts'};
+                                last;
+                            } else {
+                                log_print "\tTag information returned from query is incomplete\n";
+                                log_print Dumper $query_ref;
+                                $failed_attempt = 1;
+                            }
                         }
                     } else {
+                        $failed_attempt = 1;
+                    }
+
+                    if ($failed_attempt) {
                         if ($refresh_attempts > $max_refresh_attempts) {
                             log_print sprintf "\tFailed to query for tag information on %d attempts\n", $max_refresh_attempts;
                             exit 1;
