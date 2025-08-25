@@ -168,6 +168,9 @@
                     },
                     "settings": {
                         "$ref": "#/definitions/settings"
+                    },
+                    "verifications": {
+                        "$ref": "#/definitions/verifications"
                     }
                 },
                 "additionalProperties": false,
@@ -197,6 +200,9 @@
                 "cpu-partitioning": {
                     "type": "boolean"
                 },
+                "hostNetwork": {
+                    "type": "boolean"
+                },
                 "nodeSelector": {
                     "type": "object",
                     "minProperties": 1
@@ -206,14 +212,6 @@
                     "enum": [
                         "kata",
                         "pod"
-                    ]
-                },
-                "qosClass": {
-                    "type": "string",
-                    "enum": [
-                        "BestEffort",
-                        "Burstable",
-                        "Guaranteed"
                     ]
                 },
                 "resources": {
@@ -268,13 +266,99 @@
                     },
                     "additionalProperties": false
                 },
+                "runtimeClassName": {
+                    "type": "string",
+                    "minLength": 1
+                },
                 "securityContext": {
                     "type": "object",
-                    "minProperties": 1
+                    "minProperties": 1,
+                    "properties": {
+                        "container": {
+                            "type": "object",
+                            "minProperties": 1
+                        },
+                        "pod": {
+                            "type": "object",
+                            "minProperties": 1
+                        }
+                    },
+                    "additionalProperties": false
                 },
                 "userenv": {
                     "type": "string",
                     "minLength": 1
+                },
+                "volumes": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "volumeMount": {
+                                "type": "object",
+                                "properties": {
+                                    "mountPath": {
+                                        "type": "string",
+                                        "minLength": 1
+                                    },
+                                    "readOnly": {
+                                        "type": "boolean"
+                                    }
+                                },
+                                "additionalProperties": false,
+                                "required": [
+                                    "mountPath"
+                                ]
+                            },
+                            "name": {
+                                "type": "string",
+                                "minLength": 1
+                            },
+                            "volume": {
+                                "type": "object",
+                                "minProperties": 1,
+                                "maxProperties": 1,
+                                "properties": {
+                                    "configMap": {
+                                        "type": "object",
+                                        "minProperties": 1
+                                    },
+                                    "emptyDir": {
+                                        "type": "object",
+                                        "minProperties": 1
+                                    },
+                                    "hostPath": {
+                                        "type": "object",
+                                        "minProperties": 1
+                                    },
+                                    "image": {
+                                        "type": "object",
+                                        "minProperties": 1
+                                    },
+                                    "nfs": {
+                                        "type": "object",
+                                        "minProperties": 1
+                                    },
+                                    "persistentVolumeClaim": {
+                                        "type": "object",
+                                        "minProperties": 1
+                                    },
+                                    "secret": {
+                                        "type": "object",
+                                        "minProperties": 1
+                                    }
+                                },
+                                "additionalProperties": false
+                            }
+                        },
+                        "additionalProperties": false,
+                        "required": [
+                            "name",
+                            "volume",
+                            "volumeMount"
+                        ]
+                    }
                 }
             },
             "additionalProperties": false
@@ -304,6 +388,21 @@
                     }
                 }
             ]
+        },
+        "verifications": {
+            "type": "object",
+            "minProperties": 1,
+            "properties": {
+                "qosClass": {
+                    "type": "string",
+                    "enum": [
+                        "BestEffort",
+                        "Burstable",
+                        "Guaranteed"
+                    ]
+                }
+            },
+            "additionalProperties": false
         }
     }
 }
