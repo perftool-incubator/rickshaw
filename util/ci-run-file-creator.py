@@ -158,7 +158,7 @@ def update_endpoint_sub_type():
     run_file["tags"]["endpoint-sub-type"] = args.endpoint_sub_type
 
     match args.endpoint:
-        case "remotehosts" | "kube":
+        case "remotehosts":
             if args.endpoint_sub_type != "NONE":
                 msg = "%s endpoint expected sub-type of 'NONE' (not '%s')" % (args.endpoint, args.endpoint_sub_type)
                 log.error(msg)
@@ -181,6 +181,11 @@ def update_endpoint_sub_type():
                         raise ValueError(msg)
                     case "OCP":
                         endpoint["kubeconfig"] = 1
+        case "kube":
+            if args.endpoint_sub_type == "NONE":
+                msg = "%s endpoint expected sub-type of either 'GENERIC', 'MICROK8S', or 'OCP' (not 'NONE')"
+                log.error(msg)
+                raise VelueError(msg)
 
     return
 
