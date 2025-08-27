@@ -5,7 +5,7 @@
     "benchmarks": [
         {
             "name": "cyclictest",
-            "enabled": true,
+            "enabled": false,
             "scenarios": [
                 {
                     "enabled": true,
@@ -34,7 +34,7 @@
         },
         {
             "name": "fio",
-            "enabled": true,
+            "enabled": false,
             "scenarios": [
                 {
                     "enabled": true,
@@ -51,7 +51,7 @@
         },
         {
             "name": "hwnoise",
-            "enabled": true,
+            "enabled": false,
             "scenarios": [
                 {
                     "enabled": true,
@@ -80,7 +80,7 @@
         },
         {
             "name": "iperf",
-            "enabled": true,
+            "enabled": false,
             "scenarios": [
                 {
                     "enabled": true,
@@ -143,7 +143,7 @@
         },
         {
             "name": "sleep",
-            "enabled": true,
+            "enabled": false,
             "scenarios": [
                 {
                     "enabled": true,
@@ -160,7 +160,7 @@
         },
         {
             "name": "uperf",
-            "enabled": true,
+            "enabled": false,
             "scenarios": [
                 {
                     "enabled": true,
