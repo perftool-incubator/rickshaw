@@ -259,6 +259,10 @@ def find_k8s_bin(validate, connection):
     if result.exited == 0:
         return "kubectl"
 
+    result = endpoints.run_remote(connection, "microk8s kubectl", validate = validate, debug = debug_output)
+    if result.exited == 0:
+        return "microk8s kubectl"
+
     return None
 
 def validate():
@@ -549,10 +553,18 @@ def get_k8s_config():
         settings["misc"]["k8s"]["nodes"]["endpoint"]["workers"] = []
         for node in settings["misc"]["k8s"]["nodes"]["cluster"]["items"]:
             name = node["metadata"]["name"]
+
+            # OCP
             if "node-role.kubernetes.io/worker" in node["metadata"]["labels"]:
                 settings["misc"]["k8s"]["nodes"]["endpoint"]["masters"].append(name)
             if "node-role.kubernetes.io/master" in node["metadata"]["labels"]:
                 settings["misc"]["k8s"]["nodes"]["endpoint"]["workers"].append(name)
+
+            # microk8s
+            if "node.kubernetes.io/microk8s-controlplane" in node["metadata"]["labels"]:
+                settings["misc"]["k8s"]["nodes"]["endpoint"]["masters"].append(name)
+                settings["misc"]["k8s"]["nodes"]["endpoint"]["workers"].append(name)
+
         node_count_fault = False
         log.info("Found %d masters: %s" % (len(settings["misc"]["k8s"]["nodes"]["endpoint"]["masters"]), settings["misc"]["k8s"]["nodes"]["endpoint"]["masters"]))
         if len(settings["misc"]["k8s"]["nodes"]["endpoint"]["masters"]) == 0:
