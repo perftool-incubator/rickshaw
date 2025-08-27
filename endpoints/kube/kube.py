@@ -1832,6 +1832,10 @@ def main():
         "test-stop": None,
         "remote-cleanup": kube_cleanup
     }
+    if early_abort and not "new-followers" in settings["engines"]:
+        # in the case of an early abort the new-followers list may not
+        # have been initialized yet
+        settings["engines"]["new-followers"] = []
     rc = endpoints.process_roadblocks(callbacks = kube_callbacks,
                                       roadblock_id = args.roadblock_id,
                                       endpoint_label = args.endpoint_label,
