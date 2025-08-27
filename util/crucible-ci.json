@@ -10,7 +10,8 @@
                 {
                     "enabled": true,
                     "endpoints": [
-                        "k8s"
+                        "k8s",
+                        "kube"
                     ],
                     "runners": {
                         "type": "github"
@@ -39,6 +40,7 @@
                     "enabled": true,
                     "endpoints": [
                         "k8s",
+                        "kube",
                         "remotehosts"
                     ],
                     "runners": {
@@ -54,7 +56,8 @@
                 {
                     "enabled": true,
                     "endpoints": [
-                        "k8s"
+                        "k8s",
+                        "kube"
                     ],
                     "runners": {
                         "type": "github"
@@ -83,6 +86,7 @@
                     "enabled": true,
                     "endpoints": [
                         "k8s",
+                        "kube",
                         "remotehosts"
                     ],
                     "runners": {
@@ -99,6 +103,7 @@
                     "enabled": true,
                     "endpoints": [
                         "k8s",
+                        "kube",
                         "remotehosts"
                     ],
                     "runners": {
@@ -114,7 +119,8 @@
                 {
                     "enabled": true,
                     "endpoints": [
-                        "k8s"
+                        "k8s",
+                        "kube"
                     ],
                     "runners": {
                         "type": "github"
@@ -143,6 +149,7 @@
                     "enabled": true,
                     "endpoints": [
                         "k8s",
+                        "kube",
                         "remotehosts"
                     ],
                     "runners": {
@@ -159,6 +166,7 @@
                     "enabled": true,
                     "endpoints": [
                         "k8s",
+                        "kube",
                         "remotehosts"
                     ],
                     "runners": {
