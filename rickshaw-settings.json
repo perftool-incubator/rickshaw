@@ -21,12 +21,5 @@
     },
     "workshop": {
         "force-builds": "false"
-    },
-    "quay": {
-        "image-expiration": "2w",
-        "refresh-expiration": {
-            "token-file": null,
-            "api-url": null
-        }
     }
 }
