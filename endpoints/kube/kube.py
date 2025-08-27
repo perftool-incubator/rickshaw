@@ -255,7 +255,7 @@ def find_k8s_bin(validate, connection):
     if result.exited == 0:
         return "oc"
 
-    result = endpoint.run_remote(connection, "kubectl", validate = validate, debug = debug_output)
+    result = endpoints.run_remote(connection, "kubectl", validate = validate, debug = debug_output)
     if result.exited == 0:
         return "kubectl"
 
