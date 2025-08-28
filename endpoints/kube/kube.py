@@ -255,9 +255,13 @@ def find_k8s_bin(validate, connection):
     if result.exited == 0:
         return "oc"
 
-    result = endpoint.run_remote(connection, "kubectl", validate = validate, debug = debug_output)
+    result = endpoints.run_remote(connection, "kubectl", validate = validate, debug = debug_output)
     if result.exited == 0:
         return "kubectl"
+
+    result = endpoints.run_remote(connection, "microk8s kubectl", validate = validate, debug = debug_output)
+    if result.exited == 0:
+        return "microk8s kubectl"
 
     return None
 
@@ -549,10 +553,18 @@ def get_k8s_config():
         settings["misc"]["k8s"]["nodes"]["endpoint"]["workers"] = []
         for node in settings["misc"]["k8s"]["nodes"]["cluster"]["items"]:
             name = node["metadata"]["name"]
+
+            # OCP
             if "node-role.kubernetes.io/worker" in node["metadata"]["labels"]:
                 settings["misc"]["k8s"]["nodes"]["endpoint"]["masters"].append(name)
             if "node-role.kubernetes.io/master" in node["metadata"]["labels"]:
                 settings["misc"]["k8s"]["nodes"]["endpoint"]["workers"].append(name)
+
+            # microk8s
+            if "node.kubernetes.io/microk8s-controlplane" in node["metadata"]["labels"]:
+                settings["misc"]["k8s"]["nodes"]["endpoint"]["masters"].append(name)
+                settings["misc"]["k8s"]["nodes"]["endpoint"]["workers"].append(name)
+
         node_count_fault = False
         log.info("Found %d masters: %s" % (len(settings["misc"]["k8s"]["nodes"]["endpoint"]["masters"]), settings["misc"]["k8s"]["nodes"]["endpoint"]["masters"]))
         if len(settings["misc"]["k8s"]["nodes"]["endpoint"]["masters"]) == 0:
@@ -1832,6 +1844,10 @@ def main():
         "test-stop": None,
         "remote-cleanup": kube_cleanup
     }
+    if early_abort and not "new-followers" in settings["engines"]:
+        # in the case of an early abort the new-followers list may not
+        # have been initialized yet
+        settings["engines"]["new-followers"] = []
     rc = endpoints.process_roadblocks(callbacks = kube_callbacks,
                                       roadblock_id = args.roadblock_id,
                                       endpoint_label = args.endpoint_label,
