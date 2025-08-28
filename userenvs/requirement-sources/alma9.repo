@@ -7,7 +7,7 @@ mirrorlist=https://mirrors.almalinux.org/mirrorlist/$releasever/baseos
 enabled=1
 gpgcheck=1
 countme=1
-gpgkey=http://westus2.azure.repo.almalinux.org/almalinux/RPM-GPG-KEY-AlmaLinux-9
+gpgkey=https://na.edge.kernel.org/almalinux/RPM-GPG-KEY-AlmaLinux-9
 metadata_expire=86400
 enabled_metadata=0
 
@@ -18,7 +18,7 @@ mirrorlist=https://mirrors.almalinux.org/mirrorlist/$releasever/appstream
 enabled=1
 gpgcheck=1
 countme=1
-gpgkey=http://westus2.azure.repo.almalinux.org/almalinux/RPM-GPG-KEY-AlmaLinux-9
+gpgkey=https://na.edge.kernel.org/almalinux/RPM-GPG-KEY-AlmaLinux-9
 metadata_expire=86400
 enabled_metadata=0
 
@@ -29,7 +29,7 @@ mirrorlist=https://mirrors.almalinux.org/mirrorlist/$releasever/extras
 enabled=1
 gpgcheck=1
 countme=1
-gpgkey=http://westus2.azure.repo.almalinux.org/almalinux/RPM-GPG-KEY-AlmaLinux-9
+gpgkey=https://na.edge.kernel.org/almalinux/RPM-GPG-KEY-AlmaLinux-9
 metadata_expire=86400
 enabled_metadata=0
 
@@ -41,7 +41,7 @@ mirrorlist=https://mirrors.almalinux.org/mirrorlist/$releasever/baseos-source
 # baseurl=https://repo.almalinux.org/vault/$releasever/BaseOS/Source/
 enabled=0
 gpgcheck=1
-gpgkey=http://westus2.azure.repo.almalinux.org/almalinux/RPM-GPG-KEY-AlmaLinux-9
+gpgkey=https://na.edge.kernel.org/almalinux/RPM-GPG-KEY-AlmaLinux-9
 metadata_expire=86400
 enabled_metadata=0
 
@@ -51,7 +51,7 @@ mirrorlist=https://mirrors.almalinux.org/mirrorlist/$releasever/appstream-source
 # baseurl=https://repo.almalinux.org/vault/$releasever/AppStream/Source/
 enabled=0
 gpgcheck=1
-gpgkey=http://westus2.azure.repo.almalinux.org/almalinux/RPM-GPG-KEY-AlmaLinux-9
+gpgkey=https://na.edge.kernel.org/almalinux/RPM-GPG-KEY-AlmaLinux-9
 metadata_expire=86400
 enabled_metadata=0
 
@@ -61,7 +61,7 @@ mirrorlist=https://mirrors.almalinux.org/mirrorlist/$releasever/extras-source
 # baseurl=https://repo.almalinux.org/vault/$releasever/extras/Source/
 enabled=0
 gpgcheck=1
-gpgkey=http://westus2.azure.repo.almalinux.org/almalinux/RPM-GPG-KEY-AlmaLinux-9
+gpgkey=https://na.edge.kernel.org/almalinux/RPM-GPG-KEY-AlmaLinux-9
 metadata_expire=86400
 enabled_metadata=0
 
@@ -73,7 +73,7 @@ mirrorlist=https://mirrors.almalinux.org/mirrorlist/$releasever/baseos-debug
 # baseurl=https://repo.almalinux.org/vault/$releasever/BaseOS/debug/$basearch/
 enabled=0
 gpgcheck=1
-gpgkey=http://westus2.azure.repo.almalinux.org/almalinux/RPM-GPG-KEY-AlmaLinux-9
+gpgkey=https://na.edge.kernel.org/almalinux/RPM-GPG-KEY-AlmaLinux-9
 metadata_expire=86400
 enabled_metadata=0
 
@@ -83,7 +83,7 @@ mirrorlist=https://mirrors.almalinux.org/mirrorlist/$releasever/appstream-debug
 # baseurl=https://repo.almalinux.org/vault/$releasever/AppStream/debug/$basearch/
 enabled=0
 gpgcheck=1
-gpgkey=http://westus2.azure.repo.almalinux.org/almalinux/RPM-GPG-KEY-AlmaLinux-9
+gpgkey=https://na.edge.kernel.org/almalinux/RPM-GPG-KEY-AlmaLinux-9
 metadata_expire=86400
 enabled_metadata=0
 
@@ -93,6 +93,6 @@ mirrorlist=https://mirrors.almalinux.org/mirrorlist/$releasever/extras-debug
 # baseurl=https://repo.almalinux.org/vault/$releasever/extras/debug/$basearch/
 enabled=0
 gpgcheck=1
-gpgkey=http://westus2.azure.repo.almalinux.org/almalinux/RPM-GPG-KEY-AlmaLinux-9
+gpgkey=https://na.edge.kernel.org/almalinux/RPM-GPG-KEY-AlmaLinux-9
 metadata_expire=86400
 enabled_metadata=0
