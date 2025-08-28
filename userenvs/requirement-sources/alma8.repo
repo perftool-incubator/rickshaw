@@ -1,4 +1,4 @@
-# almalinux.repo
+# alma8.repo
 
 [baseos]
 name=AlmaLinux $releasever - BaseOS
@@ -7,7 +7,7 @@ mirrorlist=https://mirrors.almalinux.org/mirrorlist/$releasever/baseos
 enabled=1
 gpgcheck=1
 countme=1
-gpgkey=http://westus2.azure.repo.almalinux.org/almalinux/RPM-GPG-KEY-AlmaLinux
+gpgkey=https://na.edge.kernel.org/almalinux/RPM-GPG-KEY-AlmaLinux
 
 [appstream]
 name=AlmaLinux $releasever - AppStream
@@ -16,7 +16,7 @@ mirrorlist=https://mirrors.almalinux.org/mirrorlist/$releasever/appstream
 enabled=1
 gpgcheck=1
 countme=1
-gpgkey=http://westus2.azure.repo.almalinux.org/almalinux/RPM-GPG-KEY-AlmaLinux
+gpgkey=https://na.edge.kernel.org/almalinux/RPM-GPG-KEY-AlmaLinux
 
 [extras]
 name=AlmaLinux $releasever - Extras
@@ -25,7 +25,7 @@ mirrorlist=https://mirrors.almalinux.org/mirrorlist/$releasever/extras
 enabled=1
 gpgcheck=1
 countme=1
-gpgkey=http://westus2.azure.repo.almalinux.org/almalinux/RPM-GPG-KEY-AlmaLinux
+gpgkey=https://na.edge.kernel.org/almalinux/RPM-GPG-KEY-AlmaLinux
 
 ## Sources
 [baseos-source]
@@ -34,7 +34,7 @@ mirrorlist=https://mirrors.almalinux.org/mirrorlist/$releasever/baseos-source
 # baseurl=https://repo.almalinux.org/almalinux/$releasever/BaseOS/Source/
 enabled=0
 gpgcheck=1
-gpgkey=http://westus2.azure.repo.almalinux.org/almalinux/RPM-GPG-KEY-AlmaLinux
+gpgkey=https://na.edge.kernel.org/almalinux/RPM-GPG-KEY-AlmaLinux
 
 [appstream-source]
 name=AlmaLinux $releasever - AppStream Source
@@ -42,7 +42,7 @@ mirrorlist=https://mirrors.almalinux.org/mirrorlist/$releasever/appstream-source
 # baseurl=https://repo.almalinux.org/almalinux/$releasever/AppStream/Source/
 enabled=0
 gpgcheck=1
-gpgkey=http://westus2.azure.repo.almalinux.org/almalinux/RPM-GPG-KEY-AlmaLinux
+gpgkey=https://na.edge.kernel.org/almalinux/RPM-GPG-KEY-AlmaLinux
 
 [extras-source]
 name=AlmaLinux $releasever - Extras Source
@@ -50,7 +50,7 @@ mirrorlist=https://mirrors.almalinux.org/mirrorlist/$releasever/extras-source
 # baseurl=https://repo.almalinux.org/almalinux/$releasever/extras/Source/
 enabled=0
 gpgcheck=1
-gpgkey=http://westus2.azure.repo.almalinux.org/almalinux/RPM-GPG-KEY-AlmaLinux
+gpgkey=https://na.edge.kernel.org/almalinux/RPM-GPG-KEY-AlmaLinux
 
 ## Debuginfo
 [baseos-debuginfo]
@@ -59,7 +59,7 @@ mirrorlist=https://mirrors.almalinux.org/mirrorlist/$releasever/baseos-debuginfo
 # baseurl=https://repo.almalinux.org/almalinux/$releasever/BaseOS/debug/$basearch/
 enabled=0
 gpgcheck=1
-gpgkey=http://westus2.azure.repo.almalinux.org/almalinux/RPM-GPG-KEY-AlmaLinux
+gpgkey=https://na.edge.kernel.org/almalinux/RPM-GPG-KEY-AlmaLinux
 
 [appstream-debuginfo]
 name=AlmaLinux $releasever - AppStream debuginfo
@@ -67,7 +67,7 @@ mirrorlist=https://mirrors.almalinux.org/mirrorlist/$releasever/appstream-debugi
 # baseurl=https://repo.almalinux.org/almalinux/$releasever/AppStream/debug/$basearch/
 enabled=0
 gpgcheck=1
-gpgkey=http://westus2.azure.repo.almalinux.org/almalinux/RPM-GPG-KEY-AlmaLinux
+gpgkey=https://na.edge.kernel.org/almalinux/RPM-GPG-KEY-AlmaLinux
 
 [extras-debuginfo]
 name=AlmaLinux $releasever - Extras debuginfo
@@ -75,4 +75,4 @@ mirrorlist=https://mirrors.almalinux.org/mirrorlist/$releasever/extras-debuginfo
 # baseurl=https://repo.almalinux.org/almalinux/$releasever/extras/debug/$basearch/
 enabled=0
 gpgcheck=1
-gpgkey=http://westus2.azure.repo.almalinux.org/almalinux/RPM-GPG-KEY-AlmaLinux
+gpgkey=https://na.edge.kernel.org/almalinux/RPM-GPG-KEY-AlmaLinux
