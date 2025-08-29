@@ -33,6 +33,7 @@ function scp_from_controller() {
     local dest=$1; shift
     local error_handler=$1; shift
     local rb_name=$1; shift
+    local port=$1; shift
     if [ -z "$ssh_id_file" ]; then
         exit_error "scp_from_controller(): ssh_id_file not defined"
     fi
@@ -42,10 +43,16 @@ function scp_from_controller() {
     if [ -z "$dest" ]; then
         exit_error "scp_from_controller(): dest not defined"
     fi
+    if [ -z "$port" ]; then
+        port=22
+    fi
+    echo "ssh_id_file[$ssh_id_file] src[$src] dest[$dest] error_handler[$error_handler] rb_name[$rb_name] port[$port]"
     local scp_attempts=1
     local scp_rc=1
     local max_attempts=10
-    scp_cmd="scp -o StrictHostKeyChecking=no"
+    scp_cmd="scp"
+    scp_cmd+=" -P $port"
+    scp_cmd+=" -o StrictHostKeyChecking=no"
     scp_cmd+=" -o BatchMode=yes"
     scp_cmd+=" -v"
     scp_cmd+=" -o ControlMaster=auto"
@@ -179,6 +186,12 @@ while true; do
             echo "setting engine_script_start_timeout to $engine_script_start_timeout"
             shift;
             ;;
+        --ssh-port)
+            shift;
+            export ssh_port="$1"
+            echo "setting ssh_port to $ssh_port"
+            shift;
+            ;;
         --)
             shift;
             break;
@@ -194,6 +207,14 @@ done
 if [ -z "$max_sample_failures" ]; then
     max_sample_failures=3
     echo "[WARNING] --max-sample-failures was not used, so setting to default of $max_sample_failures"
+fi
+
+if [ -z "$ssh_port" ]; then
+    export ssh_port=22
+    echo "[INFO] --ssh-port was not used, so setting to default of $ssh_port"
+else
+    export ssh_port
+    echo "[INFO] var ssh_port is $ssh_port and is exported"
 fi
 
 export ssh_id_file="/tmp/rickshaw_id.rsa"
@@ -274,15 +295,15 @@ echo
 
 export json_settings_file="/tmp/rickshaw-settings.json.xz"
 
-scp_from_controller "$ssh_id_file" "$config_dir/rickshaw-settings.json.xz" /tmp
+scp_from_controller "$ssh_id_file" "$config_dir/rickshaw-settings.json.xz" /tmp "" "" $ssh_port
 if [ ! -e ${json_settings_file} ]; then
     exit_error "Could not find rickshaw-settings.json.xz"
 fi
 
-scp_from_controller "$ssh_id_file" "$engine_config_dir/engine-script" /usr/local/bin/
-scp_from_controller "$ssh_id_file" "$engine_config_dir/engine-script-library" /usr/local/bin/
-scp_from_controller "$ssh_id_file" "$engine_config_dir/roadblocker.py" /usr/local/bin
-scp_from_controller "$ssh_id_file" "$engine_config_dir/roadblock.py" /usr/local/bin
+scp_from_controller "$ssh_id_file" "$engine_config_dir/engine-script" /usr/local/bin/ "" "" $ssh_port
+scp_from_controller "$ssh_id_file" "$engine_config_dir/engine-script-library" /usr/local/bin/ "" "" $ssh_port
+scp_from_controller "$ssh_id_file" "$engine_config_dir/roadblocker.py" /usr/local/bin "" "" $ssh_port
+scp_from_controller "$ssh_id_file" "$engine_config_dir/roadblock.py" /usr/local/bin "" "" $ssh_port
 if [ -e /usr/local/bin/engine-script -a -e /usr/local/bin/engine-script-library ]; then
     echo "Execing engine-script:"
     exec /usr/local/bin/engine-script

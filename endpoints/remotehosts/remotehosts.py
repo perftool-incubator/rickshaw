@@ -689,6 +689,164 @@ def remotes_pull_images():
 
     return rc
 
+def create_valkey_tunnels():
+    """
+    Handle the creation of ssh tunnels for valkey
+
+    Args:
+        None
+
+    Globals:
+        settings (dict): the one data structure to rule then all
+
+    Returns:
+        0
+    """
+    worker_threads_count = 0
+    tunnels_work = queue.Queue()
+    for remote in settings["run-file"]["endpoints"][args.endpoint_index]["remotes"]:
+        print("create_valkey_tunnels() remote:" + endpoints.dump_json(remote))
+        if "engine-connection" in remote["config"]["settings"] and \
+            remote["config"]["settings"]["engine-connection"] == "ssh-tunnel" and \
+            remote["config"]["host"] != "localhost" and \
+            remote["config"]["host"] != "127.0.0.1":
+
+            tunnels_work.put(remote["config"]["host"])
+            worker_threads_count += 1
+
+    if (worker_threads_count > 0):
+        create_thread_pool("Valkey Tunnel Worker Threads", "VTWT", tunnels_work, worker_threads_count, valkey_tunnels_worker_thread)
+
+def valkey_tunnels_worker_thread(thread_id, work_queue, threads_rcs):
+    """
+    Worker thread to consume and perform tunnel creation job for a unique remote
+
+    Args:
+        thread_id (int): The specifc worker thread that this is
+        work_queue (Queue): The work queue to pull jobs to process from
+        threads_rcs (list): The list to record the threads return code in
+
+    Globals:
+        settings (dict): the one data structure to rule then all
+
+    Returns:
+        None
+    """
+    thread = threading.current_thread()
+    thread_name = thread.name
+    thread_logger(thread_name, "Starting tunnels thread with thread ID %d and name = '%s'" % (thread_id, thread_name))
+    rc = 0
+    job_count = 0
+
+    while not work_queue.empty():
+        remote = None
+        try:
+            remote = work_queue.get(block = False)
+        except queue.Empty:
+            thread_logger(thread_name, "Received a work queue empty exception")
+            break
+
+        if remote is None:
+            thread_logger(thread_name, "Received a null job", log_level = "warning")
+            continue
+
+        job_count += 1
+        thread_logger(thread_name, "Retrieved remote %s" % (remote))
+
+        my_unique_remote = settings["engines"]["remotes"][remote]
+        my_run_file_remote = settings["run-file"]["endpoints"][args.endpoint_index]["remotes"][my_unique_remote["run-file-idx"][0]]
+
+        cmd = "ssh -o ExitOnForwardFailure=yes -o StrictHostKeyChecking=no -o PasswordAuthentication=no -R 6379:localhost:6379 -N -f -o ServerAliveInterval=60 " + remote
+        print("creating a tunnel with the following: " + cmd)
+        endpoints.run(cmd)
+
+        thread_logger(thread_name, "Notifying work queue that job processing is complete", remote_name = remote)
+        work_queue.task_done()
+
+    threads_rcs[thread_id] = rc
+    thread_logger(thread_name, "Stopping valkey tunnel thread after processing %d job(s)" % (job_count))
+    return
+
+def create_ssh_tunnels():
+    """
+    Handle the creation of ssh tunnels for ssh/scp
+
+    Args:
+        None
+
+    Globals:
+        settings (dict): the one data structure to rule then all
+
+    Returns:
+        0
+    """
+    worker_threads_count = 0
+    tunnels_work = queue.Queue()
+    for remote in settings["run-file"]["endpoints"][args.endpoint_index]["remotes"]:
+        print("create_ssh_tunnels() remote:" + endpoints.dump_json(remote))
+        if "engine-connection" in remote["config"]["settings"] and \
+            remote["config"]["settings"]["engine-connection"] == "ssh-tunnel" and \
+            remote["config"]["host"] != "localhost" and \
+            remote["config"]["host"] != "127.0.0.1":
+
+            tunnels_work.put(remote["config"]["host"])
+            worker_threads_count += 1
+
+    if (worker_threads_count > 0):
+        create_thread_pool("Ssh Tunnel Worker Threads", "STWT", tunnels_work, worker_threads_count, ssh_tunnels_worker_thread)
+
+    return 0
+
+def ssh_tunnels_worker_thread(thread_id, work_queue, threads_rcs):
+    """
+    Worker thread to consume and perform tunnel creation jobs for a unique remote
+
+    Args:
+        thread_id (int): The specifc worker thread that this is
+        work_queue (Queue): The work queue to pull jobs to process from
+        threads_rcs (list): The list to record the threads return code in
+
+    Globals:
+        settings (dict): the one data structure to rule then all
+
+    Returns:
+        None
+    """
+    thread = threading.current_thread()
+    thread_name = thread.name
+    thread_logger(thread_name, "Starting remote tunnels thread with thread ID %d and name = '%s'" % (thread_id, thread_name))
+    rc = 0
+    job_count = 0
+
+    while not work_queue.empty():
+        remote = None
+        try:
+            remote = work_queue.get(block = False)
+        except queue.Empty:
+            thread_logger(thread_name, "Received a work queue empty exception")
+            break
+
+        if remote is None:
+            thread_logger(thread_name, "Received a null job", log_level = "warning")
+            continue
+
+        job_count += 1
+        thread_logger(thread_name, "Retrieved remote %s" % (remote))
+
+        my_unique_remote = settings["engines"]["remotes"][remote]
+        my_run_file_remote = settings["run-file"]["endpoints"][args.endpoint_index]["remotes"][my_unique_remote["run-file-idx"][0]]
+
+        cmd = "ssh -o ExitOnForwardFailure=yes -o StrictHostKeyChecking=no -o PasswordAuthentication=no -R 8022:localhost:22 -N -f -o ServerAliveInterval=60 " + remote
+        print("creating a tunnel with the following: " + cmd)
+        endpoints.run(cmd)
+
+        thread_logger(thread_name, "Notifying work queue that job processing is complete", remote_name = remote)
+        work_queue.task_done()
+
+    threads_rcs[thread_id] = rc
+    thread_logger(thread_name, "Stopping ssh tunnel thread after processing %d job(s)" % (job_count))
+    return
+
 def remote_mkdirs_worker_thread(thread_id, work_queue, threads_rcs):
     """
     Worker thread to consume and perform directory creation jobs for a unique remote
@@ -842,7 +1000,15 @@ def create_podman(thread_name, remote_name, engine_name, container_name, connect
         env_file.write("endpoint_run_dir=" + settings["dirs"]["local"]["endpoint"] + "\n")
         env_file.write("engine_script_start_timeout=" + str(args.engine_script_start_timeout) + "\n")
         env_file.write("max_sample_failures=" + str(args.max_sample_failures) + "\n")
-        env_file.write("rickshaw_host=" + controller_ip + "\n")
+
+        #if "engine-connection" in settings["engines"]["remotes"][remote] and settings["engines"]["remotes"][remote]["engine-connection"] == "ssh-tunnel":
+        print("remote settings---->" + endpoints.dump_json(settings["engines"]["remotes"][remote]))
+        if 1 == 1:
+            env_file.write("ssh_port=8022" + "\n")
+            env_file.write("rickshaw_host=127.0.0.1" + "\n")
+        else:
+            env_file.write("rickshaw_host=" + controller_ip + "\n")
+
         env_file.write("roadblock_id=" + args.roadblock_id + "\n")
         env_file.write("roadblock_passwd=" + args.roadblock_passwd + "\n")
         env_file.write("ssh_id=" + settings["misc"]["ssh-private-key"] + "\n")
@@ -1135,6 +1301,14 @@ def start_chroot(thread_name, remote_name, engine_name, container_name, connecti
         "--roadblock-id=" + args.roadblock_id,
         "--roadblock-passwd=" + args.roadblock_passwd,
     ])
+
+    print("settings: " + settings["engines"]["remotes"][remote])
+    if "engine-connection" in settings["engines"]["remotes"][remote] and settings["engines"]["remotes"][remote]["engine-connection"] == "ssh-tunnel":
+    #if 1 == 1:
+        start_cmd.extend([
+            "--ssh-port=8022",
+            "--controller-ip=127.0.0.1"
+        ])
 
     if cpu_partitioning == 1:
         with settings["engines"]["remotes"][remote]["cpu-partitions-idx-lock"]:
@@ -2380,6 +2554,8 @@ def main():
     if build_unique_remote_configs() != 0:
         return 1
     endpoints.create_local_dirs(settings)
+    create_ssh_tunnels()
+    create_valkey_tunnels()
     create_remote_dirs()
     remote_image_pull_rc = remotes_pull_images()
     if remote_image_pull_rc == 0:
