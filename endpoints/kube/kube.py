@@ -152,86 +152,94 @@ def normalize_endpoint_settings(endpoint, rickshaw):
                     log.error(msg)
                 return None
 
-    for cfg_block_idx,cfg_block in enumerate(endpoint["config"]):
-        for target in cfg_block["targets"]:
-            try:
-                target["ids"] = endpoints.expand_ids(target["ids"])
-            except ValueError as e:
-                msg = "While expanding IDs for '%s' in config block at index %d encounterd exception '%s'" % (target["role"], cfg_block_idx, str(e))
-                if args.validate:
-                    endpoints.validate_error(msg)
-                else:
-                    log.error(msg)
-                return None
-
-    endpoint["engines"]["settings"] = dict()
-    endpoint["engines"]["verifications"] = dict()
-    for cfg_block_idx,cfg_block in enumerate(endpoint["config"]):
-        for target in cfg_block["targets"]:
-            if not target["role"] in endpoint["engines"]:
-                msg = "Found engine role '%s' in config block at index %d but not in the endpoint engines config" % (target["role"], cfg_block_idx)
-                if args.validate:
-                    endpoints.validate_error(msg)
-                else:
-                    log.error(msg)
-                return None
-
-            if not target["role"] in endpoint["engines"]["settings"]:
-                endpoint["engines"]["settings"][target["role"]] = dict()
-
-            if not target["role"] in endpoint["engines"]["verifications"]:
-                endpoint["engines"]["verifications"][target["role"]] = dict()
-
-            for engine_id in target["ids"]:
-                if not engine_id in endpoint["engines"][target["role"]]:
-                    msg = "Found engine with ID %d and role '%s' in config block at index %d that is not owned by this endpoint" % (engine_id, target["role"], cfg_block_idx)
+    if "config" in endpoint:
+        for cfg_block_idx,cfg_block in enumerate(endpoint["config"]):
+            for target in cfg_block["targets"]:
+                try:
+                    target["ids"] = endpoints.expand_ids(target["ids"])
+                except ValueError as e:
+                    msg = "While expanding IDs for '%s' in config block at index %d encounterd exception '%s'" % (target["role"], cfg_block_idx, str(e))
                     if args.validate:
                         endpoints.validate_error(msg)
                     else:
                         log.error(msg)
                     return None
 
-                if engine_id not in endpoint["engines"]["settings"][target["role"]]:
-                    endpoint["engines"]["settings"][target["role"]][engine_id] = dict()
+    endpoint["engines"]["settings"] = dict()
+    endpoint["engines"]["verifications"] = dict()
+    if "config" in endpoint:
+        for cfg_block_idx,cfg_block in enumerate(endpoint["config"]):
+            for target in cfg_block["targets"]:
+                if not target["role"] in endpoint["engines"]:
+                    msg = "Found engine role '%s' in config block at index %d but not in the endpoint engines config" % (target["role"], cfg_block_idx)
+                    if args.validate:
+                        endpoints.validate_error(msg)
+                    else:
+                        log.error(msg)
+                    return None
 
-                if engine_id not in endpoint["engines"]["verifications"][target["role"]]:
-                    endpoint["engines"]["verifications"][target["role"]][engine_id] = dict()
+                if not target["role"] in endpoint["engines"]["settings"]:
+                    endpoint["engines"]["settings"][target["role"]] = dict()
 
-                for key in cfg_block["settings"].keys():
-                    if key in endpoint["engines"]["settings"][target["role"]][engine_id]:
-                        msg = "Overriding previously defined value for key '%s' for engine ID %d with role '%s' while processing config block at index %d" % (key, engine_id, target["role"], cfg_block_idx)
+                if not target["role"] in endpoint["engines"]["verifications"]:
+                    endpoint["engines"]["verifications"][target["role"]] = dict()
+
+                for engine_id in target["ids"]:
+                    if not engine_id in endpoint["engines"][target["role"]]:
+                        msg = "Found engine with ID %d and role '%s' in config block at index %d that is not owned by this endpoint" % (engine_id, target["role"], cfg_block_idx)
                         if args.validate:
-                            endpoints.validate_warning(msg)
+                            endpoints.validate_error(msg)
                         else:
-                            log.warning(msg)
-                    endpoint["engines"]["settings"][target["role"]][engine_id][key] = cfg_block["settings"][key]
+                            log.error(msg)
+                        return None
 
-                if "verifications" in cfg_block:
-                    for key in cfg_block["verifications"].keys():
-                        if key in endpoint["engines"]["verifications"][target["role"]][engine_id]:
-                            msg = "Overriding previously defined value for key '%s' for engine ID %s with role '%s' while processing config block at index %d" % (key, engine_id, target["role"], cfg_block_idx)
+                    if engine_id not in endpoint["engines"]["settings"][target["role"]]:
+                        endpoint["engines"]["settings"][target["role"]][engine_id] = dict()
+
+                    if engine_id not in endpoint["engines"]["verifications"][target["role"]]:
+                        endpoint["engines"]["verifications"][target["role"]][engine_id] = dict()
+
+                    for key in cfg_block["settings"].keys():
+                        if key in endpoint["engines"]["settings"][target["role"]][engine_id]:
+                            msg = "Overriding previously defined value for key '%s' for engine ID %d with role '%s' while processing config block at index %d" % (key, engine_id, target["role"], cfg_block_idx)
                             if args.validate:
                                 endpoints.validate_warning(msg)
                             else:
                                 log.warning(msg)
-                        endpoint["engines"]["verifications"][target["role"]][engine_id][key] = cfg_block["verifications"][key]
+                        endpoint["engines"]["settings"][target["role"]][engine_id][key] = cfg_block["settings"][key]
 
-                for key in endpoint["engines"]["defaults"]["settings"].keys():
-                    if not key in endpoint["engines"]["settings"][target["role"]][engine_id]:
-                        endpoint["engines"]["settings"][target["role"]][engine_id][key] = endpoint["engines"]["defaults"]["settings"][key]
+                    if "verifications" in cfg_block:
+                        for key in cfg_block["verifications"].keys():
+                            if key in endpoint["engines"]["verifications"][target["role"]][engine_id]:
+                                msg = "Overriding previously defined value for key '%s' for engine ID %s with role '%s' while processing config block at index %d" % (key, engine_id, target["role"], cfg_block_idx)
+                                if args.validate:
+                                    endpoints.validate_warning(msg)
+                                else:
+                                    log.warning(msg)
+                            endpoint["engines"]["verifications"][target["role"]][engine_id][key] = cfg_block["verifications"][key]
 
-                for key in endpoint["engines"]["defaults"]["verifications"].keys():
-                    if not key in endpoint["engines"]["settings"][target["role"]][engine_id]:
-                        endpoint["engines"]["settings"][target["role"]][engine_id][key] = endpoint["engines"]["defaults"]["verifications"][key]
+                    for key in endpoint["engines"]["defaults"]["settings"].keys():
+                        if not key in endpoint["engines"]["settings"][target["role"]][engine_id]:
+                            endpoint["engines"]["settings"][target["role"]][engine_id][key] = endpoint["engines"]["defaults"]["settings"][key]
+
+                    for key in endpoint["engines"]["defaults"]["verifications"].keys():
+                        if not key in endpoint["engines"]["settings"][target["role"]][engine_id]:
+                            endpoint["engines"]["settings"][target["role"]][engine_id][key] = endpoint["engines"]["defaults"]["verifications"][key]
 
     for engine_role in [ "client", "server" ]:
         if engine_role in endpoint["engines"]:
+            if engine_role not in endpoint["engines"]["settings"]:
+                endpoint["engines"]["settings"][engine_role] = dict()
+
+            if engine_role not in endpoint["engines"]["verifications"]:
+                endpoint["engines"]["verifications"][engine_role] = dict()
+            
             for engine_id in endpoint["engines"][engine_role]:
                 if engine_id not in endpoint["engines"]["settings"][engine_role]:
-                    endpoint["engines"]["settings"][engine_role][engine_id] = endpoint["engines"]["defaults"]
+                    endpoint["engines"]["settings"][engine_role][engine_id] = endpoint["engines"]["defaults"]["settings"]
 
                 if engine_id not in endpoint["engines"]["verifications"][engine_role]:
-                    endpoint["engines"]["settings"][engine_role][engine_id] = endpoint["engines"]["default-verifications"]
+                    endpoint["engines"]["verifications"][engine_role][engine_id] = endpoint["engines"]["defaults"]["verifications"]
 
     return endpoint
 
