@@ -127,15 +127,18 @@ def normalize_endpoint_settings(endpoint, rickshaw):
         del endpoint["config"][default_cfg_block_idx]
 
     if endpoint["engines"]["defaults"]["settings"]["controller-ip-address"] is None:
-        try:
-            endpoint["engines"]["defaults"]["settings"]["controller-ip-address"] = endpoints.get_controller_ip(endpoint["host"])
-        except ValueError as e:
-            msg = "While determining default controller IP address encountered exception '%s'" % (str(e))
-            if args.validate:
-                endpoints.validate_error(msg)
-            else:
-                log.error(msg)
-            return None
+        if "controller-ip-address" in endpoint:
+            endpoint["engines"]["defaults"]["settings"]["controller-ip-address"] = endpoint["controller-ip-address"]
+        else:
+            try:
+                endpoint["engines"]["defaults"]["settings"]["controller-ip-address"] = endpoints.get_controller_ip(endpoint["host"])
+            except ValueError as e:
+                msg = "While determining default controller IP address encountered exception '%s'" % (str(e))
+                if args.validate:
+                    endpoints.validate_error(msg)
+                else:
+                    log.error(msg)
+                return None
 
     for engine_role in [ "client", "server" ]:
         if engine_role in endpoint["engines"]:
