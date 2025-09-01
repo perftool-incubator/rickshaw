@@ -230,8 +230,8 @@ def update_userenvs():
             for endpoint_idx,endpoint in enumerate(run_file["endpoints"]):
                 if "config" in endpoint:
                     default_present = False
-                    for cfg_entry,cfg_entry_idx in enumerate(endpoint["config"]):
-                        if isinstance(cfg_etry["targets"], str) and cfg_entry["targets"] == "default":
+                    for cfg_entry_idx,cfg_entry in enumerate(endpoint["config"]):
+                        if isinstance(cfg_entry["targets"], str) and cfg_entry["targets"] == "default":
                             default_present = True
                         if "userenv" in cfg_entry["settings"]:
                             if args.userenv == "default":
