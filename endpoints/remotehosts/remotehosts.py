@@ -1788,27 +1788,51 @@ def remote_image_manager(thread_name, remote_name, connection, image_max_cache_s
             }
     thread_logger(thread_name, "images[podman]:\n%s" % (endpoints.dump_json(images["podman"])), remote_name = remote_name, log_prefix = log_prefix)
 
-    if settings["rickshaw"]["quay"]["refresh-expiration"]["api-url"] is not None:
-        thread_logger(thread_name, "Found configuration information necessary to utilize the quay API to obtain image expiration", remote_name = remote_name, log_prefix = log_prefix)
-        thread_logger(thread_name, "Quay API URL: %s" % (settings["rickshaw"]["quay"]["refresh-expiration"]["api-url"]), remote_name = remote_name, log_prefix = log_prefix)
+    expiration_create_registries = dict()
+    expiration_refresh_registries = list()
+    for registry in [ "public", "private" ]:
+        if registry in settings["crucible"]["registries"]["engines"]:
+            if "quay" in settings["crucible"]["registries"]["engines"][registry]:
+                if "refresh-expiration" in settings["crucible"]["registries"]["engines"][registry]["quay"]:
+                    expiration_refresh_registries.append(registry)
+
+                expiration_weeks = int(settings["crucible"]["registries"]["engines"][registry]["quay"]["expiration-length"].rstrip("w"))
+                image_created_expiration = endpoints.image_created_expiration_gmepoch(expiration_weeks)
+                expiration_create_registries[settings["crucible"]["registries"]["engines"][registry]["url"]] = image_created_expiration
+                thread_logger(thread_name, "Images from the %s registry evaluated by their creation data will be considered expired if it is before %d (%d weeks ago)" % (registry, image_created_expiration, expiration_weeks), remote_name = remote_name, log_prefix = log_prefix)
+
+    if len(expiration_refresh_registries) > 0:
+        thread_logger(thread_name, "Using the quay API to look for image expiration timestamps in these registries: %s" % (expiration_refresh_registries), remote_name = remote_name, log_prefix = log_prefix)
 
         for image in images["podman"].keys():
             image_parts = image.split(":")
 
-            get_request = requests.get(settings["rickshaw"]["quay"]["refresh-expiration"]["api-url"] + "/tag", params = { "onlyActiveTags": True, "specificTag": image_parts[1] })
+            registry_match = None
+            for registry in expiration_refresh_registries:
+                if settings["crucible"]["registries"]["engines"][registry]["url"] == image_parts[0]:
+                    registry_match = registry
+                    break
 
-            query_log_level = "info"
-            if get_request.status_code != requests.codes.ok:
-                query_log_level = "warning"
+            if registry_match is None:
+                thread_logger(thread_name, "Could not find a quay API URL to check for an image expiration timestamp for image '%s'" % (image), remote_name = remote_name, log_prefix = log_prefix)
+            else:
+                thread_logger(thread_name, "Using the '%s' registry to run a quay API call to get the image's ('%s') expiration timestamp" % (registry_match, image), remote_name = remote_name, log_prefix = log_prefix)
 
-            thread_logger(thread_name, "Quay API query for %s returned %d" % (image, get_request.status_code), log_level = query_log_level, remote_name = remote_name, log_prefix = log_prefix)
+                get_request = requests.get(settings["crucible"]["registries"]["engines"][registry]["quay"]["refresh-expiration"]["api-url"] + "/tag", params = { "onlyActiveTags": True, "specificTag": image_parts[1] })
 
-            if get_request.status_code == requests.codes.ok:
-                image_json = get_request.json()
-                if len(image_json["tags"]) == 1:
-                    images["quay"][image] = image_json["tags"][0]
-                else:
-                    thread_logger(thread_name, "Quay API query for %s found %d tags" % (image, len(image_json["tags"])), log_level = "warning", remote_name = remote_name, log_prefix = log_prefix)
+                query_log_level = "info"
+                if get_request.status_code != requests.codes.ok:
+                    query_log_level = "warning"
+
+                thread_logger(thread_name, "Quay API query for %s returned status code %d" % (image, get_request.status_code), log_level = query_log_level, remote_name = remote_name, log_prefix = log_prefix)
+
+                if get_request.status_code == requests.codes.ok:
+                    image_json = get_request.json()
+                    if len(image_json["tags"]) == 1:
+                        images["quay"][image] = image_json["tags"][0]
+                        thread_logger(thread_name, "Quay API query for %s generated %s" % (image, images["quay"][image]), remote_name = remote_name, log_prefix = log_prefix)
+                    else:
+                        thread_logger(thread_name, "Quay API query for %s found %d tags" % (image, len(image_json["tags"])), log_level = "warning", remote_name = remote_name, log_prefix = log_prefix)
 
         thread_logger(thread_name, "images[quay]:\n%s" % (endpoints.dump_json(images["quay"])), remote_name = remote_name, log_prefix = log_prefix)
     else:
@@ -1816,10 +1840,6 @@ def remote_image_manager(thread_name, remote_name, connection, image_max_cache_s
 
     image_expiration = endpoints.image_expiration_gmepoch()
     thread_logger(thread_name, "Images evaludated by their expiration data will be considered expired if it is before %d" % (image_expiration), remote_name = remote_name, log_prefix = log_prefix)
-
-    expiration_weeks = int(settings["rickshaw"]["quay"]["image-expiration"].rstrip("w"))
-    image_created_expiration = endpoints.image_created_expiration_gmepoch(expiration_weeks)
-    thread_logger(thread_name, "Images evaludated by their creation data will be considered expired if it is before %d (%d weeks ago)" % (image_created_expiration, expiration_weeks), remote_name = remote_name, log_prefix = log_prefix)
 
     deletes = []
     for image in images["rickshaw"].keys():
@@ -1867,19 +1887,21 @@ def remote_image_manager(thread_name, remote_name, connection, image_max_cache_s
 
         if image in images["quay"]:
             if images["quay"][image]["end_ts"] < image_expiration:
-                thread_logger(thread_name, "Podman image '%s' has been evaluated based on it's expiration data and has expired, removing it from the image cache" % (image), remote_name = remote_name, log_prefix = log_prefix)
+                thread_logger(thread_name, "Podman image '%s' has been evaluated based on its expiration data and has expired, removing it from the image cache" % (image), remote_name = remote_name, log_prefix = log_prefix)
                 deletes["podman"].append(image)
                 deletes["rickshaw"].append(image)
                 remove_image(thread_name, remote_name, log_prefix, connection, image)
             else:
-                thread_logger(thread_name, "Podman image '%s' has been evaluated based on it's expiration data and has not expired" % (image), remote_name = remote_name, log_prefix = log_prefix)
-        elif images["podman"][image]["created"] < image_created_expiration:
-            thread_logger(thread_name, "Podman image '%s' has been evaluated based on it's creation data and has expired, removing it from the image cache" % (image), remote_name = remote_name, log_prefix = log_prefix)
-            deletes["podman"].append(image)
-            deletes["rickshaw"].append(image)
-            remove_image(thread_name, remote_name, log_prefix, connection, image)
+                thread_logger(thread_name, "Podman image '%s' has been evaluated based on its expiration data and has not expired" % (image), remote_name = remote_name, log_prefix = log_prefix)
         else:
-            thread_logger(thread_name, "Podman image '%s' has been evaluated based on it's creation data and has not expired" % (image), remote_name = remote_name, log_prefix = log_prefix)
+            image_parts = image.split(":")
+            if image_parts[0] in expiration_create_registries and images["podman"][image]["created"] < expiration_create_registries[image_parts[0]]:
+                thread_logger(thread_name, "Podman image '%s' has been evaluated based on its creation data and has expired, removing it from the image cache" % (image), remote_name = remote_name, log_prefix = log_prefix)
+                deletes["podman"].append(image)
+                deletes["rickshaw"].append(image)
+                remove_image(thread_name, remote_name, log_prefix, connection, image)
+            else:
+                thread_logger(thread_name, "Podman image '%s' has been evaluated based on its creation data and has not expired" % (image), remote_name = remote_name, log_prefix = log_prefix)
 
         if not image in deletes["podman"]:
             thread_logger(thread_name, "Podman image '%s' is valid and remains under consideration" % (image), remote_name = remote_name, log_prefix = log_prefix)
