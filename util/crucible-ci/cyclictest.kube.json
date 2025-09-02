@@ -2,7 +2,7 @@
     "benchmarks": [
         {
             "name": "cyclictest",
-            "ids": "1",
+            "ids": "1-2",
             "mv-params": {
                 "global-options": [
                     {
