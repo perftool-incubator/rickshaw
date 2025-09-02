@@ -158,7 +158,7 @@ def update_endpoint_sub_type():
     run_file["tags"]["endpoint-sub-type"] = args.endpoint_sub_type
 
     match args.endpoint:
-        case "remotehosts" | "kube":
+        case "remotehosts":
             if args.endpoint_sub_type != "NONE":
                 msg = "%s endpoint expected sub-type of 'NONE' (not '%s')" % (args.endpoint, args.endpoint_sub_type)
                 log.error(msg)
@@ -181,6 +181,11 @@ def update_endpoint_sub_type():
                         raise ValueError(msg)
                     case "OCP":
                         endpoint["kubeconfig"] = 1
+        case "kube":
+            if args.endpoint_sub_type == "NONE":
+                msg = "%s endpoint expected sub-type of either 'GENERIC', 'MICROK8S', or 'OCP' (not 'NONE')"
+                log.error(msg)
+                raise VelueError(msg)
 
     return
 
@@ -225,8 +230,8 @@ def update_userenvs():
             for endpoint_idx,endpoint in enumerate(run_file["endpoints"]):
                 if "config" in endpoint:
                     default_present = False
-                    for cfg_entry,cfg_entry_idx in enumerate(endpoint["config"]):
-                        if isinstance(cfg_etry["targets"], str) and cfg_entry["targets"] == "default":
+                    for cfg_entry_idx,cfg_entry in enumerate(endpoint["config"]):
+                        if isinstance(cfg_entry["targets"], str) and cfg_entry["targets"] == "default":
                             default_present = True
                         if "userenv" in cfg_entry["settings"]:
                             if args.userenv == "default":
