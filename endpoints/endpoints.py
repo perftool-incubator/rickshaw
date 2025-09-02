@@ -1554,6 +1554,12 @@ def process_options():
                         required = True,
                         type = str)
 
+    parser.add_argument("--crucible-dir",
+                        dest = "crucible_dir",
+                        help = "Path to the root of the crucible project directory.",
+                        required = True,
+                        type = str)
+
     parser.add_argument("--endpoint-deploy-timeout",
                         dest = "endpoint_deploy_timeout",
                         help = "How long should the timeout be for the endpoint deployment phase.",
@@ -1736,6 +1742,8 @@ def log_settings(settings, mode = "all", endpoint_index = None):
     match mode:
         case "benchmark-mapping":
             return log.info("settings[benchmark-mapping]:\n%s" % (dump_json(settings["engines"]["benchmark-mapping"])), stacklevel = 2)
+        case "crucible":
+            return log.info("settings[crucible]:\n%s" % (dump_json(settings["crucible"])), stacklevel = 2)
         case "engines":
             return log.info("settings[engines]:\n%s" % (dump_json(settings["engines"])), stacklevel = 2)
         case "misc":
@@ -1751,7 +1759,7 @@ def log_settings(settings, mode = "all", endpoint_index = None):
         case "all" | _:
             return log.info("settings:\n%s" % (dump_json(settings)), stacklevel = 2)
 
-def load_settings(settings, endpoint_name = None, run_file = None, rickshaw_dir = None, endpoint_index = None, endpoint_normalizer_callback = None):
+def load_settings(settings, endpoint_name = None, run_file = None, rickshaw_dir = None, endpoint_index = None, endpoint_normalizer_callback = None, crucible_dir = None):
     """
     Load settings from config multiple config files
 
@@ -1762,6 +1770,7 @@ def load_settings(settings, endpoint_name = None, run_file = None, rickshaw_dir 
         rickshaw_dir (str): the path to the rickshaw directory
         endpoint_index (str): the index into the run-file's endpoint object for this endpoint instance
         endpoint_normalizer_callback (func): the endpoint specific function to call to normalize the endpoint settings
+        crucible_dir (str): the path to the crucible directory
 
     Globals:
         log: a logger instance
@@ -1770,6 +1779,26 @@ def load_settings(settings, endpoint_name = None, run_file = None, rickshaw_dir 
         settings (dict): the one data structure to rule them all
     """
     log.info("Loading settings from config files")
+
+    settings["crucible"] = dict()
+    if crucible_dir is not None:
+        crucible_registries_file = crucible_dir + "/config/registries.json"
+        crucible_registries_schema_file = crucible_dir + "/schema/registries.json"
+        settings["crucible"]["registries"],err = load_json_file(crucible_registries_file)
+        if settings["crucible"]["registries"] is None:
+            log.error("Failed to load crucible registries information from %s with error '%s'" % (crucible_registries_file, err))
+            return None
+        else:
+            log.info("Loaded crucible registries information from %s" % (crucible_registries_file))
+
+        valid,err = validate_schema(settings["crucible"]["registries"], crucible_registries_schema_file)
+        if not valid:
+            log.error("JSON validation failed for crucible registries information with error '%s'" % (err))
+            return None
+        else:
+            log.info("JSON validation for crucible registries information passed")
+
+        log_settings(settings, mode = "crucible")
 
     rickshaw_settings_file = settings["dirs"]["local"]["conf"] + "/rickshaw-settings.json.xz"
     settings["rickshaw"],err = load_json_file(rickshaw_settings_file, uselzma = True)

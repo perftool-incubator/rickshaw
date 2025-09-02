@@ -2371,7 +2371,8 @@ def main():
                                        run_file = args.run_file,
                                        rickshaw_dir = args.rickshaw_dir,
                                        endpoint_index = args.endpoint_index,
-                                       endpoint_normalizer_callback = normalize_endpoint_settings)
+                                       endpoint_normalizer_callback = normalize_endpoint_settings,
+                                       crucible_dir = args.crucible_dir)
     if settings is None:
         return 1
 
