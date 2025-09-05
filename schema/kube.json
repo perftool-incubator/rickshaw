@@ -1,17 +1,23 @@
 {
+    "title": "Kube Endpoint Schema",
+    "description": "This schema defines the user interface to the kube endpoint",
     "type": "object",
     "properties": {
         "type": {
+            "description": "The type parameter is how rickshaw-run knows what endpoint code to execute and assign a given endpoint configuration",
             "type": "string",
             "enum": [ "kube" ]
         },
         "controller-ip-address": {
+            "description": "This parameter is used to provide an explicit IP address to the engines for use when connecting to the controller.  Typically this value is automatically figured out but in some environments, such as those with complex networking configurations, it is necessary for the user to provide this value.",
             "type": "string",
             "minLength": 1
         },
         "disable-tools": {
+            "description": "This object is used to control where tool engines should be provisioned.  There are two different versions of this object to choose from.",
             "oneOf": [
                 {
+                    "description": "This version of the 'disable-tools' object allows for control of all node types with a single paramter",
                     "type": "object",
                     "properties": {
                         "all": {
@@ -24,6 +30,7 @@
                     ]
                 },
                 {
+                    "description": "This version of the 'disable-tools' object allows for control of individual node types",
                     "type": "object",
                     "minProperties": 1,
                     "properties": {
@@ -39,12 +46,15 @@
             ]
         },
         "host": {
+            "description": "This is the hostname or IP address to use to connect to the system where control plane commands can be executed",
             "type": "string",
             "minLength": 1
         },
         "namespace": {
+            "description": "This object is used to configure the k8s namespace that will be used to create objects in. There are three different versions of this object to choose from.  NOTE:  If there is a collision in the namespace between two runs the 'newest' one will destroy all objects in the namespace to start with a clean slate.  This behavior is present to ensure that previously failed runs are properly cleaned up automatically.",
             "oneOf": [
                 {
+                    "description": "This version of the 'namespace' object requests that a unique name be generated for the run and would allow multiple runs to coexist on the same k8s cluster simultaneously.  The run ID is used as part of the namespace name to ensure uniqueness.",
                     "type": "object",
                     "properties": {
                         "type": {
@@ -54,6 +64,8 @@
                             ]
                         },
                         "prefix": {
+                            "description": "This is an optional prefix for the unique namespace name",
+                            "default": "crucible-rickshaw",
                             "type": "string",
                             "minLength": 1
                         }
@@ -64,6 +76,7 @@
                     ]
                 },
                 {
+                    "description": "This version of the 'namespace' objects requests a common name, 'crucible-rickshaw', be used.  Only a single run can exist on the k8s cluster with this namespace name.",
                     "type": "object",
                     "properties": {
                         "type": {
@@ -79,6 +92,7 @@
                     ]
                 },
                 {
+                    "description": "This version of the 'namespace' object requests that a custom name that is provided by the user is used.  If more than one unique custom names are used then multiple runs can coexist on the same k8s cluster simultaneously.",
                     "type": "object",
                     "properties": {
                         "type": {
@@ -88,6 +102,7 @@
                             ]
                         },
                         "name": {
+                            "description": "This is the custom name to use for the namespace",
                             "type": "string",
                             "minLength": 1
                         }
@@ -101,15 +116,18 @@
             ]
         },
         "sysinfo": {
+            "description": "This object contains parameters related to the control of system information collection",
             "type": "object",
             "properties": {
                 "collect-must-gather": {
+                    "description": "This parameter is used to control whether a must-gather is collected for the k8s cluster",
                     "type": "boolean"
                 }
             },
             "additionalProperties": false
         },
         "user": {
+            "description": "The username used to login to the system that can issue k8s control plane commands",
             "type": "string",
             "minLength": 1
         },
@@ -117,9 +135,11 @@
             "type": "object",
             "properties": {
                 "client": {
+                    "description": "This parameter controls which client engines belong to this endpoint.  The 'number-lists' definition below explains what the available formats are.",
                     "$ref": "#/definitions/number-lists"
                 },
                 "server": {
+                    "description": "This parameter controls which server engines belong to this endpoint.  The 'number-lists' definition below explains what the available formats are.",
                     "$ref": "#/definitions/number-lists"
                 }
             },
@@ -127,6 +147,7 @@
             "additionalProperties": false
         },
         "config": {
+            "description": "A list of configuration blocks.  Each block consists of the targets (ie. engines) it applies to and the settings or verifications that should be applied to those targets.",
             "type": "array",
             "minItems": 1,
             "uniqueItems": true,
@@ -134,16 +155,20 @@
                 "type": "object",
                 "properties": {
                     "targets": {
+                        "description": "This object is to define what target engines that this configuration block applies to.  There are two different versions of this object to choose from.",
                         "oneOf": [
                             {
+                                "description": "This version of the 'targets' object defines the default configuration that is applied to any engine that does not have a block that specifically targets it.",
                                 "type": "string",
                                 "enum": [ "default" ]
                             },
                             {
+                                "description": "This version of the 'targets' object defines a list of one or more targets that this configuration block will explicitly apply to.",
                                 "type": "array",
                                 "minItems": 1,
                                 "uniqueItems": true,
                                 "items": {
+                                    "description": "Each item in the targets list will include the role and the IDs for that role that this configuration block should apply to.",
                                     "type": "object",
                                     "properties": {
                                         "role": {
@@ -154,6 +179,7 @@
                                             ]
                                         },
                                         "ids": {
+                                            "description": "This parameter defines which engines with the specified role are being targeted.  The 'number-lists' definition below explains what the available formats are.",
                                             "$ref": "#/definitions/number-lists"
                                         }
                                     },
@@ -167,9 +193,11 @@
                         ]
                     },
                     "settings": {
+                        "description": "This object contains one or more properties that will be applied to associated targets scope. The 'settings' definition below explains what the available properties are.",
                         "$ref": "#/definitions/settings"
                     },
                     "verifications": {
+                        "description": "This object contains one or more verifications that will be checked at runtime to ensure that the launched engine pods have the appropriate configuration.  The 'verifications' definition below explains what the available properties are.",
                         "$ref": "#/definitions/verifications"
                     }
                 },
@@ -190,24 +218,32 @@
     ],
     "definitions": {
         "memory": {
+            "description": "This definition is for a string property that matches the associated regular expression to declare an amount of memory.  The value is expected to be one or more mebibytes or gibibytes.  Additionally, it is expected to be a whole number.",
             "type": "string",
             "pattern": "^[1-9][0-9]*(Mi|Gi)$"
         },
         "settings": {
+            "description": "The properties defined here can be assigned as either the default or explicitly targeted engine configuration options.  At least one must be specified when this is used.",
             "type": "object",
             "minProperties": 1,
             "properties": {
                 "cpu-partitioning": {
-                    "type": "boolean"
+                    "description": "This parameter defines whether engines that have it assigned are to be configured with or without CPU partitioning enabled.",
+                    "type": "boolean",
+                    "default": false
                 },
                 "hostNetwork": {
-                    "type": "boolean"
+                    "description": "This parameter defines whether engines that have it assigned should be configured with host networking (as opposed to pod networking).",
+                    "type": "boolean",
+                    "default": false
                 },
                 "nodeSelector": {
+                    "description": "This object can be used to define what cluster nodes assigned pods should be launched on.  The value(s) in this object are simply passed through to K8S for interpretation and should be pulled from K8S (or similar) documentation.",
                     "type": "object",
                     "minProperties": 1
                 },
                 "osruntime": {
+                    "description": "This parameter defines why type of container the engine should be running in.",
                     "type": "string",
                     "enum": [
                         "kata",
@@ -215,18 +251,22 @@
                     ]
                 },
                 "resources": {
+                    "description": "This object is used to define resource configuration settings that should be made by the assigned engines.  The values come from the K8S documentation",
                     "type": "object",
                     "minProperties": 1,
                     "properties": {
                         "cpu": {
+                            "description": "This object is used to configure CPU resources.  At least one property is expected to be defined.",
                             "type": "object",
                             "minProperties": 1,
                             "properties": {
                                 "limits": {
+                                    "description": "This parameter defines the CPU limits that should be assigned to the associated engines.",
                                     "type": "number",
                                     "exclusiveMinimum": 0
                                 },
                                 "requests": {
+                                    "description": "This parameter defines the CPU requests that should be assigned to the associated engines.",
                                     "type": "number",
                                     "exclusiveMinimum": 0
                                 }
@@ -234,12 +274,15 @@
                             "additionalProperties": false
                         },
                         "hugepages": {
+                            "description": "This object is used to configure hugepage resources.",
                             "type": "object",
                             "properties": {
                                 "size": {
+                                    "description": "This paramter controls the total amount of hugepage memory that should be assigned to the associate engines.",
                                     "$ref": "#/definitions/memory"
                                 },
                                 "type": {
+                                    "description": "This parameter controls the size of the hugepages to use for the associated engines.  Be aware that the available sizes are hardware dependent and can vary from one system to another based on a variety of details (CPU manufacturer, family, generation, architecture, etc.).  The accepted values are controlled by a regular expression and are expected to be one or more mebibytes or gibibytes.",
                                     "type": "string",
                                     "pattern": "^hugepages-[1-9][0-9]*(Mi|Gi)$"
                                 }
@@ -251,13 +294,16 @@
                             ]
                         },
                         "memory": {
+                            "description": "This object is used to configure the memory resources.  At least one property is expected to be defined.",
                             "type": "object",
                             "minProperties": 1,
                             "properties": {
                                 "limits": {
+                                    "description": "This parameter defines the memory limits that should be assigned to the associated engines.  The 'memory' definition above explains what the available values are.",
                                     "$ref": "#/definitions/memory"
                                 },
                                 "requests": {
+                                    "description": "This parameter defines the memory requests that should be assigned to the associated engines.  The 'memory definition above explains what the available values are.",
                                     "$ref": "#/definitions/memory"
                                 }
                             },
@@ -267,18 +313,22 @@
                     "additionalProperties": false
                 },
                 "runtimeClassName": {
+                    "description": "This parameter defines a runtime class that should be assigned to the associated engines.  See the K8S (or similar) documentation for more details about what this means and the possible values.",
                     "type": "string",
                     "minLength": 1
                 },
                 "securityContext": {
+                    "description": "This object can be used to define a security context that is assigned to the associated engines.  At least one, but up to two, context levels ('container' and 'pod') can be configured.  The value(s) in this object are simply passed through to K8S for interpretation and should be pulled from K8S (or similar) documentation.",
                     "type": "object",
                     "minProperties": 1,
                     "properties": {
                         "container": {
+                            "description": "This object defines a security context to be assigned at the container context level",
                             "type": "object",
                             "minProperties": 1
                         },
                         "pod": {
+                            "description": "This object defines a security context to be assigned at the pod context level",
                             "type": "object",
                             "minProperties": 1
                         }
@@ -286,23 +336,29 @@
                     "additionalProperties": false
                 },
                 "userenv": {
+                    "description": "This parameter defines the userenv that is to be assigned to the associated engines.  The userenv is the base container image.",
                     "type": "string",
                     "minLength": 1
                 },
                 "volumes": {
+                    "description": "This object can be used to define one or more volumes that are to be mapped to the associated engines",
                     "type": "array",
                     "minItems": 1,
                     "items": {
+                        "description": "Each item in this list defines one volumes that should be mapped to the associated engines",
                         "type": "object",
                         "properties": {
                             "volumeMount": {
+                                "description": "This object defines the parameters that are used to configure the mount within the engine",
                                 "type": "object",
                                 "properties": {
                                     "mountPath": {
+                                        "description": "This parameter defines the path inside the engine which the mount should be made at ",
                                         "type": "string",
                                         "minLength": 1
                                     },
                                     "readOnly": {
+                                        "description": "This optional parameter can be used to defined whether the volume should be read only or not",
                                         "type": "boolean"
                                     }
                                 },
@@ -312,39 +368,48 @@
                                 ]
                             },
                             "name": {
+                                "description": "This parameter is a name that is assigned to the volume.  It is used to map the volume declared at the pod level to the volumeMount at the container level.",
                                 "type": "string",
                                 "minLength": 1
                             },
                             "volume": {
+                                "description": "This object defines the type of volume that is being declared at the pod level to be available for mounting inside the container.  There are seven different types avaible and each one's format is passed through to K8s for interpreation.  The object parameters should be pulled from K8S (or similar) documentation",
                                 "type": "object",
                                 "minProperties": 1,
                                 "maxProperties": 1,
                                 "properties": {
                                     "configMap": {
+                                        "description": "A configMap volume",
                                         "type": "object",
                                         "minProperties": 1
                                     },
                                     "emptyDir": {
+                                        "description": "An emptyDir volume",
                                         "type": "object",
                                         "minProperties": 1
                                     },
                                     "hostPath": {
+                                        "description": "A hostPath volume",
                                         "type": "object",
                                         "minProperties": 1
                                     },
                                     "image": {
+                                        "description": "An image volume",
                                         "type": "object",
                                         "minProperties": 1
                                     },
                                     "nfs": {
+                                        "description": "A nfs volume",
                                         "type": "object",
                                         "minProperties": 1
                                     },
                                     "persistentVolumeClaim": {
+                                        "description": "A persistentVolumeClaim (PVC) volume",
                                         "type": "object",
                                         "minProperties": 1
                                     },
                                     "secret": {
+                                        "description": "A secret volume",
                                         "type": "object",
                                         "minProperties": 1
                                     }
@@ -364,24 +429,31 @@
             "additionalProperties": false
         },
         "number-lists": {
+            "description": "This defintion defines multiple ways to describe a list of numbers.  There are three different definitions to choose from.",
             "anyOf": [
                 {
+                    "description": "This version of the definition is a + separated list of values and/or ranges of number.  Since this definition can contain both number and symbols it is represented as a string.  Some  examples are '1-5+6-10', '1+3+5', or '1-3+5+7-9'.  This representation is a historic legacy that was used in an interface where comma separated values where used to specify many different parameter and their values; thus commas could not be used to separate the individual elements of this value.",
                     "type": "string",
                     "pattern": "^(([1-9][0-9]*)(-[1-9][0-9]*)?)(\\+(([1-9][0-9]*)(-[1-9][0-9]*)?))*$"
                 },
                 {
+                    "description": "This version of the definition is a single integer value.  Some examples are 1, 5, or 10.",
                     "type": "integer"
                 },
                 {
+                    "description": "This version of the definition is a list of one or more values.  Since this is a list there is no need for the individual items to support multiple ranges or values.",
                     "type": "array",
                     "minItems": 1,
                     "items": {
+                        "description": "This definition defines the ability to specify a range or an individual value.",
                         "anyOf": [
                             {
+                                "description": "This version of the definition defines a range.  Since it contains a special characeter it is represented as a string.  Some examples include '1-5', '3-7', or '1-10'.",
                                 "type": "string",
                                 "pattern": "^(([1-9][0-9]*)(-[1-9][0-9]*)?)$"
                             },
                             {
+                                "description": "This version of the definition defines a single integer value.  Some examples are 3, 6, or 9.",
                                 "type": "integer"
                             }
                         ]
@@ -390,10 +462,12 @@
             ]
         },
         "verifications": {
+            "description": "The properties defined here are used as validation tests to check if the associated engines are running with the proper/expected configuration.  If one of the verification tests failed the test will be aborted so that corrections can be made and the test re-attempted.",
             "type": "object",
             "minProperties": 1,
             "properties": {
                 "qosClass": {
+                    "description": "This verification be used to ensure that the associated engines are running with the desired/expected qosClass.  The running qosClass is a function of several different characteristics of the resource configuration and thus it is easy for values to be entered that do not end up yielding the desired runtime qosClass.  By specifying this validation the associated engines will be verified to have the expected value.",
                     "type": "string",
                     "enum": [
                         "BestEffort",
