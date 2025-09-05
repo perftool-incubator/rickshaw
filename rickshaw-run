@@ -2429,6 +2429,8 @@ sub validate_endpoints() {
             foreach my $arg (split(/,/, $$endpoint{'opts'})) {
                 $job{'command'} .= " --" . $arg;
             }
+
+            $job{'command'} .= " --crucible-dir=" . $ENV{'CRUCIBLE_HOME'};
         } else {
             $job{'command'} .= " --endpoint-opts=" . $$endpoint{'opts'};
         }
@@ -3123,6 +3125,8 @@ sub deploy_endpoints() {
                 foreach my $arg (split(/,/, $opts)) {
                     $cmd .= " --" . $arg;
                 }
+
+                $cmd .= " --crucible-dir=" . $ENV{'CRUCIBLE_HOME'};
             } else {
                 $cmd .= " --roadblock-dir=" . $run{'roadblock-dir'};
                 $cmd .= " --endpoint-opts=" . $opts .
