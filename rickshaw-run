@@ -1044,16 +1044,19 @@ sub source_container_image {
     my $x = 0;
     my $refresh_expiration;
     if (defined $quay_refresh_expiration_token && defined $quay_refresh_expiration_api_url) {
-        if ($quay_image_expiration =~ m/([0-9]+)w/) {
+        if ($quay_image_expiration =~ m/([1-9][0-9]*)w/) {
             #                               weeks   days/week   hours/day   min/hour   seconds/min
             $refresh_expiration = time() + ($1    * 7         * 24        * 60       * 60);
-
-            my $refresh_expiration_str = localtime($refresh_expiration);
-            printf "Going to refresh image expiration with this value: %d (%s)\n", $refresh_expiration, $refresh_expiration_str;
+        } elsif ($quay_image_expiration =~ m/([1-9][0-9]*)d/) {
+            #                               days   hours/day   min/hour   seconds/min
+            $refresh_expiration = time() + ($1     * 24        * 60       * 60);
         } else {
-            print "Failed to determine quay image expiration weeks\n";
+            print "Failed to determine quay image expiration\n";
             exit 1;
         }
+
+        my $refresh_expiration_str = localtime($refresh_expiration);
+        printf "Going to refresh image expiration with this value: %d (%s)\n", $refresh_expiration, $refresh_expiration_str;
     }
     while ($x < $i) {
         printf "Processing stage %d (%s)...\n", $x + 1, $workshop_args[$x]{'tag'};
