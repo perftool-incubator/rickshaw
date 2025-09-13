@@ -1204,15 +1204,18 @@ sub source_container_image {
     my $x = 0;
     my $refresh_expiration;
     if (defined $quay_refresh_expiration_tokens{$registry_type} && defined $run{'registries'}{$registry_type}{'quay-refresh-expiration-api-url'}) {
-        if ($run{'registries'}{$registry_type}{'quay-expiration-length'} =~ m/([0-9]+)w/) {
+        if ($run{'registries'}{$registry_type}{'quay-expiration-length'} =~ m/([1-9][0-9]*)w/) {
             #                               weeks   days/week   hours/day   min/hour   seconds/min
             $refresh_expiration = time() + ($1    * 7         * 24        * 60       * 60);
-
-            log_print sprintf "Going to refresh image expiration with this value: %d (%s)\n", $refresh_expiration, quay_image_refresh_formatted_timestamp($refresh_expiration);
+        } elsif ($run{'registries'}{$registry_type}{'quay-expiration-length'} =~ m/([1-9][0-9]*)d/) {
+            #                               days   hours/day   min/hour   seconds/min
+            $refresh_expiration = time() + ($1     * 24        * 60       * 60);
         } else {
-            log_print "Failed to determine quay image expiration weeks\n";
+            log_print "Failed to determine quay image expiration\n";
             exit 1;
         }
+
+        log_print sprintf "Going to refresh image expiration with this value: %d (%s)\n", $refresh_expiration, quay_image_refresh_formatted_timestamp($refresh_expiration);
     }
     while ($x < $i) {
         log_print sprintf "Processing stage %d (%s)...\n", $x + 1, $workshop_args[$x]{'tag'};
