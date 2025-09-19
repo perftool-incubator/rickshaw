@@ -282,6 +282,7 @@ fi
 scp_from_controller "$ssh_id_file" "$engine_config_dir/engine-script" /usr/local/bin/
 scp_from_controller "$ssh_id_file" "$engine_config_dir/engine-script-library" /usr/local/bin/
 scp_from_controller "$ssh_id_file" "$engine_config_dir/roadblocker.py" /usr/local/bin
+scp_from_controller "$ssh_id_file" "$engine_config_dir/roadblocker_config.py" /usr/local/bin
 scp_from_controller "$ssh_id_file" "$engine_config_dir/roadblock.py" /usr/local/bin
 if [ -e /usr/local/bin/engine-script -a -e /usr/local/bin/engine-script-library ]; then
     echo "Execing engine-script:"

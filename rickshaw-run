@@ -86,6 +86,7 @@ my $engine_archives_dir;
 my $engine_run_script;
 my $engine_library_script;
 my $engine_roadblock_script;
+my $engine_roadblock_config;
 my $engine_roadblock_module;
 my $iterations_dir;
 my $rickshaw_project_dir;
@@ -2009,6 +2010,7 @@ sub make_run_dirs() {
     $engine_run_script = $engine_config_dir . "/engine-script";
     $engine_library_script = $engine_config_dir . "/engine-script-library";
     $engine_roadblock_script = $engine_config_dir . "/roadblocker.py";
+    $engine_roadblock_config = $engine_config_dir . "/roadblocker_config.py";
     $engine_roadblock_module = $engine_config_dir . "/roadblock.py";
     $iterations_dir = $run_dir . "/iterations";
     mkdir($iterations_dir);
@@ -2873,6 +2875,8 @@ sub prepare_bench_tool_engines() {
     copy($run{'roadblock-dir'} . "/roadblocker.py", $engine_roadblock_script)
         || die "Could not copy roadblocker.py to " . $engine_roadblock_script;
     chmod 0755, "$engine_roadblock_script";
+    copy($run{'roadblock-dir'} . "/roadblocker_config.py", $engine_roadblock_config)
+        || die "Could not copy roadblocker_config.py to " . $engine_roadblock_config;
     copy($run{'roadblock-dir'} . "/roadblock.py", $engine_roadblock_module)
         || die "Could not copy roadblock.py to " . $engine_roadblock_module;
 
