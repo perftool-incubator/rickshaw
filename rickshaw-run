@@ -3404,6 +3404,9 @@ sub roadblock_exit_on_error {
 
     if ($roadblock_rc != 0) {
         log_print "roadblock_exit_on_error()\n";
+
+        wait_for_endpoints();
+
         exit $roadblock_rc;
     }
 }
