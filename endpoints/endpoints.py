@@ -16,6 +16,7 @@ import sys
 import tempfile
 import time
 import ipaddress
+import threading
 
 TOOLBOX_HOME = os.environ.get('TOOLBOX_HOME')
 if TOOLBOX_HOME is None:
@@ -957,12 +958,16 @@ def setup_logger(log_level):
     Returns:
         a logging instance
     """
-    log_format = '[LOG %(asctime)s %(levelname)s %(module)s %(funcName)s:%(lineno)d] %(message)s'
+    log_format = '[LOG %(asctime)s %(levelname)s %(module)s %(funcName)s:%(lineno)d][Thread %(threadName)s] %(message)s'
     match log_level:
         case "debug":
             logging.basicConfig(level = logging.DEBUG, format = log_format, stream = sys.stdout)
         case "normal" | _:
             logging.basicConfig(level = logging.INFO, format = log_format, stream = sys.stdout)
+
+    # change the main thread's name so it fits with other usage in the endpoints
+    main_thread = threading.main_thread()
+    main_thread.name = "Main"
 
     return logging.getLogger(__file__)
 
