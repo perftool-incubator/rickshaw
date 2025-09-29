@@ -3180,7 +3180,7 @@ sub process_roadblocks() {
         foreach my $msg (@{ $$messages_ref{'received'} })  {
             if (exists $$msg{'payload'}{'message'}{'user-object'}{'new-followers'}) {
                 debug_log(sprintf "found these new followers: %s\n", join(" ", @{ $$msg{'payload'}{'message'}{'user-object'}{'new-followers'} }));
-                @new_followers = (@new_followers, @{ $$msg{'payload'}{'message'}{'user-object'}{'new-followers'} });
+                push @new_followers, @{ $$msg{'payload'}{'message'}{'user-object'}{'new-followers'} };
             }
         }
     }
