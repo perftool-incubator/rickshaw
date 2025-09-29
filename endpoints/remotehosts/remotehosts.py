@@ -2401,6 +2401,15 @@ def main():
     if build_unique_remote_configs() != 0:
         return 1
     endpoints.create_local_dirs(settings)
+
+    if endpoints.process_pre_deploy_roadblock(roadblock_id = args.roadblock_id,
+                                              endpoint_label = args.endpoint_label,
+                                              roadblock_password = args.roadblock_passwd,
+                                              roadblock_messages_dir = settings["dirs"]["local"]["roadblock-msgs"],
+                                              roadblock_timeouts = settings["rickshaw"]["roadblock"]["timeouts"],
+                                              early_abort = early_abort):
+        return 1
+
     create_remote_dirs()
     remote_image_pull_rc = remotes_pull_images()
     if remote_image_pull_rc == 0:

@@ -961,6 +961,14 @@ function process_roadblocks() {
     local msg_file=""
     local roadblock_rc
 
+    do_roadblock "endpoint-pre-deploy-begin" ${default_timeout}
+    roadblock_rc=$?
+    roadblock_exit_on_error ${roadblock_rc}
+
+    do_roadblock "endpoint-pre-deploy-end" ${default_timeout}
+    roadblock_rc=$?
+    roadblock_exit_on_error ${roadblock_rc}
+
     local msgs_arg=""
     if [ ! -z "$new_followers" ]; then
         echo "pwd: `/bin/pwd`"
@@ -972,7 +980,6 @@ function process_roadblocks() {
         echo "ls: `/bin/ls`"
         msgs_arg="messages ${msg_file}"
     fi
-
 
     do_roadblock "endpoint-deploy-begin" ${endpoint_deploy_timeout} ${msgs_arg}
     roadblock_rc=$?

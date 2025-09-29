@@ -15,6 +15,7 @@ from pathlib import Path
 import re
 import sys
 import tempfile
+import threading
 import time
 
 script_path = os.path.abspath(__file__)
@@ -991,7 +992,7 @@ def create_pod_crd(role = None, id = None, node = None):
     
     return crd, 0
 
-def verify_pods_running(connection, pods, pod_details):
+def verify_pods_running(connection, pods, pod_details, abort_event):
     """
     Take the list of pods and verify that they are running and collect information about them
 
@@ -999,6 +1000,7 @@ def verify_pods_running(connection, pods, pod_details):
        connection (Fabric): The Fabric connection to use to run commands
        pods (list): The list of pods that are to be verified to be in the running state
        pod_details (dict): Additional metadata that can be used to verify that the pod is properly configured
+       abort_event (threading.Event): a threading.Event that signals if the deployment should be aborted
 
     Globals:
        log
@@ -1021,6 +1023,10 @@ def verify_pods_running(connection, pods, pod_details):
 
     count = 1
     while len(unverified_pods) > 0:
+        if abort_event.is_set():
+            log.info("Aborting pod verification due to an abort event")
+            break
+
         log.info("Loop pass %d" % (count))
         log.info("Unverified pods: %s" % (unverified_pods))
         log.info("Verified pods:   %s" % (verified_pods))
@@ -1125,12 +1131,13 @@ def verify_pods_running(connection, pods, pod_details):
 
     return pods_info
 
-def create_cs_pods(cpu_partitioning = None):
+def create_cs_pods(cpu_partitioning = None, abort_event = None):
     """
     Generate Validate, and Create Pods for the client/server engines with the given CPU partitioning configuration
 
     Args:
-        None
+        cpu_partitioning (bool): whether or not to start pods with CPU partitioning enabled
+        abort_event (threading.Event): a threading.Event that signals if the deployment should be aborted
 
     Globals:
         args (namespace): the script's CLI parameters
@@ -1251,7 +1258,7 @@ def create_cs_pods(cpu_partitioning = None):
         if not "pods" in settings["engines"]["endpoint"]:
             settings["engines"]["endpoint"]["pods"] = dict()
 
-        pod_status = verify_pods_running(con, created_crds, engine_details)
+        pod_status = verify_pods_running(con, created_crds, engine_details, abort_event)
         if pod_status is None:
             log.error("Encountered fatal error while verifying pods")
             return 2
@@ -1280,11 +1287,12 @@ def create_cs_pods(cpu_partitioning = None):
     
     return 0
 
-def create_tools_pods():
+def create_tools_pods(abort_event):
     """
+    Create tools pods where appropriate based on the input parameters and the location of launched client/server pods
 
     Args:
-        None
+        abort_event (threading.Event): a threading.Event that signals if the deployment should be aborted
 
     Globals:
         args (namespace): the script's CLI parameters
@@ -1456,7 +1464,7 @@ def create_tools_pods():
         if not "pods" in settings["engines"]["endpoint"]:
             settings["engines"]["endpoint"]["pods"] = dict()
 
-        pod_status = verify_pods_running(con, created_crds, pod_details)
+        pod_status = verify_pods_running(con, created_crds, pod_details, abort_event)
         if pod_status is None:
             log.error("Enclountered fatal error while verifying pods")
             return 2
@@ -1757,6 +1765,27 @@ def collect_sysinfo():
 
     return 0
 
+def deployment_roadblock_function(roadblock_id, follower_name, endpoint_deploy_timeout, roadblock_password, roadblock_messages_dir, abort_deployment_event):
+    log.info("This is the deployment roadblock thread.  My name is '%s'" % (follower_name))
+
+    rc = endpoints.do_roadblock(roadblock_id = roadblock_id,
+                                follower_id = follower_name,
+                                label = "endpoint-deploy-begin",
+                                timeout = endpoint_deploy_timeout,
+                                redis_password = roadblock_password,
+                                msgs_dir = roadblock_messages_dir)
+    if rc == 0:
+        log.info("endpoint-deploy-begin roadblock succeeded")
+    else:
+        log.error("endpoint-deploy-begin roadblock failed")
+
+        log.critical("Setting abort deployment event")
+        abort_deployment_event.set()
+
+    log.info("Ending the deployment roadblock thread")
+
+    return 0
+
 def main():
     """
     Main control block
@@ -1812,65 +1841,102 @@ def main():
     else:
         log.warning("Skipping call to get_k8s_config due to early abort")
 
-    if not early_abort:
-        if init_k8s_namespace() != 0:
-            log.error("Enabling early abort due to error in init_k8s_namespace")
-            early_abort = True
+    deployment_label = args.endpoint_label + "-deploy"
+    rc = endpoints.process_pre_deploy_roadblock(roadblock_id = args.roadblock_id,
+                                                endpoint_label = args.endpoint_label,
+                                                roadblock_password = args.roadblock_passwd,
+                                                deployment_followers = [ deployment_label ],
+                                                roadblock_messages_dir = settings["dirs"]["local"]["roadblock-msgs"],
+                                                roadblock_timeouts = settings["rickshaw"]["roadblock"]["timeouts"],
+                                                early_abort = early_abort)
+    if rc != 0:
+        log.error("Processing of the pre-deploy roadblocks resulted in an error")
     else:
-        log.warning("Skipping call to init_k8s_namespace due to early abort")
+        abort_deployment_event = threading.Event()
 
-    if not early_abort:
-        if compile_object_configs() != 0:
-            log.error("Enabling early abort due to error in compile_object_configs")
+        try:
+            log.info("Create roadblock deployment thread with name '%s'" % (deployment_label))
+            deployment_roadblock_thread = threading.Thread(target = deployment_roadblock_function,
+                                                           args = (
+                                                                   args.roadblock_id,
+                                                                   deployment_label,
+                                                                   args.endpoint_deploy_timeout,
+                                                                   args.roadblock_passwd,
+                                                                   settings["dirs"]["local"]["roadblock-msgs"],
+                                                                   abort_deployment_event
+                                                                  ),
+                                                           name = deployment_label)
+            deployment_roadblock_thread.start()
+        except RuntimeError as e:
+            log.error("Failed to create and start the deployment roadblock thread due to exception '%s'" % (str(e)))
             early_abort = True
-    else:
-        log.warning("Skipping call to compile_object_configs due to early abort")
 
-    if not early_abort:
-        if create_cs_pods(cpu_partitioning = True) != 0:
-            log.error("Enabling early abort due to error in create_cs_pods(cpu_partitioning = True)")
-            early_abort = True
-    else:
-        log.warning("Skipping call to create_cs_pods(cpu_partitioning = True) due to early abort")
+        if not early_abort and not abort_deployment_event.is_set():
+            if init_k8s_namespace() != 0:
+                log.error("Enabling early abort due to error in init_k8s_namespace")
+                early_abort = True
+        else:
+            log.warning("Skipping call to init_k8s_namespace due to early abort")
 
-    if not early_abort:
-        if create_cs_pods(cpu_partitioning = False) != 0:
-            log.error("Enabling early abort due to error in create_cs_pods(cpu_partitioning = False)")
-            early_abort = True
-    else:
-        log.warning("Skipping call to create_cs_pods(cpu_partitioning = False) due to early abort")
+        if not early_abort and not abort_deployment_event.is_set():
+            if compile_object_configs() != 0:
+                log.error("Enabling early abort due to error in compile_object_configs")
+                early_abort = True
+        else:
+            log.warning("Skipping call to compile_object_configs due to early abort")
 
-    if not early_abort:
-        if create_tools_pods() != 0:
-            log.error("Enabling early abort due to error in create_tools_pods")
-            early_abort = True
-    else:
-        log.warning("Skipping call to create_tools_pods due to early abort")
+        if not early_abort and not abort_deployment_event.is_set():
+            if create_cs_pods(cpu_partitioning = True, abort_event = abort_deployment_event) != 0:
+                log.error("Enabling early abort due to error in create_cs_pods(cpu_partitioning = True)")
+                early_abort = True
+        else:
+            log.warning("Skipping call to create_cs_pods(cpu_partitioning = True) due to early abort")
 
-    # KMR implement callbacks
-    kube_callbacks = {
-        "engine-init": engine_init,
-        "collect-sysinfo": collect_sysinfo,
-        "test-start": None,
-        "test-stop": None,
-        "remote-cleanup": kube_cleanup
-    }
-    if early_abort and not "new-followers" in settings["engines"]:
-        # in the case of an early abort the new-followers list may not
-        # have been initialized yet
-        settings["engines"]["new-followers"] = []
-    rc = endpoints.process_roadblocks(callbacks = kube_callbacks,
-                                      roadblock_id = args.roadblock_id,
-                                      endpoint_label = args.endpoint_label,
-                                      endpoint_deploy_timeout = args.endpoint_deploy_timeout,
-                                      roadblock_password = args.roadblock_passwd,
-                                      new_followers = settings["engines"]["new-followers"],
-                                      roadblock_messages_dir = settings["dirs"]["local"]["roadblock-msgs"],
-                                      roadblock_timeouts = settings["rickshaw"]["roadblock"]["timeouts"],
-                                      max_sample_failures = args.max_sample_failures,
-                                      engine_commands_dir = settings["dirs"]["local"]["engine-cmds"],
-                                      endpoint_dir = settings["dirs"]["local"]["endpoint"],
-                                      early_abort = early_abort)
+        if not early_abort and not abort_deployment_event.is_set():
+            if create_cs_pods(cpu_partitioning = False, abort_event = abort_deployment_event) != 0:
+                log.error("Enabling early abort due to error in create_cs_pods(cpu_partitioning = False)")
+                early_abort = True
+        else:
+            log.warning("Skipping call to create_cs_pods(cpu_partitioning = False) due to early abort")
+
+        if not early_abort and not abort_deployment_event.is_set():
+            if create_tools_pods(abort_deployment_event) != 0:
+                log.error("Enabling early abort due to error in create_tools_pods")
+                early_abort = True
+        else:
+            log.warning("Skipping call to create_tools_pods due to early abort")
+
+        if not abort_deployment_event.is_set():
+            # KMR implement callbacks
+            kube_callbacks = {
+                "engine-init": engine_init,
+                "collect-sysinfo": collect_sysinfo,
+                "test-start": None,
+                "test-stop": None,
+                "remote-cleanup": kube_cleanup
+            }
+            if early_abort and not "new-followers" in settings["engines"]:
+                # in the case of an early abort the new-followers list may not
+                # have been initialized yet
+                settings["engines"]["new-followers"] = []
+            rc = endpoints.process_roadblocks(callbacks = kube_callbacks,
+                                              roadblock_id = args.roadblock_id,
+                                              endpoint_label = args.endpoint_label,
+                                              endpoint_deploy_timeout = args.endpoint_deploy_timeout,
+                                              roadblock_password = args.roadblock_passwd,
+                                              new_followers = settings["engines"]["new-followers"],
+                                              roadblock_messages_dir = settings["dirs"]["local"]["roadblock-msgs"],
+                                              roadblock_timeouts = settings["rickshaw"]["roadblock"]["timeouts"],
+                                              max_sample_failures = args.max_sample_failures,
+                                              engine_commands_dir = settings["dirs"]["local"]["engine-cmds"],
+                                              endpoint_dir = settings["dirs"]["local"]["endpoint"],
+                                              early_abort = early_abort)
+        else:
+            log.warning("Skipping call to process_raodblocks due to abort deployment")
+
+        log.info("Joining deployment roadblock thread")
+        deployment_roadblock_thread.join()
+        log.info("Joined deployment roadblock thread")
 
     log.info("Logging 'final' settings data structure")
     endpoints.log_settings(settings, mode = "settings")

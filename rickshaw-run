@@ -3169,11 +3169,30 @@ sub process_roadblocks() {
     my $roadblock_rc;
     my @new_followers;
     my @dropped_followers;
+    my @deployment_followers;
 
     @active_followers = (dump_endpoint_labels(\@endpoints));
 
     ####################################################################
-    $roadblock_rc = do_roadblock("endpoint-deploy-begin", $endpoint_deploy_timeout, $messages_ref, @active_followers);
+    $roadblock_rc = do_roadblock("endpoint-pre-deploy-begin", $default_rb_timeout, $messages_ref, @active_followers);
+    roadblock_exit_on_error($roadblock_rc);
+
+    if (defined $messages_ref) {
+        foreach my $msg (@{ $$messages_ref{'received'} })  {
+            if (exists $$msg{'payload'}{'message'}{'user-object'}{'deployment-followers'}) {
+                debug_log(sprintf "found these deployment followers: %s\n", join(" ", @{ $$msg{'payload'}{'message'}{'user-object'}{'deployment-followers'} }));
+                push @deployment_followers, @{ $$msg{'payload'}{'message'}{'user-object'}{'deployment-followers'} };
+            }
+        }
+    }
+    debug_log(sprintf "All deployment followers: %s\n", join(" ", @deployment_followers));
+
+    $roadblock_rc = do_roadblock("endpoint-pre-deploy-end", $default_rb_timeout, $messages_ref, @active_followers);
+    roadblock_exit_on_error($roadblock_rc);
+
+    push @deployment_followers, @active_followers;
+    ####################################################################
+    $roadblock_rc = do_roadblock("endpoint-deploy-begin", $endpoint_deploy_timeout, $messages_ref, @deployment_followers);
     roadblock_exit_on_error($roadblock_rc);
 
     if (defined $messages_ref) {
