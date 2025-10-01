@@ -16,6 +16,7 @@ import sys
 import tempfile
 import time
 import ipaddress
+import threading
 
 TOOLBOX_HOME = os.environ.get('TOOLBOX_HOME')
 if TOOLBOX_HOME is None:
@@ -957,14 +958,82 @@ def setup_logger(log_level):
     Returns:
         a logging instance
     """
-    log_format = '[LOG %(asctime)s %(levelname)s %(module)s %(funcName)s:%(lineno)d] %(message)s'
+    log_format = '[LOG %(asctime)s %(levelname)s %(module)s %(funcName)s:%(lineno)d][Thread %(threadName)s] %(message)s'
     match log_level:
         case "debug":
             logging.basicConfig(level = logging.DEBUG, format = log_format, stream = sys.stdout)
         case "normal" | _:
             logging.basicConfig(level = logging.INFO, format = log_format, stream = sys.stdout)
 
+    # change the main thread's name so it fits with other usage in the endpoints
+    main_thread = threading.main_thread()
+    main_thread.name = "Main"
+
     return logging.getLogger(__file__)
+
+def process_pre_deploy_roadblock(roadblock_id = None, endpoint_label = None, roadblock_password = None, deployment_followers = None, roadblock_messages_dir = None, roadblock_timeouts = None, early_abort = None):
+    """
+    Process the beginning and ending roadblocks associated with synchronizing a test
+
+    Args:
+        roadblock_id (str): The base ID to use as part of a roadblock's name
+        endpoint_label (str): The name of the calling endpoint
+        roadblock_password (str): The password that roadblock uses to connect to it's server
+        deployment_followers (list): A list of the deploynment followers to inform the roadblock leader about
+        roadblock_messages_dir (str): The directory where roadblock messages should be stored
+        roadblock_timeouts (dict): The roadblock timeout values from rickshaw-settings
+        early_abort (bool): Abort the run as early as possible due to an error early in initialization
+
+    Globals:
+        None
+
+    Returns:
+        status (int): 0 for success, != 0 for failure
+    """
+    log.info("Starting to process pre-deploy roadblock")
+
+    deployment_followers_msg_file = None
+    if deployment_followers is not None:
+        log.info("A deployment followers list was provided")
+        
+        if len(deployment_followers) > 0:
+            log.info("Informing roadblock leader of these deployment followers: %s" % (deployment_followers))
+
+            deployment_followers_msg_payload = {
+                "deployment-followers": deployment_followers
+            }
+            deployment_followers_msg = create_roadblock_msg("all", "all", "user-object", deployment_followers_msg_payload)
+
+            deployment_followers_msg_file = roadblock_messages_dir + "/deployment-followers.json"
+            log.info("Writing deployment followers message to %s" % (deployment_followers_msg_file))
+            with open(deployment_followers_msg_file, "w", encoding = "ascii") as deployment_followers_msg_file_fp:
+                deployment_followers_msg_file_fp.write(dump_json(deployment_followers_msg))
+        else:
+            log.info("No deplyment followers to inform the roadblock leader about")
+    else:
+        log.info("The deployment followers list was not provided")
+
+    rc = do_roadblock(roadblock_id = roadblock_id,
+                      follower_id = endpoint_label,
+                      label = "endpoint-pre-deploy-begin",
+                      timeout = roadblock_timeouts["default"],
+                      messages = deployment_followers_msg_file,
+                      redis_password = roadblock_password,
+                      msgs_dir = roadblock_messages_dir,
+                      abort = early_abort)
+    if rc != 0:
+        return rc
+
+    rc = do_roadblock(roadblock_id = roadblock_id,
+                      follower_id = endpoint_label,
+                      label = "endpoint-pre-deploy-end",
+                      timeout = roadblock_timeouts["default"],
+                      redis_password = roadblock_password,
+                      msgs_dir = roadblock_messages_dir)
+    if rc != 0:
+        return rc
+
+    return 0
 
 def process_roadblocks(callbacks = None, roadblock_id = None, endpoint_label = None, endpoint_deploy_timeout = None, roadblock_password = None, new_followers = None, roadblock_messages_dir = None, roadblock_timeouts = None, max_sample_failures = None, engine_commands_dir = None, endpoint_dir = None, early_abort = False):
     """

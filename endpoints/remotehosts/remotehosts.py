@@ -450,7 +450,7 @@ def image_pull_worker_thread(thread_id, work_queue, threads_rcs):
     """
     thread = threading.current_thread()
     thread_name = thread.name
-    thread_logger(thread_name, "Starting image pull thread with thread ID %d and name = '%s'" % (thread_id, thread_name))
+    thread_logger("Starting image pull thread with thread ID %d and name = '%s'" % (thread_id, thread_name))
     rc = 0
     job_count = 0
 
@@ -459,36 +459,36 @@ def image_pull_worker_thread(thread_id, work_queue, threads_rcs):
         try:
             remote = work_queue.get(block = False)
         except queue.Empty:
-            thread_logger(thread_name, "Received a work queue empty exception")
+            thread_logger("Received a work queue empty exception")
             break
 
         if remote is None:
-            thread_logger(thread_name, "Received a null job", log_level = "warning")
+            thread_logger("Received a null job", log_level = "warning")
             continue
 
         job_count += 1
-        thread_logger(thread_name, "Retrieved remote %s" % (remote))
+        thread_logger("Retrieved remote %s" % (remote))
 
         my_unique_remote = settings["engines"]["remotes"][remote]
         my_run_file_remote = settings["run-file"]["endpoints"][args.endpoint_index]["remotes"][my_unique_remote["run-file-idx"][0]]
 
-        thread_logger(thread_name, "Remote user is %s" % (my_run_file_remote["config"]["settings"]["remote-user"]), remote_name = remote)
+        thread_logger("Remote user is %s" % (my_run_file_remote["config"]["settings"]["remote-user"]), remote_name = remote)
 
         with endpoints.remote_connection(remote, my_run_file_remote["config"]["settings"]["remote-user"]) as c:
             for image_info in my_unique_remote["images"]:
                 auth_arg = ""
                 remote_auth_file = settings["dirs"]["remote"]["run"] + "/pull-token.json"
                 if "pull-token" in image_info:
-                    thread_logger(thread_name, "Image %s requires pull token %s" % (image_info["image"], image_info["pull-token"]), remote_name = remote)
+                    thread_logger("Image %s requires pull token %s" % (image_info["image"], image_info["pull-token"]), remote_name = remote)
                     result = c.put(image_info["pull-token"], remote_auth_file)
-                    thread_logger(thread_name, "Copied %s to %s:%s" % (image_info["pull-token"], remote, remote_auth_file), remote_name = remote)
+                    thread_logger("Copied %s to %s:%s" % (image_info["pull-token"], remote, remote_auth_file), remote_name = remote)
                     auth_arg = "--authfile=" + remote_auth_file
 
                 result = endpoints.run_remote(c, "podman pull " + auth_arg + " " + image_info["image"])
                 loglevel = "info"
                 if result.exited != 0:
                     loglevel = "error"
-                thread_logger(thread_name, "Attempted to pull %s with return code %d:\nstdout:\n%sstderr:\n%s" % (image_info["image"], result.exited, result.stdout, result.stderr), log_level = loglevel, remote_name = remote)
+                thread_logger("Attempted to pull %s with return code %d:\nstdout:\n%sstderr:\n%s" % (image_info["image"], result.exited, result.stdout, result.stderr), log_level = loglevel, remote_name = remote)
                 rc += result.exited
 
                 if "pull-token" in image_info:
@@ -496,28 +496,27 @@ def image_pull_worker_thread(thread_id, work_queue, threads_rcs):
                     log_level = "info"
                     if result.exited != 0:
                         loglevel = "error"
-                    thread_logger(thread_name, "Attempted to remove %s with return code %d:\nstdout:\n%sstderr:\n%s" % (remote_auth_file, result.exited, result.stdout, result.stderr), log_level = loglevel, remote_name = remote)
+                    thread_logger("Attempted to remove %s with return code %d:\nstdout:\n%sstderr:\n%s" % (remote_auth_file, result.exited, result.stdout, result.stderr), log_level = loglevel, remote_name = remote)
 
                 result = endpoints.run_remote(c, "echo '" + image_info["image"] + " " + str(int(time.time())) + " " + args.run_id + "' >> " + settings["dirs"]["remote"]["base"] + "/remotehosts-container-image-census")
                 loglevel = "info"
                 if result.exited != 0:
                     loglevel = "error"
-                thread_logger(thread_name, "Recorded usage for %s in the census with return code %d:\nstdout:\n%sstderr:\n%s" % (image_info["image"], result.exited, result.stdout, result.stderr), log_level = loglevel, remote_name = remote)
+                thread_logger("Recorded usage for %s in the census with return code %d:\nstdout:\n%sstderr:\n%s" % (image_info["image"], result.exited, result.stdout, result.stderr), log_level = loglevel, remote_name = remote)
                 rc += result.exited
 
-        thread_logger(thread_name, "Notifying work queue that job processing is complete", remote_name = remote)
+        thread_logger("Notifying work queue that job processing is complete", remote_name = remote)
         work_queue.task_done()
 
     threads_rcs[thread_id] = rc
-    thread_logger(thread_name, "Stopping image pull thread after processing %d job(s)" % (job_count))
+    thread_logger("Stopping image pull thread after processing %d job(s)" % (job_count))
     return
 
-def thread_logger(thread_id, msg, log_level = "info", remote_name = None, engine_name = None, log_prefix = None):
+def thread_logger(msg, log_level = "info", remote_name = None, engine_name = None, log_prefix = None):
     """
     Logging function with specific metadata the identifies the thread/remote/engine the message should be associated with
 
     Args:
-        thread_id (str): An identifier of which thread is logging the message
         msg (str): The message to log
         log_level (str): Which logging level to use for the message
         remote_name (str): An optional remote identifier to label the message with
@@ -530,7 +529,6 @@ def thread_logger(thread_id, msg, log_level = "info", remote_name = None, engine
     Returns:
         None
     """
-    thread_label = "[Thread %s]" % (thread_id)
     remote_label = ""
     if not remote_name is None:
         remote_label = "[Remote %s]" % (remote_name)
@@ -540,7 +538,7 @@ def thread_logger(thread_id, msg, log_level = "info", remote_name = None, engine
     prefix_label =  ""
     if not log_prefix is None:
         prefix_label = "[%s]" % (log_prefix)
-    msg = "%s%s%s%s %s" % (thread_label, remote_label, engine_label, prefix_label, msg)
+    msg = "%s%s%s %s" % (remote_label, engine_label, prefix_label, msg)
 
     match log_level:
         case "debug":
@@ -571,53 +569,53 @@ def create_thread_pool(description, acronym, work, worker_threads_count, worker_
     Returns:
         rc (int): an aggregated return code value from all the launched worker threads
     """
-    thread_logger("MAIN", "Creating thread pool")
-    thread_logger("MAIN", "Thread pool description: %s" % (description))
-    thread_logger("MAIN", "Thread pool acronym: %s" % (acronym))
-    thread_logger("MAIN", "Thread pool size: %d" % (worker_threads_count))
+    thread_logger("Creating thread pool")
+    thread_logger("Thread pool description: %s" % (description))
+    thread_logger("Thread pool acronym: %s" % (acronym))
+    thread_logger("Thread pool size: %d" % (worker_threads_count))
 
     if not endpoint_defaults["maximum-worker-threads-count"] is None and worker_threads_count > endpoint_defaults["maximum-worker-threads-count"]:
-        thread_logger("MAIN", "Reducing thread pool size to %d in accordance with maximum thread pool size definition" % (endpoint_defaults["maximum-worker-threads-count"]))
+        thread_logger("Reducing thread pool size to %d in accordance with maximum thread pool size definition" % (endpoint_defaults["maximum-worker-threads-count"]))
         worker_threads_count = endpoint_defaults["maximum-worker-threads-count"]
 
     worker_threads = [None] * worker_threads_count
     worker_threads_rcs = [None] * worker_threads_count
 
-    thread_logger("MAIN", "Launching %d %s (%s)" % (worker_threads_count, description, acronym))
+    thread_logger("Launching %d %s (%s)" % (worker_threads_count, description, acronym))
     for thread_id in range(0, worker_threads_count):
         if work.empty():
-            thread_logger("MAIN", "Aborting %s launch because no more work to do" % (acronym))
+            thread_logger("Aborting %s launch because no more work to do" % (acronym))
             break
         thread_name = "%s-%d" % (acronym, thread_id)
-        thread_logger("MAIN", "Creating and starting thread %s" % (thread_name))
+        thread_logger("Creating and starting thread %s" % (thread_name))
         try:
             worker_threads[thread_id] = threading.Thread(target = worker_thread_function, args = (thread_id, work, worker_threads_rcs), name = thread_name)
             worker_threads[thread_id].start()
         except RuntimeError as e:
-            thread_logger("MAIN", "Failed to create and start thread %s due to exception '%s'" % (thread_name, str(e)), log_level = "error")
+            thread_logger("Failed to create and start thread %s due to exception '%s'" % (thread_name, str(e)), log_level = "error")
 
-    thread_logger("MAIN", "Waiting for all %s work jobs to be consumed" % (acronym))
+    thread_logger("Waiting for all %s work jobs to be consumed" % (acronym))
     work.join()
-    thread_logger("MAIN", "All %s work jobs have been consumed" % (acronym))
+    thread_logger("All %s work jobs have been consumed" % (acronym))
 
-    thread_logger("MAIN", "Joining %s" % (acronym))
+    thread_logger("Joining %s" % (acronym))
     for thread_id in range(0, worker_threads_count):
         thread_name = "%s-%d" % (acronym, thread_id)
         if not worker_threads[thread_id] is None:
             if not worker_threads[thread_id].native_id is None:
                 worker_threads[thread_id].join()
-                thread_logger("MAIN", "Joined thread %s" % (thread_name))
+                thread_logger("Joined thread %s" % (thread_name))
             else:
-                thread_logger("MAIN", "Skipping join of thread %s because it was not started" % (thread_name), log_level = "warning")
+                thread_logger("Skipping join of thread %s because it was not started" % (thread_name), log_level = "warning")
         else:
-            thread_logger("MAIN", "Skipping join of thread %s because it does not exist" % (thread_name), log_level = "warning")
+            thread_logger("Skipping join of thread %s because it does not exist" % (thread_name), log_level = "warning")
 
-    thread_logger("MAIN", "Return codes for each %s:\n%s" % (acronym, endpoints.dump_json(worker_threads_rcs)))
+    thread_logger("Return codes for each %s:\n%s" % (acronym, endpoints.dump_json(worker_threads_rcs)))
 
     rc = 0
     for thread_rc in worker_threads_rcs:
         rc += thread_rc
-    thread_logger("MAIN", "Aggregate return code for %s: %d" % (acronym, rc))
+    thread_logger("Aggregate return code for %s: %d" % (acronym, rc))
 
     return rc
 
@@ -706,7 +704,7 @@ def remote_mkdirs_worker_thread(thread_id, work_queue, threads_rcs):
     """
     thread = threading.current_thread()
     thread_name = thread.name
-    thread_logger(thread_name, "Starting remote mkdirs thread with thread ID %d and name = '%s'" % (thread_id, thread_name))
+    thread_logger("Starting remote mkdirs thread with thread ID %d and name = '%s'" % (thread_id, thread_name))
     rc = 0
     job_count = 0
 
@@ -715,15 +713,15 @@ def remote_mkdirs_worker_thread(thread_id, work_queue, threads_rcs):
         try:
             remote = work_queue.get(block = False)
         except queue.Empty:
-            thread_logger(thread_name, "Received a work queue empty exception")
+            thread_logger("Received a work queue empty exception")
             break
 
         if remote is None:
-            thread_logger(thread_name, "Received a null job", log_level = "warning")
+            thread_logger("Received a null job", log_level = "warning")
             continue
 
         job_count += 1
-        thread_logger(thread_name, "Retrieved remote %s" % (remote))
+        thread_logger("Retrieved remote %s" % (remote))
 
         my_unique_remote = settings["engines"]["remotes"][remote]
         my_run_file_remote = settings["run-file"]["endpoints"][args.endpoint_index]["remotes"][my_unique_remote["run-file-idx"][0]]
@@ -731,14 +729,14 @@ def remote_mkdirs_worker_thread(thread_id, work_queue, threads_rcs):
         with endpoints.remote_connection(remote, my_run_file_remote["config"]["settings"]["remote-user"]) as con:
             for remote_dir in settings["dirs"]["remote"].keys():
                 result = endpoints.run_remote(con, "mkdir --parents --verbose " + settings["dirs"]["remote"][remote_dir])
-                thread_logger(thread_name, "Remote attempted to mkdir %s with return code %d:\nstdout:\n%sstderr:\n%s" % (settings["dirs"]["remote"][remote_dir], result.exited, result.stdout, result.stderr), log_level = endpoints.get_result_log_level(result), remote_name = remote)
+                thread_logger("Remote attempted to mkdir %s with return code %d:\nstdout:\n%sstderr:\n%s" % (settings["dirs"]["remote"][remote_dir], result.exited, result.stdout, result.stderr), log_level = endpoints.get_result_log_level(result), remote_name = remote)
                 rc += result.exited
 
-        thread_logger(thread_name, "Notifying work queue that job processing is complete", remote_name = remote)
+        thread_logger("Notifying work queue that job processing is complete", remote_name = remote)
         work_queue.task_done()
 
     threads_rcs[thread_id] = rc
-    thread_logger(thread_name, "Stopping remote mkdirs thread after processing %d job(s)" % (job_count))
+    thread_logger("Stopping remote mkdirs thread after processing %d job(s)" % (job_count))
     return
 
 def create_remote_dirs():
@@ -820,10 +818,10 @@ def create_podman(thread_name, remote_name, engine_name, container_name, connect
     Returns:
         None
     """
-    thread_logger(thread_name, "Running create podman", remote_name = remote_name, engine_name = engine_name)
+    thread_logger("Running create podman", remote_name = remote_name, engine_name = engine_name)
 
     local_env_file_name = settings["dirs"]["local"]["endpoint"] + "/" + engine_name + "_env.txt"
-    thread_logger(thread_name, "Creating env file %s" % (local_env_file_name), remote_name = remote_name, engine_name = engine_name)
+    thread_logger("Creating env file %s" % (local_env_file_name), remote_name = remote_name, engine_name = engine_name)
     with open(local_env_file_name, "w", encoding = "ascii") as env_file:
         env_file.write("base_run_dir=" + settings["dirs"]["local"]["base"] + "\n")
         env_file.write("cs_label=" + engine_name + "\n")
@@ -833,7 +831,7 @@ def create_podman(thread_name, remote_name, engine_name, container_name, connect
                 cpu_partition_idx = settings["engines"]["remotes"][remote]["cpu-partitions-idx"]
                 settings["engines"]["remotes"][remote]["cpu-partitions-idx"] += 1
 
-            thread_logger(thread_name, "Allocated cpu-partition index %d" % (cpu_partition_idx), remote_name = remote_name, engine_name = engine_name)
+            thread_logger("Allocated cpu-partition index %d" % (cpu_partition_idx), remote_name = remote_name, engine_name = engine_name)
             env_file.write("cpu_partition_index=" + str(cpu_partition_idx) + "\n")
             env_file.write("cpu_partitions=" + str(settings["engines"]["remotes"][remote]["total-cpu-partitions"]) + "\n")
         if role != "profiler":
@@ -852,7 +850,7 @@ def create_podman(thread_name, remote_name, engine_name, container_name, connect
 
     remote_env_file_name = settings["dirs"]["remote"]["cfg"] + "/" + engine_name + "_env.txt"
     result = connection.put(local_env_file_name, remote_env_file_name)
-    thread_logger(thread_name, "Copied %s to %s:%s" % (local_env_file_name, remote, remote_env_file_name), remote_name = remote_name, engine_name = engine_name)
+    thread_logger("Copied %s to %s:%s" % (local_env_file_name, remote, remote_env_file_name), remote_name = remote_name, engine_name = engine_name)
 
     mandatory_mounts = [
         {
@@ -905,10 +903,10 @@ def create_podman(thread_name, remote_name, engine_name, container_name, connect
 
     create_cmd.append(image)
 
-    thread_logger(thread_name, "Podman create command is:\n%s" % (endpoints.dump_json(create_cmd)), remote_name = remote_name, engine_name = engine_name)
+    thread_logger("Podman create command is:\n%s" % (endpoints.dump_json(create_cmd)), remote_name = remote_name, engine_name = engine_name)
 
     result = endpoints.run_remote(connection, " ".join(create_cmd))
-    thread_logger(thread_name, "Creating container with name '%s' resulted in return code %d:\nstdout:\n%sstderr:\n%s" % (container_name, result.exited, result.stdout, result.stderr), log_level = endpoints.get_result_log_level(result), remote_name = remote_name, engine_name = engine_name)
+    thread_logger("Creating container with name '%s' resulted in return code %d:\nstdout:\n%sstderr:\n%s" % (container_name, result.exited, result.stdout, result.stderr), log_level = endpoints.get_result_log_level(result), remote_name = remote_name, engine_name = engine_name)
 
     return
 
@@ -931,7 +929,7 @@ def create_chroot(thread_name, remote_name, engine_name, container_name, connect
     Returns:
         create_info (dict): A collection of information about the chroot that is needed to properly destroy it later
     """
-    thread_logger(thread_name, "Running create chroot", remote_name = remote_name, engine_name = engine_name)
+    thread_logger("Running create chroot", remote_name = remote_name, engine_name = engine_name)
 
     create_info = {
         "id": None,
@@ -948,10 +946,10 @@ def create_chroot(thread_name, remote_name, engine_name, container_name, connect
                    "--name=" + container_name,
                    image ]
 
-    thread_logger(thread_name, "Podman create command is:\n%s" % (endpoints.dump_json(create_cmd)), remote_name = remote_name, engine_name = engine_name)
+    thread_logger("Podman create command is:\n%s" % (endpoints.dump_json(create_cmd)), remote_name = remote_name, engine_name = engine_name)
 
     result = endpoints.run_remote(connection, " ".join(create_cmd))
-    thread_logger(thread_name, "Creating container with name '%s' resulted in return code %d:\nstdout:\n%sstderr:\n%s" % (container_name, result.exited, result.stdout, result.stderr), log_level = endpoints.get_result_log_level(result), remote_name = remote_name, engine_name = engine_name)
+    thread_logger("Creating container with name '%s' resulted in return code %d:\nstdout:\n%sstderr:\n%s" % (container_name, result.exited, result.stdout, result.stderr), log_level = endpoints.get_result_log_level(result), remote_name = remote_name, engine_name = engine_name)
     if result.exited == 0:
         create_info["id"] = result.stdout.rstrip('\n')
     else:
@@ -962,13 +960,13 @@ def create_chroot(thread_name, remote_name, engine_name, container_name, connect
                   container_name ]
 
     result = endpoints.run_remote(connection, " ".join(mount_cmd))
-    thread_logger(thread_name, "Mounting container with name '%s' resulted in return code %d:\nstdout:\n%sstderr:\n%s" % (container_name, result.exited, result.stdout, result.stderr), log_level = endpoints.get_result_log_level(result), remote_name = remote_name, engine_name = engine_name)
+    thread_logger("Mounting container with name '%s' resulted in return code %d:\nstdout:\n%sstderr:\n%s" % (container_name, result.exited, result.stdout, result.stderr), log_level = endpoints.get_result_log_level(result), remote_name = remote_name, engine_name = engine_name)
     if result.exited == 0:
         create_info["mount"] = result.stdout.rstrip('\n')
     else:
         return create_info
 
-    thread_logger(thread_name, "Container mount is '%s'" % (create_info["mount"]), remote_name = remote_name, engine_name = engine_name)
+    thread_logger("Container mount is '%s'" % (create_info["mount"]), remote_name = remote_name, engine_name = engine_name)
 
     mandatory_mounts = [
         {
@@ -1019,37 +1017,37 @@ def create_chroot(thread_name, remote_name, engine_name, container_name, connect
 
         mount["dest"] = create_info["mount"] + mount["dest"]
 
-        thread_logger(thread_name, "Procesing mount:\n%s" % (endpoints.dump_json(mount)), remote_name = remote_name, engine_name = engine_name)
+        thread_logger("Procesing mount:\n%s" % (endpoints.dump_json(mount)), remote_name = remote_name, engine_name = engine_name)
 
         result = endpoints.run_remote(connection, "mkdir --parents --verbose " + mount["dest"])
-        thread_logger(thread_name, "Creating '%s' resulted in return code %d:\nstdout:\n%sstderr:\n%s" % (mount["dest"], result.exited, result.stdout, result.stderr), log_level = endpoints.get_result_log_level(result), remote_name = remote_name, engine_name = engine_name)
+        thread_logger("Creating '%s' resulted in return code %d:\nstdout:\n%sstderr:\n%s" % (mount["dest"], result.exited, result.stdout, result.stderr), log_level = endpoints.get_result_log_level(result), remote_name = remote_name, engine_name = engine_name)
 
         if mount["rbind"]:
             result = endpoints.run_remote(connection, "mount --verbose --options rbind " + mount["src"] + " " + mount["dest"])
-            thread_logger(thread_name, "rbind mounting '%s' to '%s' resulted in return code %d:\nstdout:\n%sstderr:\n%s" % (mount["src"], mount["dest"], result.exited, result.stdout, result.stderr), log_level = endpoints.get_result_log_level(result), remote_name = remote_name, engine_name = engine_name)
+            thread_logger("rbind mounting '%s' to '%s' resulted in return code %d:\nstdout:\n%sstderr:\n%s" % (mount["src"], mount["dest"], result.exited, result.stdout, result.stderr), log_level = endpoints.get_result_log_level(result), remote_name = remote_name, engine_name = engine_name)
 
             result = endpoints.run_remote(connection, "mount --verbose --make-rslave " + mount["dest"])
-            thread_logger(thread_name, "making rslave '%s' resulted in return code %d:\nstdout:\n%sstderr:\n%s" % (mount["dest"], result.exited, result.stdout, result.stderr), log_level = endpoints.get_result_log_level(result), remote_name = remote_name, engine_name = engine_name)
+            thread_logger("making rslave '%s' resulted in return code %d:\nstdout:\n%sstderr:\n%s" % (mount["dest"], result.exited, result.stdout, result.stderr), log_level = endpoints.get_result_log_level(result), remote_name = remote_name, engine_name = engine_name)
 
             create_info["mounts"]["rbind"].append(mount["dest"])
         else:
             result = endpoints.run_remote(connection, "mount --verbose --options bind " + mount["src"] + " " + mount["dest"])
-            thread_logger(thread_name, "bind mounting '%s' to '%s' resulted in return code %d:\nstdout:\n%sstderr:\n%s" % (mount["src"], mount["dest"], result.exited, result.stdout, result.stderr), log_level = endpoints.get_result_log_level(result), remote_name = remote_name, engine_name = engine_name)
+            thread_logger("bind mounting '%s' to '%s' resulted in return code %d:\nstdout:\n%sstderr:\n%s" % (mount["src"], mount["dest"], result.exited, result.stdout, result.stderr), log_level = endpoints.get_result_log_level(result), remote_name = remote_name, engine_name = engine_name)
 
             create_info["mounts"]["regular"].append(mount["dest"])
 
     local_ssh_private_key_file = settings["dirs"]["local"]["conf"] + "/rickshaw_id.rsa"
     remote_ssh_private_key_file = create_info["mount"] + "/tmp/" + "rickshaw_id.rsa"
     result = connection.put(local_ssh_private_key_file, remote_ssh_private_key_file)
-    thread_logger(thread_name, "Copied %s to %s:%s" % (local_ssh_private_key_file, connection.host, remote_ssh_private_key_file), remote_name = remote_name, engine_name = engine_name)
+    thread_logger("Copied %s to %s:%s" % (local_ssh_private_key_file, connection.host, remote_ssh_private_key_file), remote_name = remote_name, engine_name = engine_name)
 
     for etc_file in [ "hosts", "resolv.conf" ]:
         src_etc_file = "/etc/" + etc_file
         dst_etc_dir = create_info["mount"] + "/etc"
         result = endpoints.run_remote(connection, "cp --verbose " + src_etc_file + " " + dst_etc_dir)
-        thread_logger(thread_name, "Remotely copied %s to %s" % (src_etc_file, dst_etc_dir), log_level = endpoints.get_result_log_level(result), remote_name = remote_name, engine_name = engine_name)
+        thread_logger("Remotely copied %s to %s" % (src_etc_file, dst_etc_dir), log_level = endpoints.get_result_log_level(result), remote_name = remote_name, engine_name = engine_name)
 
-    thread_logger(thread_name, "chroot create info:\n%s" % (endpoints.dump_json(create_info)), remote_name = remote_name, engine_name = engine_name)
+    thread_logger("chroot create info:\n%s" % (endpoints.dump_json(create_info)), remote_name = remote_name, engine_name = engine_name)
 
     return create_info
 
@@ -1070,7 +1068,7 @@ def start_podman(thread_name, remote_name, engine_name, container_name, connecti
     Returns:
         None
     """
-    thread_logger(thread_name, "Running start podman", remote_name = remote_name, engine_name = engine_name)
+    thread_logger("Running start podman", remote_name = remote_name, engine_name = engine_name)
 
     start_cmd = [
         "podman",
@@ -1079,7 +1077,7 @@ def start_podman(thread_name, remote_name, engine_name, container_name, connecti
     ]
 
     result = endpoints.run_remote(connection, " ".join(start_cmd))
-    thread_logger(thread_name, "Starting container with name '%s' resulted in return code %d:\nstdout:\n%sstderr:\n%s" % (container_name, result.exited, result.stdout, result.stderr), log_level = endpoints.get_result_log_level(result), remote_name = remote_name, engine_name = engine_name)
+    thread_logger("Starting container with name '%s' resulted in return code %d:\nstdout:\n%sstderr:\n%s" % (container_name, result.exited, result.stdout, result.stderr), log_level = endpoints.get_result_log_level(result), remote_name = remote_name, engine_name = engine_name)
 
     return
 
@@ -1106,7 +1104,7 @@ def start_chroot(thread_name, remote_name, engine_name, container_name, connecti
     Returns:
         None
     """
-    thread_logger(thread_name, "Running start chroot", remote_name = remote_name, engine_name = engine_name)
+    thread_logger("Running start chroot", remote_name = remote_name, engine_name = engine_name)
 
     start_cmd = [
         "nohup",
@@ -1141,7 +1139,7 @@ def start_chroot(thread_name, remote_name, engine_name, container_name, connecti
             cpu_partition_idx = settings["engines"]["remotes"][remote]["cpu-partitions-idx"]
             settings["engines"]["remotes"][remote]["cpu-partitions-idx"] += 1
 
-        thread_logger(thread_name, "Allocated cpu-partition index %d" % (cpu_partition_idx), remote_name = remote_name, engine_name = engine_name)
+        thread_logger("Allocated cpu-partition index %d" % (cpu_partition_idx), remote_name = remote_name, engine_name = engine_name)
         start_cmd.extend([
             "--cpu-partition-index=" + str(cpu_partition_idx),
             "--cpu-partitions=" + str(settings["engines"]["remotes"][remote]["total-cpu-partitions"])
@@ -1152,10 +1150,10 @@ def start_chroot(thread_name, remote_name, engine_name, container_name, connecti
         "&"
     ])
 
-    thread_logger(thread_name, "chroot start command is:\n%s" % (endpoints.dump_json(start_cmd)), remote_name = remote_name, engine_name = engine_name)
+    thread_logger("chroot start command is:\n%s" % (endpoints.dump_json(start_cmd)), remote_name = remote_name, engine_name = engine_name)
 
     result = endpoints.run_remote(connection, " ".join(start_cmd))
-    thread_logger(thread_name, "Starting chroot with name '%s' resulted in return code %d:\nstdout:\n%sstderr:\n%s" % (container_name, result.exited, result.stdout, result.stderr), log_level = endpoints.get_result_log_level(result), remote_name = remote_name, engine_name = engine_name)
+    thread_logger("Starting chroot with name '%s' resulted in return code %d:\nstdout:\n%sstderr:\n%s" % (container_name, result.exited, result.stdout, result.stderr), log_level = endpoints.get_result_log_level(result), remote_name = remote_name, engine_name = engine_name)
 
     return
 
@@ -1177,7 +1175,7 @@ def launch_engines_worker_thread(thread_id, work_queue, threads_rcs):
     """
     thread = threading.current_thread()
     thread_name = thread.name
-    thread_logger(thread_name, "Starting launch engines thread with thread ID %d and name = '%s'" % (thread_id, thread_name))
+    thread_logger("Starting launch engines thread with thread ID %d and name = '%s'" % (thread_id, thread_name))
     rc = 0
     job_count = 0
 
@@ -1186,11 +1184,11 @@ def launch_engines_worker_thread(thread_id, work_queue, threads_rcs):
         try:
             remote_idx = work_queue.get(block = False)
         except queue.Empty:
-            thread_logger(thread_name, "Received a work queue empty exception")
+            thread_logger("Received a work queue empty exception")
             break
 
         if remote_idx is None:
-            thread_logger(thread_name, "Received a null job", log_level = "warning")
+            thread_logger("Received a null job", log_level = "warning")
             continue
 
         job_count += 1
@@ -1198,16 +1196,16 @@ def launch_engines_worker_thread(thread_id, work_queue, threads_rcs):
         remote = settings["run-file"]["endpoints"][args.endpoint_index]["remotes"][remote_idx]
         remote_name = "%s-%s" % (remote["config"]["host"], remote_idx)
 
-        thread_logger(thread_name, "Processing remote '%s' at index %d" % (remote["config"]["host"], remote_idx), remote_name = remote_name)
-        thread_logger(thread_name, "Remote user is %s" % (remote["config"]["settings"]["remote-user"]), remote_name = remote_name)
+        thread_logger("Processing remote '%s' at index %d" % (remote["config"]["host"], remote_idx), remote_name = remote_name)
+        thread_logger("Remote user is %s" % (remote["config"]["settings"]["remote-user"]), remote_name = remote_name)
 
         with endpoints.remote_connection(remote["config"]["host"], remote["config"]["settings"]["remote-user"]) as con:
             for engine in remote["engines"]:
                 for engine_id in engine["ids"]:
                     engine_name = "%s-%s" % (engine["role"], str(engine_id))
                     container_name = "%s_%s" % (args.run_id, engine_name)
-                    thread_logger(thread_name, "Creating engine '%s'" % (engine_name), remote_name = remote_name, engine_name = engine_name)
-                    thread_logger(thread_name, "Container name will be '%s'" % (container_name), remote_name = remote_name, engine_name = engine_name)
+                    thread_logger("Creating engine '%s'" % (engine_name), remote_name = remote_name, engine_name = engine_name)
+                    thread_logger("Container name will be '%s'" % (container_name), remote_name = remote_name, engine_name = engine_name)
 
                     if engine["role"] == "profiler":
                         userenv = endpoints.get_profiler_userenv(settings, engine_id)
@@ -1216,33 +1214,33 @@ def launch_engines_worker_thread(thread_id, work_queue, threads_rcs):
 
                     image = endpoints.get_engine_id_image(settings, engine["role"], engine_id, userenv)
                     if image is None:
-                        thread_logger(thread_name, "Could not determine image", log_level = "error", remote_name = remote_name, engine_name = engine_name)
+                        thread_logger("Could not determine image", log_level = "error", remote_name = remote_name, engine_name = engine_name)
                         continue
                     else:
                         image_split = image.split("::")
                         image = image_split[0]
-                        thread_logger(thread_name, "Image is '%s'" % (image), remote_name = remote_name, engine_name = engine_name)
+                        thread_logger("Image is '%s'" % (image), remote_name = remote_name, engine_name = engine_name)
 
                     osruntime = None
                     if engine["role"] == "profiler":
                         osruntime = "podman"
                     else:
                         osruntime = remote["config"]["settings"]["osruntime"]
-                    thread_logger(thread_name, "osruntime is '%s'" % (osruntime), remote_name = remote_name, engine_name = engine_name)
+                    thread_logger("osruntime is '%s'" % (osruntime), remote_name = remote_name, engine_name = engine_name)
 
-                    thread_logger(thread_name, "host-mounts is %s" % (remote["config"]["settings"]["host-mounts"]), remote_name = remote_name, engine_name = engine_name)
+                    thread_logger("host-mounts is %s" % (remote["config"]["settings"]["host-mounts"]), remote_name = remote_name, engine_name = engine_name)
 
                     result = endpoints.run_remote(con, "podman ps --all --filter 'name=" + container_name + "' --format '{{.Names}}'")
-                    thread_logger(thread_name, "Check for existing container with name '%s' resulted in return code %d:\nstdout:\n%sstderr:\n%s" % (container_name, result.exited, result.stdout, result.stderr), remote_name = remote_name, engine_name = engine_name)
+                    thread_logger("Check for existing container with name '%s' resulted in return code %d:\nstdout:\n%sstderr:\n%s" % (container_name, result.exited, result.stdout, result.stderr), remote_name = remote_name, engine_name = engine_name)
                     if result.exited != 0:
-                        thread_logger(thread_name, "Check for existing container exited with non-zero return code %d" % (result.exited), log_level = "error", remote_name = remote_name, engine_name = engine_name)
+                        thread_logger("Check for existing container exited with non-zero return code %d" % (result.exited), log_level = "error", remote_name = remote_name, engine_name = engine_name)
                     if result.stdout.rstrip('\n') == container_name:
-                        thread_logger(thread_name, "Found existing container '%s'" % (container_name), log_level = "warning", remote_name = remote_name, engine_name = engine_name)
+                        thread_logger("Found existing container '%s'" % (container_name), log_level = "warning", remote_name = remote_name, engine_name = engine_name)
 
                         result = endpoints.run_remote(con, "podman rm --force " + container_name)
-                        thread_logger(thread_name, "Forced removal of existing container with name '%s' resulted in return code %d:\nstdout:\n%sstderr:\n%s" % (container_name, result.exited, result.stdout, result.stderr), remote_name = remote_name, engine_name = engine_name)
+                        thread_logger("Forced removal of existing container with name '%s' resulted in return code %d:\nstdout:\n%sstderr:\n%s" % (container_name, result.exited, result.stdout, result.stderr), remote_name = remote_name, engine_name = engine_name)
                         if result.exited != 0:
-                            thread_logger(thread_name, "Forced removal of existing container exited with non-zero return code %d" % (result.exited), log_level = 'error', remote_name = remote_name, engine_name = engine_name)
+                            thread_logger("Forced removal of existing container exited with non-zero return code %d" % (result.exited), log_level = 'error', remote_name = remote_name, engine_name = engine_name)
 
                     match osruntime:
                         case "podman":
@@ -1256,12 +1254,12 @@ def launch_engines_worker_thread(thread_id, work_queue, threads_rcs):
                                     cpu_partitioning = 1
                                 else:
                                     cpu_partitioning = 0
-                            thread_logger(thread_name, "cpu-partitioning is '%s'" % (str(cpu_partitioning)), remote_name = remote_name, engine_name = engine_name)
+                            thread_logger("cpu-partitioning is '%s'" % (str(cpu_partitioning)), remote_name = remote_name, engine_name = engine_name)
 
                             numa_node = None
                             if not remote["config"]["settings"]["numa-node"] is None:
                                 numa_node = remote["config"]["settings"]["numa-node"]
-                            thread_logger(thread_name, "numa-node is '%s'" % (str(numa_node)), remote_name = remote_name, engine_name = engine_name)
+                            thread_logger("numa-node is '%s'" % (str(numa_node)), remote_name = remote_name, engine_name = engine_name)
 
                             create_podman(thread_name, remote_name, engine_name, container_name, con, remote["config"]["host"], remote["config"]["settings"]["controller-ip-address"], engine["role"], image, cpu_partitioning, numa_node, remote["config"]["settings"]["host-mounts"], podman_settings)
                         case "chroot":
@@ -1274,14 +1272,14 @@ def launch_engines_worker_thread(thread_id, work_queue, threads_rcs):
                 for engine_id in engine["ids"]:
                     engine_name = "%s-%s" % (engine["role"], str(engine_id))
                     container_name = "%s_%s" % (args.run_id, engine_name)
-                    thread_logger(thread_name, "Starting engine '%s'" % (engine_name), remote_name = remote_name, engine_name = engine_name)
+                    thread_logger("Starting engine '%s'" % (engine_name), remote_name = remote_name, engine_name = engine_name)
 
                     osruntime = None
                     if engine["role"] == "profiler":
                         osruntime = "podman"
                     else:
                         osruntime = remote["config"]["settings"]["osruntime"]
-                    thread_logger(thread_name, "osruntime is '%s'" % (osruntime), remote_name = remote_name, engine_name = engine_name)
+                    thread_logger("osruntime is '%s'" % (osruntime), remote_name = remote_name, engine_name = engine_name)
 
                     match osruntime:
                         case "podman":
@@ -1295,20 +1293,20 @@ def launch_engines_worker_thread(thread_id, work_queue, threads_rcs):
                                     cpu_partitioning = 1
                                 else:
                                     cpu_partitioning = 0
-                            thread_logger(thread_name, "cpu-partitioning is '%s'" % (str(cpu_partitioning)), remote_name = remote_name, engine_name = engine_name)
+                            thread_logger("cpu-partitioning is '%s'" % (str(cpu_partitioning)), remote_name = remote_name, engine_name = engine_name)
 
                             numa_node = None
                             if not remote["config"]["settings"]["numa-node"] is None:
                                 numa_node = remote["config"]["settings"]["numa-node"]
-                            thread_logger(thread_name, "numa-node is '%s'" % (str(numa_node)), remote_name = remote_name, engine_name = engine_name)
+                            thread_logger("numa-node is '%s'" % (str(numa_node)), remote_name = remote_name, engine_name = engine_name)
 
                             start_chroot(thread_name, remote_name, engine_name, container_name, con, remote["config"]["host"], remote["config"]["settings"]["controller-ip-address"], cpu_partitioning, numa_node, remote["chroots"][engine_name]["mount"])
 
-        thread_logger(thread_name, "Notifying work queue that job processing is complete", remote_name = remote_name)
+        thread_logger("Notifying work queue that job processing is complete", remote_name = remote_name)
         work_queue.task_done()
 
     threads_rcs[thread_id] = rc
-    thread_logger(thread_name, "Stopping launch engines thread after processing %d job(s)" % (job_count))
+    thread_logger("Stopping launch engines thread after processing %d job(s)" % (job_count))
     return
 
 def launch_engines():
@@ -1504,7 +1502,7 @@ def collect_podman_log(thread_name, remote_name, engine_name, container_name, co
         or
         False: On failure
     """
-    thread_logger(thread_name, "Collecting podman log", remote_name = remote_name, engine_name = engine_name)
+    thread_logger("Collecting podman log", remote_name = remote_name, engine_name = engine_name)
 
     cmd_retries = 5
     cmd_attempt = 1
@@ -1513,7 +1511,7 @@ def collect_podman_log(thread_name, remote_name, engine_name, container_name, co
     while cmd_rc != 0 and cmd_attempt <= cmd_retries:
         result = endpoints.run_remote(connection, "podman logs --timestamps " + container_name + " | xz -c | base64")
         if result.exited != 0:
-            thread_logger(thread_name, "Collecting podman log for %s failed with return code %d on attempt %d of %d:\nstdout:\n%sstderr:\n%s" %
+            thread_logger("Collecting podman log for %s failed with return code %d on attempt %d of %d:\nstdout:\n%sstderr:\n%s" %
                         (
                             engine_name,
                             result.exited,
@@ -1526,7 +1524,7 @@ def collect_podman_log(thread_name, remote_name, engine_name, container_name, co
             log_file = settings["dirs"]["local"]["engine-logs"] + "/" + engine_name + ".txt.xz"
             with open(log_file, "wb") as log_file_fp:
                 log_file_fp.write(base64.b64decode(result.stdout))
-            thread_logger(thread_name, "Wrote podman log to %s" % (log_file), remote_name = remote_name, engine_name = engine_name)
+            thread_logger("Wrote podman log to %s" % (log_file), remote_name = remote_name, engine_name = engine_name)
         cmd_rc = result.exited
         cmd_attempt += 1
 
@@ -1555,12 +1553,12 @@ def collect_chroot_log(thread_name, remote_name, engine_name, container_name, co
         or
         False: On failure
     """
-    thread_logger(thread_name, "Collecting chroot log", remote_name = remote_name, engine_name = engine_name)
+    thread_logger("Collecting chroot log", remote_name = remote_name, engine_name = engine_name)
 
     remote_log_file = settings["dirs"]["remote"]["logs"] + "/" + engine_name + ".txt"
     result = endpoints.run_remote(connection, "cat " + remote_log_file + " | xz -c | base64")
     if result.exited != 0:
-        thread_logger(thread_name, "Collecting chroot log for %s failed with return code %d:\nstdout:\n%sstderr:\n%s" %
+        thread_logger("Collecting chroot log for %s failed with return code %d:\nstdout:\n%sstderr:\n%s" %
                       (
                           engine_name,
                           result.exited,
@@ -1572,10 +1570,10 @@ def collect_chroot_log(thread_name, remote_name, engine_name, container_name, co
         log_file = settings["dirs"]["local"]["engine-logs"] + "/" + engine_name + ".txt.xz"
         with open(log_file, "wb") as log_file_fp:
             log_file_fp.write(base64.b64decode(result.stdout))
-        thread_logger(thread_name, "Wrote chroot log to %s" % (log_file), remote_name = remote_name, engine_name = engine_name)
+        thread_logger("Wrote chroot log to %s" % (log_file), remote_name = remote_name, engine_name = engine_name)
 
         result = endpoints.run_remote(connection, "rm --verbose " + remote_log_file)
-        thread_logger(thread_name, "Removal of engine log for '%s' gave return code %d:\nstdout:\n%stderr:\n%s" %
+        thread_logger("Removal of engine log for '%s' gave return code %d:\nstdout:\n%stderr:\n%s" %
                       (
                           engine_name,
                           result.exited,
@@ -1602,7 +1600,7 @@ def remove_rickshaw_settings(connection, thread_name, remote_name, engine_name):
     """
     remote_rickshaw_settings = settings["dirs"]["remote"]["data"] + "/rickshaw-settings.json.xz"
     result = endpoints.run_remote(connection, "if [ -e \"" + remote_rickshaw_settings + "\" ]; then rm --verbose \"" + remote_rickshaw_settings + "\"; else echo \"rickshaw settings already removed\"; fi")
-    thread_logger(thread_name, "Removal of rickshaw settings '%s' resulted in return code %d:\nstdout:\n%sstderr:\n%s" % (remote_rickshaw_settings, result.exited, result.stdout, result.stderr), log_level = endpoints.get_result_log_level(result), remote_name = remote_name, engine_name = engine_name)
+    thread_logger("Removal of rickshaw settings '%s' resulted in return code %d:\nstdout:\n%sstderr:\n%s" % (remote_rickshaw_settings, result.exited, result.stdout, result.stderr), log_level = endpoints.get_result_log_level(result), remote_name = remote_name, engine_name = engine_name)
 
     return
 
@@ -1624,7 +1622,7 @@ def remove_ssh_private_key(connection, thread_name, remote_name, engine_name):
     """
     remote_ssh_private_key = settings["dirs"]["remote"]["data"] + "/rickshaw_id.rsa"
     result = endpoints.run_remote(connection, "if [ -e \"" + remote_ssh_private_key + "\" ]; then rm --verbose \"" + remote_ssh_private_key + "\"; else echo \"ssh private key already removed\"; fi")
-    thread_logger(thread_name, "Removal of ssh private key '%s' resulted in return code %d:\nstdout:\n%sstderr:\n%s" % (remote_ssh_private_key, result.exited, result.stdout, result.stderr), log_level = endpoints.get_result_log_level(result), remote_name = remote_name, engine_name = engine_name)
+    thread_logger("Removal of ssh private key '%s' resulted in return code %d:\nstdout:\n%sstderr:\n%s" % (remote_ssh_private_key, result.exited, result.stdout, result.stderr), log_level = endpoints.get_result_log_level(result), remote_name = remote_name, engine_name = engine_name)
 
     return
 
@@ -1645,14 +1643,14 @@ def destroy_podman(thread_name, remote_name, engine_name, container_name, connec
     Returns:
         None
     """
-    thread_logger(thread_name, "Destroying podman", remote_name = remote_name, engine_name = engine_name)
+    thread_logger("Destroying podman", remote_name = remote_name, engine_name = engine_name)
 
     result = endpoints.run_remote(connection, "podman rm --force " + container_name)
-    thread_logger(thread_name, "Removal of pod '%s' resulted in return code %d:\nstdout:\n%sstderr:\n%s" % (engine_name, result.exited, result.stdout, result.stderr), log_level = endpoints.get_result_log_level(result), remote_name = remote_name, engine_name = engine_name)
+    thread_logger("Removal of pod '%s' resulted in return code %d:\nstdout:\n%sstderr:\n%s" % (engine_name, result.exited, result.stdout, result.stderr), log_level = endpoints.get_result_log_level(result), remote_name = remote_name, engine_name = engine_name)
 
     remote_env_file = settings["dirs"]["remote"]["cfg"] + "/" + engine_name + "_env.txt"
     result = endpoints.run_remote(connection, "rm --verbose " + remote_env_file)
-    thread_logger(thread_name, "Removal of env file  '%s' resulted in return code %d:\nstdout:\n%sstderr:\n%s" % (remote_env_file, result.exited, result.stdout, result.stderr), log_level = endpoints.get_result_log_level(result), remote_name = remote_name, engine_name = engine_name)
+    thread_logger("Removal of env file  '%s' resulted in return code %d:\nstdout:\n%sstderr:\n%s" % (remote_env_file, result.exited, result.stdout, result.stderr), log_level = endpoints.get_result_log_level(result), remote_name = remote_name, engine_name = engine_name)
 
     remove_ssh_private_key(connection, thread_name, remote_name, engine_name)
 
@@ -1678,18 +1676,18 @@ def destroy_chroot(thread_name, remote_name, engine_name, container_name, connec
     Returns:
         None
     """
-    thread_logger(thread_name, "Destroying chroot", remote_name = remote_name, engine_name = engine_name)
+    thread_logger("Destroying chroot", remote_name = remote_name, engine_name = engine_name)
 
     for mount in chroot_info["mounts"]["regular"]:
         result = endpoints.run_remote(connection, "umount --verbose " + mount)
-        thread_logger(thread_name, "regular unmounting of '%s' resulted in record code %d:\nstdout:\n%sstderr:\n%s" % (mount, result.exited, result.stdout, result.stderr), log_level = endpoints.get_result_log_level(result), remote_name = remote_name, engine_name = engine_name)
+        thread_logger("regular unmounting of '%s' resulted in record code %d:\nstdout:\n%sstderr:\n%s" % (mount, result.exited, result.stdout, result.stderr), log_level = endpoints.get_result_log_level(result), remote_name = remote_name, engine_name = engine_name)
 
     for mount in chroot_info["mounts"]["rbind"]:
         result = endpoints.run_remote(connection, "umount --verbose --recursive " + mount)
-        thread_logger(thread_name, "recursive unmounting of '%s' resulted in record code %d:\nstdout:\n%sstderr:\n%s" % (mount, result.exited, result.stdout, result.stderr), log_level = endpoints.get_result_log_level(result), remote_name = remote_name, engine_name = engine_name)
+        thread_logger("recursive unmounting of '%s' resulted in record code %d:\nstdout:\n%sstderr:\n%s" % (mount, result.exited, result.stdout, result.stderr), log_level = endpoints.get_result_log_level(result), remote_name = remote_name, engine_name = engine_name)
 
     result = endpoints.run_remote(connection, "podman rm --force " + container_name)
-    thread_logger(thread_name, "Removal of pod '%s' resulted in return code %d:\nstdout:\n%sstderr:\n%s" % (engine_name, result.exited, result.stdout, result.stderr), log_level = endpoints.get_result_log_level(result), remote_name = remote_name, engine_name = engine_name)
+    thread_logger("Removal of pod '%s' resulted in return code %d:\nstdout:\n%sstderr:\n%s" % (engine_name, result.exited, result.stdout, result.stderr), log_level = endpoints.get_result_log_level(result), remote_name = remote_name, engine_name = engine_name)
 
     remove_ssh_private_key(connection, thread_name, remote_name, engine_name)
 
@@ -1713,10 +1711,10 @@ def remove_image(thread_name, remote_name, log_prefix, connection, image):
     Returns:
         None
     """
-    thread_logger(thread_name, "Removing image '%s'" % (image), remote_name = remote_name, log_prefix = log_prefix)
+    thread_logger("Removing image '%s'" % (image), remote_name = remote_name, log_prefix = log_prefix)
 
     result = endpoints.run_remote(connection, "podman rmi " + image)
-    thread_logger(thread_name, "Removing podman image '%s' gave return code %d:\nstdout:\n%sstderr:\n%s" % (image, result.exited, result.stdout, result.stderr), log_level = endpoints.get_result_log_level(result), remote_name = remote_name, log_prefix = log_prefix)
+    thread_logger("Removing podman image '%s' gave return code %d:\nstdout:\n%sstderr:\n%s" % (image, result.exited, result.stdout, result.stderr), log_level = endpoints.get_result_log_level(result), remote_name = remote_name, log_prefix = log_prefix)
 
     return
 
@@ -1739,10 +1737,10 @@ def remote_image_manager(thread_name, remote_name, connection, image_max_cache_s
         None
     """
     log_prefix = "RIM"
-    thread_logger(thread_name, "Performing container image management", remote_name = remote_name, log_prefix = log_prefix)
+    thread_logger("Performing container image management", remote_name = remote_name, log_prefix = log_prefix)
 
     result = endpoints.run_remote(connection, "podman images --all")
-    thread_logger(thread_name, "All podman images on this remote host before running image manager:\nstdout:\n%sstderr:\n%s" % (result.stdout, result.stderr), remote_name = remote_name)
+    thread_logger("All podman images on this remote host before running image manager:\nstdout:\n%sstderr:\n%s" % (result.stdout, result.stderr), remote_name = remote_name)
 
     images = dict()
     images["rickshaw"] = dict()
@@ -1751,7 +1749,7 @@ def remote_image_manager(thread_name, remote_name, connection, image_max_cache_s
 
     result = endpoints.run_remote(connection, "cat /var/lib/crucible/remotehosts-container-image-census")
     if result.exited != 0:
-        thread_logger(thread_name, "Reading image census returned %d:\nstdout:\n%sstderr:\n%s" % (result.exited, result.stdout, result.stderr), log_level = "error", remote_name = remote_name, log_prefix = log_prefix)
+        thread_logger("Reading image census returned %d:\nstdout:\n%sstderr:\n%s" % (result.exited, result.stdout, result.stderr), log_level = "error", remote_name = remote_name, log_prefix = log_prefix)
         return
     for line in result.stdout.splitlines():
         fields = line.split(" ")
@@ -1770,11 +1768,11 @@ def remote_image_manager(thread_name, remote_name, connection, image_max_cache_s
 
         images["rickshaw"][image_name]["timestamps"].append(image_timestamp)
         images["rickshaw"][image_name]["run-ids"][image_timestamp] = image_run_id
-    thread_logger(thread_name, "images[rickshaw]:\n%s" % (endpoints.dump_json(images["rickshaw"])), remote_name = remote_name, log_prefix = log_prefix)
+    thread_logger("images[rickshaw]:\n%s" % (endpoints.dump_json(images["rickshaw"])), remote_name = remote_name, log_prefix = log_prefix)
 
     result = endpoints.run_remote(connection, "podman images --format='{{.Repository}}:{{.Tag}}|{{.CreatedAt}}'")
     if result.exited != 0:
-        thread_logger(thread_name, "Getting podman images returned %d:\nstdout:\n%sstderr:\n%s" % (result.exited, result.stdout, result.stderr), log_level = "error", remote_name = remote_name, log_prefix = log_prefix)
+        thread_logger("Getting podman images returned %d:\nstdout:\n%sstderr:\n%s" % (result.exited, result.stdout, result.stderr), log_level = "error", remote_name = remote_name, log_prefix = log_prefix)
         return
     for line in result.stdout.splitlines():
         fields = line.split("|")
@@ -1786,7 +1784,7 @@ def remote_image_manager(thread_name, remote_name, connection, image_max_cache_s
                 "created-input": image_timestamp,
                 "created": endpoints.gmtimestamp_to_gmepoch(image_timestamp)
             }
-    thread_logger(thread_name, "images[podman]:\n%s" % (endpoints.dump_json(images["podman"])), remote_name = remote_name, log_prefix = log_prefix)
+    thread_logger("images[podman]:\n%s" % (endpoints.dump_json(images["podman"])), remote_name = remote_name, log_prefix = log_prefix)
 
     expiration_create_registries = dict()
     expiration_refresh_registries = list()
@@ -1799,10 +1797,10 @@ def remote_image_manager(thread_name, remote_name, connection, image_max_cache_s
                 expiration_weeks = int(settings["crucible"]["registries"]["engines"][registry]["quay"]["expiration-length"].rstrip("w"))
                 image_created_expiration = endpoints.image_created_expiration_gmepoch(expiration_weeks)
                 expiration_create_registries[settings["crucible"]["registries"]["engines"][registry]["url"]] = image_created_expiration
-                thread_logger(thread_name, "Images from the %s registry evaluated by their creation data will be considered expired if it is before %d (%d weeks ago)" % (registry, image_created_expiration, expiration_weeks), remote_name = remote_name, log_prefix = log_prefix)
+                thread_logger("Images from the %s registry evaluated by their creation data will be considered expired if it is before %d (%d weeks ago)" % (registry, image_created_expiration, expiration_weeks), remote_name = remote_name, log_prefix = log_prefix)
 
     if len(expiration_refresh_registries) > 0:
-        thread_logger(thread_name, "Using the quay API to look for image expiration timestamps in these registries: %s" % (expiration_refresh_registries), remote_name = remote_name, log_prefix = log_prefix)
+        thread_logger("Using the quay API to look for image expiration timestamps in these registries: %s" % (expiration_refresh_registries), remote_name = remote_name, log_prefix = log_prefix)
 
         for image in images["podman"].keys():
             image_parts = image.split(":")
@@ -1814,9 +1812,9 @@ def remote_image_manager(thread_name, remote_name, connection, image_max_cache_s
                     break
 
             if registry_match is None:
-                thread_logger(thread_name, "Could not find a quay API URL to check for an image expiration timestamp for image '%s'" % (image), remote_name = remote_name, log_prefix = log_prefix)
+                thread_logger("Could not find a quay API URL to check for an image expiration timestamp for image '%s'" % (image), remote_name = remote_name, log_prefix = log_prefix)
             else:
-                thread_logger(thread_name, "Using the '%s' registry to run a quay API call to get the image's ('%s') expiration timestamp" % (registry_match, image), remote_name = remote_name, log_prefix = log_prefix)
+                thread_logger("Using the '%s' registry to run a quay API call to get the image's ('%s') expiration timestamp" % (registry_match, image), remote_name = remote_name, log_prefix = log_prefix)
 
                 get_request = requests.get(settings["crucible"]["registries"]["engines"][registry]["quay"]["refresh-expiration"]["api-url"] + "/tag", params = { "onlyActiveTags": True, "specificTag": image_parts[1] })
 
@@ -1824,27 +1822,27 @@ def remote_image_manager(thread_name, remote_name, connection, image_max_cache_s
                 if get_request.status_code != requests.codes.ok:
                     query_log_level = "warning"
 
-                thread_logger(thread_name, "Quay API query for %s returned status code %d" % (image, get_request.status_code), log_level = query_log_level, remote_name = remote_name, log_prefix = log_prefix)
+                thread_logger("Quay API query for %s returned status code %d" % (image, get_request.status_code), log_level = query_log_level, remote_name = remote_name, log_prefix = log_prefix)
 
                 if get_request.status_code == requests.codes.ok:
                     image_json = get_request.json()
                     if len(image_json["tags"]) == 1:
                         images["quay"][image] = image_json["tags"][0]
-                        thread_logger(thread_name, "Quay API query for %s generated %s" % (image, images["quay"][image]), remote_name = remote_name, log_prefix = log_prefix)
+                        thread_logger("Quay API query for %s generated %s" % (image, images["quay"][image]), remote_name = remote_name, log_prefix = log_prefix)
                     else:
-                        thread_logger(thread_name, "Quay API query for %s found %d tags" % (image, len(image_json["tags"])), log_level = "warning", remote_name = remote_name, log_prefix = log_prefix)
+                        thread_logger("Quay API query for %s found %d tags" % (image, len(image_json["tags"])), log_level = "warning", remote_name = remote_name, log_prefix = log_prefix)
 
-        thread_logger(thread_name, "images[quay]:\n%s" % (endpoints.dump_json(images["quay"])), remote_name = remote_name, log_prefix = log_prefix)
+        thread_logger("images[quay]:\n%s" % (endpoints.dump_json(images["quay"])), remote_name = remote_name, log_prefix = log_prefix)
     else:
-        thread_logger(thread_name, "Configuration information necessary to utilize the quay API to obtain image expiration timestamps is not available", remote_name = remote_name, log_prefix = log_prefix)
+        thread_logger("Configuration information necessary to utilize the quay API to obtain image expiration timestamps is not available", remote_name = remote_name, log_prefix = log_prefix)
 
     image_expiration = endpoints.image_expiration_gmepoch()
-    thread_logger(thread_name, "Images evaludated by their expiration data will be considered expired if it is before %d" % (image_expiration), remote_name = remote_name, log_prefix = log_prefix)
+    thread_logger("Images evaludated by their expiration data will be considered expired if it is before %d" % (image_expiration), remote_name = remote_name, log_prefix = log_prefix)
 
     deletes = []
     for image in images["rickshaw"].keys():
         if not image in images["podman"]:
-            thread_logger(thread_name, "Rickshaw image '%s' is no longer present in podman images, removing from consideration" % (image), remote_name = remote_name, log_prefix = log_prefix)
+            thread_logger("Rickshaw image '%s' is no longer present in podman images, removing from consideration" % (image), remote_name = remote_name, log_prefix = log_prefix)
             deletes.append(image)
             continue
 
@@ -1857,7 +1855,7 @@ def remote_image_manager(thread_name, remote_name, connection, image_max_cache_s
         del images["rickshaw"][image]["timestamps"]
     for image in deletes:
         del images["rickshaw"][image]
-    thread_logger(thread_name, "images[rickshaw]:\n%s" % (endpoints.dump_json(images["rickshaw"])), remote_name = remote_name, log_prefix = log_prefix)
+    thread_logger("images[rickshaw]:\n%s" % (endpoints.dump_json(images["rickshaw"])), remote_name = remote_name, log_prefix = log_prefix)
 
     deletes = dict()
     deletes["rickshaw"] = []
@@ -1866,73 +1864,73 @@ def remote_image_manager(thread_name, remote_name, connection, image_max_cache_s
         image_repo = os.environ.get("RS_REG_REPO")
         if image_repo is None:
             image_prefix = r"client-server"
-            thread_logger(thread_name, "Using default podman image prefix '%s'" % (image_prefix), log_level = "warning", remote_name = remote_name, log_prefix = log_prefix)
+            thread_logger("Using default podman image prefix '%s'" % (image_prefix), log_level = "warning", remote_name = remote_name, log_prefix = log_prefix)
         else:
             image_prefix = image_repo.split("/")
             image_prefix = image_prefix[len(image_prefix) - 1]
-            thread_logger(thread_name, "Using podman image prefix '%s'" % (image_prefix), remote_name = remote_name, log_prefix = log_prefix)
+            thread_logger("Using podman image prefix '%s'" % (image_prefix), remote_name = remote_name, log_prefix = log_prefix)
 
         m = re.search(image_prefix, image)
         if m is None:
-            thread_logger(thread_name, "Podman image '%s' is not a '%s' image, ignoring" % (image, image_prefix), remote_name = remote_name, log_prefix = log_prefix)
+            thread_logger("Podman image '%s' is not a '%s' image, ignoring" % (image, image_prefix), remote_name = remote_name, log_prefix = log_prefix)
             deletes["podman"].append(image)
             continue
         else:
-            thread_logger(thread_name, "Podman image '%s' is a '%s' image, processing" % (image, image_prefix), remote_name = remote_name, log_prefix = log_prefix)
+            thread_logger("Podman image '%s' is a '%s' image, processing" % (image, image_prefix), remote_name = remote_name, log_prefix = log_prefix)
 
         if not image in images["rickshaw"]:
-            thread_logger(thread_name, "Podman image '%s' is not present in rickshaw container image census, removing it from the image cache" % (image), remote_name = remote_name, log_prefix = log_prefix)
+            thread_logger("Podman image '%s' is not present in rickshaw container image census, removing it from the image cache" % (image), remote_name = remote_name, log_prefix = log_prefix)
             deletes["podman"].append(image)
             remove_image(thread_name, remote_name, log_prefix, connection, image)
 
         if image in images["quay"]:
             if images["quay"][image]["end_ts"] < image_expiration:
-                thread_logger(thread_name, "Podman image '%s' has been evaluated based on its expiration data and has expired, removing it from the image cache" % (image), remote_name = remote_name, log_prefix = log_prefix)
+                thread_logger("Podman image '%s' has been evaluated based on its expiration data and has expired, removing it from the image cache" % (image), remote_name = remote_name, log_prefix = log_prefix)
                 deletes["podman"].append(image)
                 deletes["rickshaw"].append(image)
                 remove_image(thread_name, remote_name, log_prefix, connection, image)
             else:
-                thread_logger(thread_name, "Podman image '%s' has been evaluated based on its expiration data and has not expired" % (image), remote_name = remote_name, log_prefix = log_prefix)
+                thread_logger("Podman image '%s' has been evaluated based on its expiration data and has not expired" % (image), remote_name = remote_name, log_prefix = log_prefix)
         else:
             image_parts = image.split(":")
             if image_parts[0] in expiration_create_registries and images["podman"][image]["created"] < expiration_create_registries[image_parts[0]]:
-                thread_logger(thread_name, "Podman image '%s' has been evaluated based on its creation data and has expired, removing it from the image cache" % (image), remote_name = remote_name, log_prefix = log_prefix)
+                thread_logger("Podman image '%s' has been evaluated based on its creation data and has expired, removing it from the image cache" % (image), remote_name = remote_name, log_prefix = log_prefix)
                 deletes["podman"].append(image)
                 deletes["rickshaw"].append(image)
                 remove_image(thread_name, remote_name, log_prefix, connection, image)
             else:
-                thread_logger(thread_name, "Podman image '%s' has been evaluated based on its creation data and has not expired" % (image), remote_name = remote_name, log_prefix = log_prefix)
+                thread_logger("Podman image '%s' has been evaluated based on its creation data and has not expired" % (image), remote_name = remote_name, log_prefix = log_prefix)
 
         if not image in deletes["podman"]:
-            thread_logger(thread_name, "Podman image '%s' is valid and remains under consideration" % (image), remote_name = remote_name, log_prefix = log_prefix)
+            thread_logger("Podman image '%s' is valid and remains under consideration" % (image), remote_name = remote_name, log_prefix = log_prefix)
     for kind in deletes.keys():
         for image in deletes[kind]:
             del images[kind][image]
-    thread_logger(thread_name, "images[rickshaw]:\n%s" % (endpoints.dump_json(images["rickshaw"])), remote_name = remote_name, log_prefix = log_prefix)
-    thread_logger(thread_name, "images[podman]:\n%s" % (endpoints.dump_json(images["podman"])), remote_name = remote_name, log_prefix = log_prefix)
+    thread_logger("images[rickshaw]:\n%s" % (endpoints.dump_json(images["rickshaw"])), remote_name = remote_name, log_prefix = log_prefix)
+    thread_logger("images[podman]:\n%s" % (endpoints.dump_json(images["podman"])), remote_name = remote_name, log_prefix = log_prefix)
 
     if len(images["rickshaw"]) == 0 or len(images["podman"]) == 0:
-        thread_logger(thread_name, "Invalid state, exiting image manager", remote_name = remote_name, log_prefix = log_prefix)
+        thread_logger("Invalid state, exiting image manager", remote_name = remote_name, log_prefix = log_prefix)
         return
 
     cache_size = 0
 
     if cache_size < image_max_cache_size:
-        thread_logger(thread_name, "Attemping to cache the most recently used image(s)", remote_name = remote_name, log_prefix = log_prefix)
+        thread_logger("Attemping to cache the most recently used image(s)", remote_name = remote_name, log_prefix = log_prefix)
         sorted_images = sorted(images["rickshaw"].items(), key = lambda x: (x[1]["latest-usage"], x[0]), reverse = True)
-        thread_logger(thread_name, "latest sorted images[rickshaw]:\n%s" % (endpoints.dump_json(sorted_images)), remote_name = remote_name, log_prefix = log_prefix)
+        thread_logger("latest sorted images[rickshaw]:\n%s" % (endpoints.dump_json(sorted_images)), remote_name = remote_name, log_prefix = log_prefix)
 
         image = sorted_images[0][0]
         image_last_used = sorted_images[0][1]["latest-usage"]
         image_run_id = sorted_images[0][1]["run-ids"][image_last_used]
         images["rickshaw"][image]["cached"] = True
         cache_size += 1
-        thread_logger(thread_name, "Rickshaw image '%s' is being preserved in the image cache at slot %d of %d due to last used" % (image, cache_size, image_max_cache_size), remote_name = remote_name, log_prefix = log_prefix)
+        thread_logger("Rickshaw image '%s' is being preserved in the image cache at slot %d of %d due to last used" % (image, cache_size, image_max_cache_size), remote_name = remote_name, log_prefix = log_prefix)
 
         if cache_size < image_max_cache_size:
             for image in images["rickshaw"].keys():
                 if cache_size >= image_max_cache_size:
-                    thread_logger(thread_name, "Image cache is full", remote_name = remote_name, log_prefix = log_prefix)
+                    thread_logger("Image cache is full", remote_name = remote_name, log_prefix = log_prefix)
                     break
 
                 if images["rickshaw"][image]["cached"]:
@@ -1942,21 +1940,21 @@ def remote_image_manager(thread_name, remote_name, connection, image_max_cache_s
                     if images["rickshaw"][image]["run-ids"][timestamp] == image_run_id:
                         images["rickshaw"][image]["cached"] = True
                         cache_size += 1
-                        thread_logger(thread_name, "Rickshaw image '%s' is being preserved in the image cache at slot %d of %d due to association with last used" % (image, cache_size, image_max_cache_size), remote_name = remote_name, log_prefix = log_prefix)
+                        thread_logger("Rickshaw image '%s' is being preserved in the image cache at slot %d of %d due to association with last used" % (image, cache_size, image_max_cache_size), remote_name = remote_name, log_prefix = log_prefix)
 
                 if cache_size > image_max_cache_size:
-                    thread_logger(thread_name, "Image cache maximum size '%d' exceeded in order to cache complete run image sets" % (image_max_cache_size), remote_name = remote_name, log_prefix = log_prefix)
+                    thread_logger("Image cache maximum size '%d' exceeded in order to cache complete run image sets" % (image_max_cache_size), remote_name = remote_name, log_prefix = log_prefix)
         else:
-            thread_logger(thread_name, "Image cache is full", remote_name = remote_name, log_prefix = log_prefix)
+            thread_logger("Image cache is full", remote_name = remote_name, log_prefix = log_prefix)
 
-        thread_logger(thread_name, "images[rickshaw]:\n%s" % (endpoints.dump_json(images["rickshaw"])), remote_name = remote_name, log_prefix = log_prefix)
+        thread_logger("images[rickshaw]:\n%s" % (endpoints.dump_json(images["rickshaw"])), remote_name = remote_name, log_prefix = log_prefix)
     else:
-        thread_logger(thread_name, "No images can be cached due to maximum image cache size of %d" % (image_max_cache_size), remote_name = remote_name, log_prefix = log_prefix)
+        thread_logger("No images can be cached due to maximum image cache size of %d" % (image_max_cache_size), remote_name = remote_name, log_prefix = log_prefix)
 
     if cache_size < image_max_cache_size:
-        thread_logger(thread_name, "Attempting to cache the most used image(s)", remote_name = remote_name, log_prefix = log_prefix)
+        thread_logger("Attempting to cache the most used image(s)", remote_name = remote_name, log_prefix = log_prefix)
         sorted_images = sorted(images["rickshaw"].items(), key = lambda x: (x[1]["uses"], x[0]), reverse = True)
-        thread_logger(thread_name, "usage sorted images[rickshaw]:\n%s" % (endpoints.dump_json(sorted_images)), remote_name = remote_name, log_prefix = log_prefix)
+        thread_logger("usage sorted images[rickshaw]:\n%s" % (endpoints.dump_json(sorted_images)), remote_name = remote_name, log_prefix = log_prefix)
 
         loop = True
         while loop and cache_size < image_max_cache_size:
@@ -1970,12 +1968,12 @@ def remote_image_manager(thread_name, remote_name, connection, image_max_cache_s
                     image[1]["cached"] = True
                     images["rickshaw"][image[0]]["cached"] = True
                     cache_size += 1
-                    thread_logger(thread_name, "Rickshaw image '%s' is being preserved in the image cache at slot %d of %d due to usage" % (image[0], cache_size, image_max_cache_size), remote_name = remote_name, log_prefix = log_prefix)
+                    thread_logger("Rickshaw image '%s' is being preserved in the image cache at slot %d of %d due to usage" % (image[0], cache_size, image_max_cache_size), remote_name = remote_name, log_prefix = log_prefix)
 
                     if cache_size < image_max_cache_size:
                         for image2 in images["rickshaw"].keys():
                             if cache_size >= image_max_cache_size:
-                                thread_logger(thread_name, "Image cache is full", remote_name = remote_name, log_prefix = log_prefix)
+                                thread_logger("Image cache is full", remote_name = remote_name, log_prefix = log_prefix)
                                 loop = False
                                 break
 
@@ -1986,41 +1984,41 @@ def remote_image_manager(thread_name, remote_name, connection, image_max_cache_s
                                 if images["rickshaw"][image2]["run-ids"][timestamp] == image_run_id:
                                     images["rickshaw"][image2]["cached"] = True
                                     cache_size += 1
-                                    thread_logger(thread_name, "Rickshaw image '%s' is being preserved in the image cache at slot %d of %d due to association with usage" % (image2, cache_size, image_max_cache_size), remote_name = remote_name, log_prefix = log_prefix)
+                                    thread_logger("Rickshaw image '%s' is being preserved in the image cache at slot %d of %d due to association with usage" % (image2, cache_size, image_max_cache_size), remote_name = remote_name, log_prefix = log_prefix)
 
                             if cache_size > image_max_cache_size:
-                                thread_logger(thread_name, "Image cache maximum size '%d' exceeded in order to cache complete run image sets" % (image_max_cache_size), remote_name = remote_name, log_prefix = log_prefix)
+                                thread_logger("Image cache maximum size '%d' exceeded in order to cache complete run image sets" % (image_max_cache_size), remote_name = remote_name, log_prefix = log_prefix)
                                 loop = False
                                 break
                     else:
-                        thread_logger(thread_name, "Image cache is full", remote_name = remote_name, log_prefix = log_prefix)
+                        thread_logger("Image cache is full", remote_name = remote_name, log_prefix = log_prefix)
                         loop = False
 
             if all_processed:
-                thread_logger(thread_name, "All rickshaw images are cached", remote_name = remote_name, log_prefix = log_prefix)
+                thread_logger("All rickshaw images are cached", remote_name = remote_name, log_prefix = log_prefix)
                 break
 
-        thread_logger(thread_name, "images[rickshaw]:\n%s" % (endpoints.dump_json(images["rickshaw"])), remote_name = remote_name, log_prefix = log_prefix)
+        thread_logger("images[rickshaw]:\n%s" % (endpoints.dump_json(images["rickshaw"])), remote_name = remote_name, log_prefix = log_prefix)
     else:
         if cache_size == 0:
-            thread_logger(thread_name, "No images can be cached due to maximum image cache size of %d" % (image_max_cache_size), remote_name = remote_name, log_prefix = log_prefix)
+            thread_logger("No images can be cached due to maximum image cache size of %d" % (image_max_cache_size), remote_name = remote_name, log_prefix = log_prefix)
         else:
-            thread_logger(thread_name, "Image cache is full", remote_name = remote_name, log_prefix = log_prefix)
+            thread_logger("Image cache is full", remote_name = remote_name, log_prefix = log_prefix)
 
-    thread_logger(thread_name, "Removing all rickshaw images not marked to preserve in the image cache", remote_name = remote_name, log_prefix = log_prefix)
+    thread_logger("Removing all rickshaw images not marked to preserve in the image cache", remote_name = remote_name, log_prefix = log_prefix)
     all_cached = True
     for image in images["rickshaw"].keys():
         if not images["rickshaw"][image]["cached"]:
             all_cached = False
             remove_image(thread_name, remote_name, log_prefix, connection, image)
     if all_cached:
-        thread_logger(thread_name, "All rickshaw images are cached", remote_name = remote_name, log_prefix = log_prefix)
+        thread_logger("All rickshaw images are cached", remote_name = remote_name, log_prefix = log_prefix)
 
     result = endpoints.run_remote(connection, "podman image prune -f")
-    thread_logger(thread_name, "Pruning dangling images resulted in return code %d:\nstdout:\n%sstderr:\n%s" % (result.exited, result.stdout, result.stderr), log_level = endpoints.get_result_log_level(result), remote_name = remote_name, log_prefix = log_prefix)
+    thread_logger("Pruning dangling images resulted in return code %d:\nstdout:\n%sstderr:\n%s" % (result.exited, result.stdout, result.stderr), log_level = endpoints.get_result_log_level(result), remote_name = remote_name, log_prefix = log_prefix)
 
     result = endpoints.run_remote(connection, "podman images --all")
-    thread_logger(thread_name, "All podman images on this remote host after running image manager:\nstdout:\n%sstderr:\n%s" % (result.stdout, result.stderr), remote_name = remote_name)
+    thread_logger("All podman images on this remote host after running image manager:\nstdout:\n%sstderr:\n%s" % (result.stdout, result.stderr), remote_name = remote_name)
 
     return
 
@@ -2042,7 +2040,7 @@ def shutdown_engines_worker_thread(thread_id, work_queue, threads_rcs):
     """
     thread = threading.current_thread()
     thread_name = thread.name
-    thread_logger(thread_name, "Starting shutdown engines thread with thread ID %d and name = '%s'" % (thread_id, thread_name))
+    thread_logger("Starting shutdown engines thread with thread ID %d and name = '%s'" % (thread_id, thread_name))
     rc = 0
     job_count = 0
 
@@ -2051,11 +2049,11 @@ def shutdown_engines_worker_thread(thread_id, work_queue, threads_rcs):
         try:
             remote_idx = work_queue.get(block = False)
         except queue.Empty:
-            thread_logger(thread_name, "Received a work queue empty exception")
+            thread_logger("Received a work queue empty exception")
             break
 
         if remote_idx is None:
-            thread_logger(thread_name, "Received a null job", log_level = "warning")
+            thread_logger("Received a null job", log_level = "warning")
             continue
 
         job_count += 1
@@ -2063,32 +2061,32 @@ def shutdown_engines_worker_thread(thread_id, work_queue, threads_rcs):
         remote = settings["run-file"]["endpoints"][args.endpoint_index]["remotes"][remote_idx]
         remote_name = "%s-%s" % (remote["config"]["host"], remote_idx)
 
-        thread_logger(thread_name, "Processing remote '%s' at index %d" % (remote["config"]["host"], remote_idx), remote_name = remote_name)
-        thread_logger(thread_name, "Remote user is %s" % (remote["config"]["settings"]["remote-user"]), remote_name = remote_name)
+        thread_logger("Processing remote '%s' at index %d" % (remote["config"]["host"], remote_idx), remote_name = remote_name)
+        thread_logger("Remote user is %s" % (remote["config"]["settings"]["remote-user"]), remote_name = remote_name)
 
         with endpoints.remote_connection(remote["config"]["host"], remote["config"]["settings"]["remote-user"]) as con:
             result = endpoints.run_remote(con, "mount")
-            thread_logger(thread_name, "All mounts on this remote host:\nstdout:\n%sstderr:\n%s" % (result.stdout, result.stderr), remote_name = remote_name)
+            thread_logger("All mounts on this remote host:\nstdout:\n%sstderr:\n%s" % (result.stdout, result.stderr), remote_name = remote_name)
 
             result = endpoints.run_remote(con, "podman ps --all")
-            thread_logger(thread_name, "All podman pods on this remote host:\nstdout:\n%sstderr:\n%s" % (result.stdout, result.stderr), remote_name = remote_name)
+            thread_logger("All podman pods on this remote host:\nstdout:\n%sstderr:\n%s" % (result.stdout, result.stderr), remote_name = remote_name)
 
             result = endpoints.run_remote(con, "podman mount")
-            thread_logger(thread_name, "All podman container mounts on this remote host:\nstdout:\n%sstderr:\n%s" % (result.stdout, result.stderr), remote_name = remote_name)
+            thread_logger("All podman container mounts on this remote host:\nstdout:\n%sstderr:\n%s" % (result.stdout, result.stderr), remote_name = remote_name)
 
             for engine in remote["engines"]:
                 for engine_id in engine["ids"]:
                     engine_name = "%s-%s" % (engine["role"], str(engine_id))
                     container_name = "%s_%s" % (args.run_id, engine_name)
-                    thread_logger(thread_name, "Processing engine '%s'" % (engine_name), remote_name = remote_name, engine_name = engine_name)
-                    thread_logger(thread_name, "Container name is '%s'" % (container_name), remote_name = remote_name, engine_name = engine_name)
+                    thread_logger("Processing engine '%s'" % (engine_name), remote_name = remote_name, engine_name = engine_name)
+                    thread_logger("Container name is '%s'" % (container_name), remote_name = remote_name, engine_name = engine_name)
 
                     osruntime = None
                     if engine["role"] == "profiler":
                         osruntime = "podman"
                     else:
                         osruntime = remote["config"]["settings"]["osruntime"]
-                    thread_logger(thread_name, "osruntime is '%s'" % (osruntime), remote_name = remote_name, engine_name = engine_name)
+                    thread_logger("osruntime is '%s'" % (osruntime), remote_name = remote_name, engine_name = engine_name)
 
                     match osruntime:
                         case "podman":
@@ -2101,19 +2099,19 @@ def shutdown_engines_worker_thread(thread_id, work_queue, threads_rcs):
                                 destroy_chroot(thread_name, remote_name, engine_name, container_name, con, remote["chroots"][engine_name])
 
             result = endpoints.run_remote(con, "mount")
-            thread_logger(thread_name, "All mounts on this remote host:\nstdout:\n%sstderr:\n%s" % (result.stdout, result.stderr), remote_name = remote_name)
+            thread_logger("All mounts on this remote host:\nstdout:\n%sstderr:\n%s" % (result.stdout, result.stderr), remote_name = remote_name)
 
             result = endpoints.run_remote(con, "podman ps --all")
-            thread_logger(thread_name, "All podman pods on this remote host:\nstdout:\n%sstderr:\n%s" % (result.stdout, result.stderr), remote_name = remote_name)
+            thread_logger("All podman pods on this remote host:\nstdout:\n%sstderr:\n%s" % (result.stdout, result.stderr), remote_name = remote_name)
 
             result = endpoints.run_remote(con, "podman mount")
-            thread_logger(thread_name, "All podman container mounts on this remote host:\nstdout:\n%sstderr:\n%s" % (result.stdout, result.stderr), remote_name = remote_name)
+            thread_logger("All podman container mounts on this remote host:\nstdout:\n%sstderr:\n%s" % (result.stdout, result.stderr), remote_name = remote_name)
 
-        thread_logger(thread_name, "Notifying work queue that job processing is complete", remote_name = remote_name)
+        thread_logger("Notifying work queue that job processing is complete", remote_name = remote_name)
         work_queue.task_done()
 
     threads_rcs[thread_id] = rc
-    thread_logger(thread_name, "Stopping shutdown engines thread after processing %d job(s)" % (job_count))
+    thread_logger("Stopping shutdown engines thread after processing %d job(s)" % (job_count))
     return
 
 def shutdown_engines():
@@ -2159,7 +2157,7 @@ def image_mgmt_worker_thread(thread_id, work_queue, threads_rcs):
     """
     thread = threading.current_thread()
     thread_name = thread.name
-    thread_logger(thread_name, "Starting image management thread with thread ID %d and name = '%s'" % (thread_id, thread_name))
+    thread_logger("Starting image management thread with thread ID %d and name = '%s'" % (thread_id, thread_name))
     rc = 0
     job_count = 0
 
@@ -2168,11 +2166,11 @@ def image_mgmt_worker_thread(thread_id, work_queue, threads_rcs):
         try:
             remote = work_queue.get(block = False)
         except queue.Empty:
-            thread_logger(thread_name, "Received a work queue empty exception")
+            thread_logger("Received a work queue empty exception")
             break
 
         if remote is None:
-            thread_logger(thread_name, "Received a null job", log_level = "warning")
+            thread_logger("Received a null job", log_level = "warning")
             continue
 
         job_count += 1
@@ -2180,16 +2178,16 @@ def image_mgmt_worker_thread(thread_id, work_queue, threads_rcs):
         my_unique_remote = settings["engines"]["remotes"][remote]
         my_run_file_remote = settings["run-file"]["endpoints"][args.endpoint_index]["remotes"][my_unique_remote["run-file-idx"][0]]
 
-        thread_logger(thread_name, "Remote user is %s" % (my_run_file_remote["config"]["settings"]["remote-user"]), remote_name = remote)
+        thread_logger("Remote user is %s" % (my_run_file_remote["config"]["settings"]["remote-user"]), remote_name = remote)
 
         with endpoints.remote_connection(remote, my_run_file_remote["config"]["settings"]["remote-user"]) as con:
             remote_image_manager(thread_name, remote, con, my_run_file_remote["config"]["settings"]["image-cache-size"])
 
-        thread_logger(thread_name, "Notifying work queue that job processing is complete", remote_name = remote)
+        thread_logger("Notifying work queue that job processing is complete", remote_name = remote)
         work_queue.task_done()
 
     threads_rcs[thread_id] = rc
-    thread_logger(thread_name, "Stopping image management thread after processing %d job(s)" % (job_count))
+    thread_logger("Stopping image management thread after processing %d job(s)" % (job_count))
     return
 
 def image_mgmt():
@@ -2253,7 +2251,7 @@ def collect_sysinfo_worker_thread(thread_id, work_queue, threads_rcs):
     """
     thread = threading.current_thread()
     thread_name = thread.name
-    thread_logger(thread_name, "Starting collect sysinfo thread with thread ID %d and name = '%s'" % (thread_id, thread_name))
+    thread_logger("Starting collect sysinfo thread with thread ID %d and name = '%s'" % (thread_id, thread_name))
     rc = 0
     job_count = 0
 
@@ -2262,11 +2260,11 @@ def collect_sysinfo_worker_thread(thread_id, work_queue, threads_rcs):
         try:
             remote = work_queue.get(block = False)
         except queue.Empty:
-            thread_logger(thread_name, "Received a work queue empty exception")
+            thread_logger("Received a work queue empty exception")
             break
 
         if remote is None:
-            thread_logger(thread_name, "Received a null job", log_level = "warning")
+            thread_logger("Received a null job", log_level = "warning")
             continue
 
         job_count += 1
@@ -2274,7 +2272,7 @@ def collect_sysinfo_worker_thread(thread_id, work_queue, threads_rcs):
         my_unique_remote = settings["engines"]["remotes"][remote]
         my_run_file_remote = settings["run-file"]["endpoints"][args.endpoint_index]["remotes"][my_unique_remote["run-file-idx"][0]]
 
-        thread_logger(thread_name, "Remote user is %s" % (my_run_file_remote["config"]["settings"]["remote-user"]), remote_name = remote)
+        thread_logger("Remote user is %s" % (my_run_file_remote["config"]["settings"]["remote-user"]), remote_name = remote)
 
         with endpoints.remote_connection(remote, my_run_file_remote["config"]["settings"]["remote-user"]) as con:
             local_dir = settings["dirs"]["local"]["sysinfo"] + "/" + remote
@@ -2283,34 +2281,34 @@ def collect_sysinfo_worker_thread(thread_id, work_queue, threads_rcs):
             local_packrat_file = args.packrat_dir + "/packrat"
             remote_packrat_file = settings["dirs"]["remote"]["run"] + "/packrat"
             result = con.put(local_packrat_file, remote_packrat_file)
-            thread_logger(thread_name, "Copied %s to %s:%s" % (local_packrat_file, remote, remote_packrat_file), remote_name = remote)
+            thread_logger("Copied %s to %s:%s" % (local_packrat_file, remote, remote_packrat_file), remote_name = remote)
 
             result = endpoints.run_remote(con, remote_packrat_file + " " + settings["dirs"]["remote"]["sysinfo"])
-            thread_logger(thread_name, "Running packrat resulted in return code %d:\nstdout:\n%sstderr:\n%s" % (result.exited, result.stdout, result.stderr), log_level = endpoints.get_result_log_level(result), remote_name = remote)
+            thread_logger("Running packrat resulted in return code %d:\nstdout:\n%sstderr:\n%s" % (result.exited, result.stdout, result.stderr), log_level = endpoints.get_result_log_level(result), remote_name = remote)
 
             result = endpoints.run_remote(con, "tar --create --directory " + settings["dirs"]["remote"]["sysinfo"]  + " packrat-archive | xz --stdout | base64")
-            thread_logger(thread_name, "Transferring packrat files resulted in return code %d:\nstderr:\n%s" % (result.exited, result.stderr), log_level = endpoints.get_result_log_level(result), remote_name = remote)
+            thread_logger("Transferring packrat files resulted in return code %d:\nstderr:\n%s" % (result.exited, result.stderr), log_level = endpoints.get_result_log_level(result), remote_name = remote)
 
             archive_file = local_dir + "/packrat.tar.xz"
             with open(archive_file, "wb") as archive_file_fp:
                 archive_file_fp.write(base64.b64decode(result.stdout))
-            thread_logger(thread_name, "Wrote packrat archive to '%s'" % (archive_file), remote_name = remote)
+            thread_logger("Wrote packrat archive to '%s'" % (archive_file), remote_name = remote)
 
             result = endpoints.run_local("xz --decompress --stdout " + archive_file + " | tar --extract --verbose --directory " + local_dir)
-            thread_logger(thread_name, "Unpacking packrat archive resulted in return code %d:\nstdout:\n%sstderr:\n%s" % (result.exited, result.stdout, result.stderr), log_level = endpoints.get_result_log_level(result), remote_name = remote)
+            thread_logger("Unpacking packrat archive resulted in return code %d:\nstdout:\n%sstderr:\n%s" % (result.exited, result.stdout, result.stderr), log_level = endpoints.get_result_log_level(result), remote_name = remote)
 
             path = Path(archive_file)
             path.unlink()
-            thread_logger(thread_name, "Removed packrat archive '%s'" % (archive_file), remote_name = remote)
+            thread_logger("Removed packrat archive '%s'" % (archive_file), remote_name = remote)
 
             result = endpoints.run_remote(con, "rm --recursive --force " + remote_packrat_file + " " + settings["dirs"]["remote"]["sysinfo"] + "/packrat-archive")
-            thread_logger(thread_name, "Removing remote packrat files resulted in return code %d:\nstdout:\n%sstderr:\n%s" % (result.exited, result.stdout, result.stderr), log_level = endpoints.get_result_log_level(result), remote_name = remote)
+            thread_logger("Removing remote packrat files resulted in return code %d:\nstdout:\n%sstderr:\n%s" % (result.exited, result.stdout, result.stderr), log_level = endpoints.get_result_log_level(result), remote_name = remote)
 
-        thread_logger(thread_name, "Notifying work queue that job processing is complete", remote_name = remote)
+        thread_logger("Notifying work queue that job processing is complete", remote_name = remote)
         work_queue.task_done()
 
     threads_rcs[thread_id] = rc
-    thread_logger(thread_name, "Stopping collect sysinfo thread after processing %d job(s)" % (job_count))
+    thread_logger("Stopping collect sysinfo thread after processing %d job(s)" % (job_count))
     return
 
 def collect_sysinfo():
@@ -2403,6 +2401,15 @@ def main():
     if build_unique_remote_configs() != 0:
         return 1
     endpoints.create_local_dirs(settings)
+
+    if endpoints.process_pre_deploy_roadblock(roadblock_id = args.roadblock_id,
+                                              endpoint_label = args.endpoint_label,
+                                              roadblock_password = args.roadblock_passwd,
+                                              roadblock_messages_dir = settings["dirs"]["local"]["roadblock-msgs"],
+                                              roadblock_timeouts = settings["rickshaw"]["roadblock"]["timeouts"],
+                                              early_abort = early_abort):
+        return 1
+
     create_remote_dirs()
     remote_image_pull_rc = remotes_pull_images()
     if remote_image_pull_rc == 0:

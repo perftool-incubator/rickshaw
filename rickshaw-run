@@ -3113,6 +3113,7 @@ sub deploy_endpoints() {
         my $endpoint_project_dir = $rickshaw_project_dir . "/endpoints/" . $type;
         if (-e $endpoint_project_dir) {
             my $pushd_dir = pushd($endpoint_project_dir);
+            my $cmd_log = $this_endpoint_run_dir . "/endpoint-stderrout.txt";
             my $cmd = "./" . $type .
                     " --rickshaw-dir=" . $rickshaw_project_dir .
                     " --packrat-dir=" . $run{'packrat-dir'} .
@@ -3124,7 +3125,7 @@ sub deploy_endpoints() {
                     " --engine-script-start-timeout=" . $engine_script_start_timeout .
                     $endpoint_image_opt .
                     $endpoint_roadblock_opt .
-                    " >" . $this_endpoint_run_dir . "/endpoint-stderrout.txt 2>&1";
+                    " >" . $cmd_log . " 2>&1";
             if (($type eq "remotehosts") or
                 ($type eq "kube")) {
                 $ENV{'ROADBLOCK_HOME'} = $run{'roadblock-dir'};
@@ -3146,7 +3147,7 @@ sub deploy_endpoints() {
             # Endpoints should return for each client and server started:
             # - the ID of the client/server
             # - the roadblock client ID
-            log_print sprintf "Going to run endpoint command for %s:\n%s\n\n", $label, $cmd;
+            log_print sprintf "Going to run endpoint command for %s and log it to %s:\n%s\n\n", $label, $cmd_log, $cmd;
             if ($endpoint_roadblock_opt eq "") {
                 # There is only one client and no synchronization, so we wait for the endpoint to finish
                 debug_log(sprintf "going to run and wait for: %s\n", $cmd);
@@ -3168,18 +3169,37 @@ sub process_roadblocks() {
     my $roadblock_rc;
     my @new_followers;
     my @dropped_followers;
+    my @deployment_followers;
 
     @active_followers = (dump_endpoint_labels(\@endpoints));
 
     ####################################################################
-    $roadblock_rc = do_roadblock("endpoint-deploy-begin", $endpoint_deploy_timeout, $messages_ref, @active_followers);
+    $roadblock_rc = do_roadblock("endpoint-pre-deploy-begin", $default_rb_timeout, $messages_ref, @active_followers);
+    roadblock_exit_on_error($roadblock_rc);
+
+    if (defined $messages_ref) {
+        foreach my $msg (@{ $$messages_ref{'received'} })  {
+            if (exists $$msg{'payload'}{'message'}{'user-object'}{'deployment-followers'}) {
+                debug_log(sprintf "found these deployment followers: %s\n", join(" ", @{ $$msg{'payload'}{'message'}{'user-object'}{'deployment-followers'} }));
+                push @deployment_followers, @{ $$msg{'payload'}{'message'}{'user-object'}{'deployment-followers'} };
+            }
+        }
+    }
+    debug_log(sprintf "All deployment followers: %s\n", join(" ", @deployment_followers));
+
+    $roadblock_rc = do_roadblock("endpoint-pre-deploy-end", $default_rb_timeout, $messages_ref, @active_followers);
+    roadblock_exit_on_error($roadblock_rc);
+
+    push @deployment_followers, @active_followers;
+    ####################################################################
+    $roadblock_rc = do_roadblock("endpoint-deploy-begin", $endpoint_deploy_timeout, $messages_ref, @deployment_followers);
     roadblock_exit_on_error($roadblock_rc);
 
     if (defined $messages_ref) {
         foreach my $msg (@{ $$messages_ref{'received'} })  {
             if (exists $$msg{'payload'}{'message'}{'user-object'}{'new-followers'}) {
                 debug_log(sprintf "found these new followers: %s\n", join(" ", @{ $$msg{'payload'}{'message'}{'user-object'}{'new-followers'} }));
-                @new_followers = (@new_followers, @{ $$msg{'payload'}{'message'}{'user-object'}{'new-followers'} });
+                push @new_followers, @{ $$msg{'payload'}{'message'}{'user-object'}{'new-followers'} };
             }
         }
     }
@@ -3403,6 +3423,9 @@ sub roadblock_exit_on_error {
 
     if ($roadblock_rc != 0) {
         log_print "roadblock_exit_on_error()\n";
+
+        wait_for_endpoints();
+
         exit $roadblock_rc;
     }
 }
