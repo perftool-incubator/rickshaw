@@ -1390,7 +1390,7 @@ def test_start(msgs_dir, test_id, tx_msgs_dir):
     Returns:
         None
     """
-    log.info("Running test_start()")
+    log.info("Running test_start() for '%s' (<iteration>-<sample>-<attempt>)" % (test_id))
 
     this_msg_file = msgs_dir + "/" + test_id + ":server-start-end.json"
     path = Path(this_msg_file)
@@ -1462,7 +1462,7 @@ def test_start(msgs_dir, test_id, tx_msgs_dir):
     else:
         log.info("Could not find '%s'" % (this_msg_file))
 
-    log.info("Returning from test_start()")
+    log.info("Returning from test_start() for '%s' (<iteration>-<sample>-<attempt>)" % (test_id))
     return
 
 def test_stop(test_id):
@@ -1478,9 +1478,9 @@ def test_stop(test_id):
     Returns:
         None
     """
-    log.info("Running test_stop()")
+    log.info("Running test_stop() for '%s' (<iteration>-<sample>-<attempt>)" % (test_id))
     log.info("...nothing to do here, run along...")
-    log.info("Returning from test_stop()")
+    log.info("Returning from test_stop() for '%s' (<iteration>-<sample>-<attempt>)" % (test_id))
     return
 
 def collect_podman_log(thread_name, remote_name, engine_name, container_name, connection):
