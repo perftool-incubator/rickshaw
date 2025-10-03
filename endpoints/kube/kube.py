@@ -1095,7 +1095,9 @@ def verify_pods_running(connection, pods, pod_details, abort_event):
                         pods_info[pod_name] = {
                             "name": pod_name,
                             "node": pod["spec"]["nodeName"],
-                            "containers": copy.deepcopy(running_containers)
+                            "containers": copy.deepcopy(running_containers),
+                            "pod-ip": pod["status"]["podIP"],
+                            "node-ip": pod["status"]["hostIP"]
                         }
                     else:
                         log.info("All containers in pod '%s' are running, but the pod or one of it's containers has an invalid configuration" % (pod_name))
@@ -1786,6 +1788,678 @@ def deployment_roadblock_function(roadblock_id, follower_name, endpoint_deploy_t
 
     return 0
 
+def build_network_crd_obj(crd_type, crd):
+    """
+    Build a network service CRD
+
+    Args:
+        crd_type (str): the type of network service crd this is
+        crd (dict): the actual crd to embed in the object
+
+    Globals:
+        None
+
+    Returns:
+        crd_obj (dict): a network crd object
+    """
+    crd_obj = {
+        "type": crd_type,
+        "crd": crd,
+        "validated": False,
+        "created": False,
+        "deleted": False
+    }
+
+    return crd_obj
+
+def build_service_crd(engine, ports):
+    """
+    Build a network service CRD
+
+    Args:
+        engine (str): the server engine name that this service is to be associated with
+        ports (list): a list of ports to include in the CRD
+
+    Globals:
+        settings (dict): the one data structure to rule then all
+        endpoint_default_settings (dict): default settings for this endpoint
+
+    Returns:
+        crd: a K8S service CRD
+    """
+    crd = {
+        "apiVersion": "v1",
+        "kind": "Service",
+        "metadata": {
+            "name": "%s-%s" % (endpoint_default_settings["prefix"]["pod"], engine),
+            "namespace": settings["run-file"]["endpoints"][args.endpoint_index]["namespace"]["name"]
+        },
+        "spec": {
+            "ports": []
+        }
+    }
+
+    for port in ports:
+        for protocol in [ "TCP", "UDP" ]:
+            port_obj = {
+                "name": "port-" + str(port) + "-" + protocol.lower(),
+                "port": port,
+                "protocol": protocol,
+                "targetPort": port
+            }
+            crd["spec"]["ports"].append(port_obj)
+
+    return crd
+
+def build_service_endpoints_crd(engine, engine_ip, ports):
+    """
+    Build an endpoints CRD for a network service
+
+    Args:
+        engine (str): the server engine name that this service is to be associated with
+        engine_ip (str): the server engine pod's IP address
+        ports (list): a list of ports to include in the CRD
+
+    Globals:
+        settings (dict): the one data structure to rule then all
+        endpoint_default_settings (dict): default settings for this endpoint
+
+    Returns:
+        crd: a K8S endpoints CRD
+    """
+    crd = {
+        "apiVersion": "v1",
+        "kind": "Endpoints",
+        "metadata": {
+            "name": "%s-%s" % (endpoint_default_settings["prefix"]["pod"], engine),
+            "namespace": settings["run-file"]["endpoints"][args.endpoint_index]["namespace"]["name"]
+        },
+        "subsets": [
+            {
+                "addresses": [
+                    {
+                        "ip": engine_ip
+                    }
+                ],
+            "ports": []
+            }
+        ]
+    }
+
+    for port in ports:
+        for protocol in [ "TCP", "UDP" ]:
+            port_obj = {
+                "name": "port-" + str(port) + "-" + protocol.lower(),
+                "port": port,
+                "protocol": protocol
+            }
+            crd["subsets"][0]["ports"].append(port_obj)
+
+    return crd
+
+def build_metallb_crd(engine, ports, pool_name):
+    """
+    Build a MetalLB service CRD
+
+    Args:
+        engine (str): the server engine name that this service is to be associated with
+        ports (list): a list of ports to include in the CRD
+        pool_name (str): the name of the MetalLB address pool to use
+
+    Globals:
+        settings (dict): the one data structure to rule then all
+        endpoint_default_settings (dict): default settings for this endpoint
+
+    Returns:
+        crd: a K8S MetalLB service CRD
+    """
+    crd = {
+        "apiVersion": "v1",
+        "kind": "Service",
+        "metadata": {
+            "name": "%s-%s-metallb" % (endpoint_default_settings["prefix"]["pod"], engine),
+            "namespace": settings["run-file"]["endpoints"][args.endpoint_index]["namespace"]["name"],
+            "annotations": {
+                "metallb.universe.tf/address-pool": pool_name
+            }
+        },
+        "spec": {
+            "selector": {
+                "app": "%s-%s" % (endpoint_default_settings["prefix"]["pod"], engine),
+            },
+            "type": "LoadBalancer",
+            "ports": []
+        }
+    }
+
+    for port in ports:
+        for protocol in [ "TCP", "UDP" ]:
+            port_obj = {
+                "name": "port-" + str(port) + "-" + protocol.lower(),
+                "nodePort": port,
+                "port": port,
+                "protocol": protocol,
+                "targetPort": port
+            }
+            crd["spec"]["ports"].append(port_obj)
+
+    return crd
+
+
+def build_nodeport_crd(engine, ports):
+    """
+    Build a nodeport CRD
+
+    Args:
+        engine (str): the server engine name that this service is to be associated with
+        ports (list): a list of ports to include in the CRD
+
+    Globals:
+        settings (dict): the one data structure to rule then all
+        endpoint_default_settings (dict): default settings for this endpoint
+
+    Returns:
+        crd: a K8S nodeport CRD
+    """
+    crd = {
+        "apiVersion": "v1",
+        "kind": "Service",
+        "metadata": {
+            "name": "%s-%s-nodeport" % (endpoint_default_settings["prefix"]["pod"], engine),
+            "namespace": settings["run-file"]["endpoints"][args.endpoint_index]["namespace"]["name"]
+        },
+        "spec": {
+            "type": "NodePort",
+            "ports": []
+        }
+    }
+
+    for port in ports:
+        for protocol in [ "TCP", "UDP" ]:
+            port_obj = {
+                "name": "port-" + str(port) + "-" + protocol.lower(),
+                "nodePort": port,
+                "port": port,
+                "protocol": protocol,
+                "targetPort": port
+            }
+            crd["spec"]["ports"].append(port_obj)
+
+    return crd
+
+def build_nodeport_endpoints_crd(engine, engine_ip, ports):
+    """
+    Build an endpoints CRD for a network nodeport
+
+    Args:
+        engine (str): the server engine name that this service is to be associated with
+        engine_ip (str): the server engine pod's IP address
+        ports (list): a list of ports to include in the CRD
+
+    Globals:
+        settings (dict): the one data structure to rule then all
+        endpoint_default_settings (dict): default settings for this endpoint
+
+    Returns:
+        crd: a K8S endpoints CRD
+    """
+    crd = {
+        "apiVersion": "v1",
+        "kind": "Endpoints",
+        "metadata": {
+            "name": "%s-%s-nodeport" % (endpoint_default_settings["prefix"]["pod"], engine),
+            "namespace": settings["run-file"]["endpoints"][args.endpoint_index]["namespace"]["name"]
+        },
+        "subsets": [
+            {
+                "addresses": [
+                    {
+                        "ip": engine_ip
+                    }
+                ],
+            "ports": []
+            }
+        ]
+    }
+
+    for port in ports:
+        for protocol in [ "TCP", "UDP" ]:
+            port_obj = {
+                "name": "port-" + str(port) + "-" + protocol.lower(),
+                "port": port,
+                "protocol": protocol
+            }
+            crd["subsets"][0]["ports"].append(port_obj)
+
+    return crd
+
+def test_start(msgs_dir, test_id, tx_msgs_dir):
+    """
+    Perform endpoint responsibilities that must be completed prior to running an iteration test sample
+
+    Args:
+        msgs_dir (str): The directory look for received messages in
+        test_id (str): A string of the form "<iteration>:<sample>:<attempt>" used to identify the current test
+        tx_msgs_dir (str): The directory where to write queued messages for transmit
+
+    Globals:
+        log: a logger instance
+        settings (dict): the one data structure to rule then all
+
+    Returns:
+        None
+
+    This function runs right after a server starts any service and right before a client starts
+    and tries to contect the server's service.  The purpose of this function is to do any
+    work which ensures the client can contact the server.  In some cases there may be nothing
+    to do.  Regardless of the work, the endpoint needs to relay what IP & ports the client
+    needs to use in order to reach the server.  In some cases that may be the information the
+    server has provided to the endpoint, or this information has changed because the endpoint
+    created some sort of proxy to reach the server.
+
+    In the case of the k8s endpoint, there are two possible actions, and this depends on where
+    the client is in relation to the server.  If the client is within the same k8s cluster,
+    we create a k8s-service, so the client can use an IP which is more persistent
+    than a pod's IP (this allows pods to come and go while keeping the same IP).  This is not
+    absolutely necessary for our  benchmarks, but it is a best practice for cloud-native
+    aps, so we do it anyway.  If the client is not in the k8s cluster, then we must assume 
+    it does not have direct access to the pod cluster network, and some form of 'ingress' must
+    be set up.  Currently, this endpoint implements 'NodePort' and Loadbalancer svc. For NodePort.
+    which provides a port for the service which can be accessed on any of the cluster's nodes,
+    we provide the IP address of the node which happens to host the server pod. For LoadBalancer,
+    the external IP is assigned dynamically from the LB AddressPool when the svc is created. 
+    For baremetal, the MetalLB LoadBalancer setup is outside crucible. We just need the PoolName 
+    in the k8s endpoint option lbSvc="PoolName".
+    """
+    log.info("Running test_start() for '%s' (<iteration>-<sample>-<attempt>)" % (test_id))
+
+    endpoint = settings["run-file"]["endpoints"][args.endpoint_index]
+
+    send_messages = False
+
+    if not "networking" in settings:
+        settings["networking"] = {}
+
+    settings["networking"][test_id] = {}
+    settings["networking"][test_id]["ingress-lb"] = []
+    settings["networking"][test_id]["other"] = []
+    settings["networking"][test_id]["nodeport"] = []
+    settings["networking"][test_id]["service"] = []
+
+    this_msg_file = msgs_dir + "/" + test_id + ":server-start-end.json"
+    path = Path(this_msg_file)
+
+    if path.exists() and path.is_file():
+        log.info("Found '%s'" % (this_msg_file))
+
+        msgs_json,err = load_json_file(this_msg_file)
+        if not msgs_json is None:
+            if "received" in msgs_json:
+                log.info("Checking received messages for service requests")
+                for msg in msgs_json["received"]:
+                    if msg["payload"]["message"]["command"] == "user-object":
+                        if "svc" in msg["payload"]["message"]["user-object"] and "ports" in msg["payload"]["message"]["user-object"]["svc"]:
+                            server_engine = msg["payload"]["sender"]["id"]
+                            client_engine = re.sub(r"server", r"client", server_engine)
+
+                            log.info("Found a service message from server engine %s to client engine %s:\n%s" % (server_engine, client_engine, endpoints.dump_json(msg["payload"])))
+
+                            if not server_engine in settings["engines"]["endpoint"]["pods"]:
+                                log.info("This server engine (%s) is not owned by this endpoint so it is being ignored" % (server_engine))
+                                continue
+                            else:
+                                log.info("This server engine (%s) is owned by this endpoint so it will be handled" % (server_engine))
+
+                            obj = {
+                                "server-engine": server_engine,
+                                "client-engine": client_engine,
+                                "test-ip": msg["payload"]["message"]["user-object"]["svc"]["ip"],
+                                "pod-ip": settings["engines"]["endpoint"]["pods"][server_engine]["pod-ip"],
+                                "service-ip": None,
+                                "ports": msg["payload"]["message"]["user-object"]["svc"]["ports"],
+                                "crds": [],
+                                "validated": False,
+                                "created": False,
+                                "deleted": False
+                            }
+
+                            if obj["test-ip"] != obj["pod-ip"]:
+                                log.info("The test IP address (%s) and the pod IP address (%s) are not the same for server engine %s" % (obj["test-ip"], obj["pod-ip"], obj["server-engine"]))
+
+                                log.info("Since the two IP addresses do not match there is nothing for me to do -- assuming something like SRIOV+multus is being used")
+
+                                settings["networking"][test_id]["other"].append(obj)
+                            else:
+                                log.info("The test IP address (%s) and the pod IP address (%s) are the same for server engine %s" % (obj["test-ip"], obj["pod-ip"], obj["server-engine"]))
+
+                                if client_engine in settings["engines"]["endpoint"]["pods"]:
+                                    log.info("Client %s is inside the cluster" % (obj["client-engine"]))
+
+                                    # if the client is hosted in the cluster then a clusterIP service will
+                                    # be created for the server and an endpoint will be created to ensure
+                                    # the service forwards connections to the correct pod
+
+                                    log.info("Building service")
+
+                                    crd = build_network_crd_obj("service",
+                                                                build_service_crd(obj["server-engine"],
+                                                                                  obj["ports"]))
+
+                                    log.info("Created service CRD:\n%s" % (endpoints.dump_json(crd)))
+                                    obj["crds"].append(crd)
+
+                                    # Instead of relying on k8s to make an association between the service and
+                                    # the pod, we explicitly connect the two by creating an endpoint, linking
+                                    # the service to the IP of the server pod
+
+                                    log.info("Building endpoints")
+
+                                    crd = build_network_crd_obj("endpoints",
+                                                                build_service_endpoints_crd(obj["server-engine"],
+                                                                                            obj["pod-ip"],
+                                                                                            obj["ports"]))
+
+                                    log.info("Created endpoints CRD:\n%s" % (endpoints.dump_json(crd)))
+                                    obj["crds"].append(crd)
+
+                                    settings["networking"][test_id]["service"].append(obj)
+                                else:
+                                    log.info("Client %s is outside the cluster" % (client_engine))
+
+                                    if "metallb-pool" in endpoint:
+                                        log.info("User has requested an ingress LoadBalancer service")
+
+                                        log.info("Building ingress-lb using MetalLB pool '%s'" % (endpoint["metallb-pool"]))
+
+                                        crd = build_network_crd_obj("ingress-lb",
+                                                                    build_metallb_crd(obj["server-engine"]),
+                                                                                      obj["ports"],
+                                                                                      endpoint["metallb-pool"])
+
+                                        log.info("Created ingress-lb CRD:\n%s" % (endpoints.dump_json(crd)))
+                                        obj["crds"].append(crd)
+
+                                        settings["networking"][test_id]["ingress-lb"].append(obj)
+                                    else:
+                                        log.info("Creating an ingress NodePort service")
+
+                                        log.info("Building nodeport")
+
+                                        crd = build_network_crd_obj("nodeport",
+                                                                    build_nodeport_crd(obj["server-engine"],
+                                                                                       obj["ports"]))
+
+                                        log.info("Created nodeport CRD:\n%s" % (endpoints.dump_json(crd)))
+                                        obj["crds"].append(crd)
+
+                                        log.info("Building endpoints")
+
+                                        crd = build_network_crd_obj("endpoints",
+                                                                    build_nodeport_endpoints_crd(obj["server-engine"],
+                                                                                                 obj["pod-ip"],
+                                                                                                 obj["ports"]))
+
+                                        log.info("Created endpoints CRD:\n%s" % (endpoints.dump_json(crd)))
+                                        obj["crds"].append(crd)
+
+                                        settings["networking"][test_id]["nodeport"].append(obj)
+
+    with endpoints.remote_connection(settings["run-file"]["endpoints"][args.endpoint_index]["host"],
+                                     settings["run-file"]["endpoints"][args.endpoint_index]["user"], validate = False) as con:
+        log.info("Validating networking model CRDs")
+        for key in settings["networking"][test_id].keys():
+            log.info("Processing networking model: %s" % (key))
+
+            log.info("There are %d server engines to process for this networking mode (%s)" % (len(settings["networking"][test_id][key]), key))
+            for obj in settings["networking"][test_id][key]:
+                log.info("Processing server engine %s" % (obj["server-engine"]))
+
+                if len(obj["crds"]) == 0:
+                    log.info("There are no CRDs to process")
+                    continue
+
+                for crd in obj["crds"]:
+                    log.info("Processing %s CRD" % (crd["type"]))
+
+                    cmd = "%s create --filename - --dry-run=server --validate=strict" % (settings["misc"]["k8s-bin"])
+                    result = endpoints.run_remote(con, cmd, debug = settings["misc"]["debug-output"], stdin = endpoints.dump_json(crd["crd"]))
+                    endpoints.log_result(result)
+                    if result.exited != 0:
+                        log.error("Failed to validate %s CRD" % (crd["type"]))
+                    else:
+                        log.info("Validated %s CRD" % (crd["type"]))
+                        crd["validated"] = True
+
+        log.info("Creating validated networking model CRDs")
+        for key in settings["networking"][test_id].keys():
+            log.info("Processing networking model: %s" % (key))
+
+            log.info("There are %d server engines to process for this networking mode (%s)" % (len(settings["networking"][test_id][key]), key))
+            for obj in settings["networking"][test_id][key]:
+                log.info("Processing server engine %s" % (obj["server-engine"]))
+
+                if len(obj["crds"]) == 0:
+                    log.info("There are no CRDs to process")
+                    continue
+
+                obj["validated"] = True
+                for crd in obj["crds"]:
+                    if not crd["validated"]:
+                        log.error("CRD %s previously failed validation" % (crd["type"]))
+                        obj["validated"] = False
+
+                if not obj["validated"]:
+                    log.error("Skipping CRD creation for this server engine (%s) since one or more CRDs failed validation" % (obj["server-engine"]))
+                else:
+                    for crd in obj["crds"]:
+                        log.info("Processing %s CRD" % (crd["type"]))
+
+                        cmd = "%s create --filename -" % (settings["misc"]["k8s-bin"])
+                        result = endpoints.run_remote(con, cmd, debug = settings["misc"]["debug-output"], stdin = endpoints.dump_json(crd["crd"]))
+                        endpoints.log_result(result)
+                        if result.exited != 0:
+                            log.error("Failed to create %s CRD" % (crd["type"]))
+                        else:
+                            log.info("Created %s CRD" % (crd["type"]))
+                            crd["created"] = True
+
+                    obj["created"] = True
+                    for crd in obj["crds"]:
+                        if not crd["created"]:
+                            log.error("CRD %s previously failed creation" % (crd["type"]))
+                            obj["created"] = False
+
+                if not obj["created"]:
+                    log.error("CRD creation for this server engine (%s) failed since one or more CRDs were not created" % (obj["server-engine"]))
+
+        log.info("Collecting service IP address for networking models")
+        for key in settings["networking"][test_id].keys():
+            log.info("Processing networking model: %s" % (key))
+
+            log.info("There are %d server engines to process for this networking mode (%s)" % (len(settings["networking"][test_id][key]), key))
+            for obj in settings["networking"][test_id][key]:
+                log.info("Processing server engine %s" % (obj["server-engine"]))
+
+                if key == "other":
+                    log.info("For the 'other' networking model an assumption is made that the service IP address is the test IP address (%s)" % (obj["test-ip"]))
+
+                    obj["service-ip"] = obj["test-ip"]
+
+                    log.info("IP address is %s" % (obj["service-ip"]))
+
+                    send_messages = True
+                elif obj["created"]:
+                    if key == "service":
+                        log.info("Getting IP address for a service")
+
+                        cmd = "%s get svc/%s --namespace %s --output json" % (settings["misc"]["k8s-bin"], obj["crds"][0]["crd"]["metadata"]["name"], endpoint["namespace"]["name"])
+                        result = endpoints.run_remote(con, cmd, debug = settings["misc"]["debug-output"])
+                        endpoints.log_result(result)
+                        if result.exited != 0:
+                            log.error("Failed to retrieve service information")
+                        else:
+                            log.info("Retrieved service information")
+
+                            service_obj = json.loads(result.stdout)
+
+                            if "spec" in service_obj and "clusterIP" in service_obj["spec"]:
+                                obj["service-ip"] = service_obj["spec"]["clusterIP"]
+
+                                log.info("IP address is %s" % (obj["service-ip"]))
+
+                                send_messages = True
+                            else:
+                                log.error("Failed to decode service information or service information is incomplete")
+                    elif key == "ingress-lb":
+                        log.info("Getting IP address for a ingress-lb")
+
+                        cmd = "%s get svc/%s --namespace %s --output json" % (settings["misc"]["k8s-bin"], obj["crds"][0]["crd"]["metadata"]["name"], endpoint["namespace"]["name"])
+                        result = endpoints.run_remote(con, cmd, debug = settings["misc"]["debug-output"])
+                        endpoints.log_result(result)
+                        if result.exited != 0:
+                            log.error("Failed to retrieve service information")
+                        else:
+                            log.info("Retrieved service information")
+
+                            service_obj = json.loads(result.stdout)
+
+                            if "status" in service_obj and "loadBalancer" in service_obj["status"] and "ingress" in service_obj["status"]["loadBalancer"] and "ip" in service_obj["status"]["loadBalancer"]["ingress"][0]:
+                                obj["service-ip"] = service_obj["status"]["loadBalancer"]["ingress"][0]["ip"]
+
+                                log.info("IP address is %s" % (obj["service-ip"]))
+
+                                send_messages = True
+                            else:
+                                log.error("Failed to decode service information or service information is incomplete")
+                    elif key == "nodeport":
+                        log.info("Getting IP address for a nodeport")
+
+                        # a NodePort is available on -any- woker node in the cluster, however, we choose to "intelligently"
+                        # provide the worker node's IP address which is currently hosting the pod
+
+                        obj["service-ip"] = settings["engines"]["endpoint"]["pods"][obj["server-engine"]]["node-ip"]
+
+                        log.info("IP address is %s" % (obj["service-ip"]))
+
+                        send_messages = True
+
+        service_status(con)
+
+    if send_messages:
+        log.info("Sending IP address messages to client engines via roadblock")
+
+        for key in settings["networking"][test_id].keys():
+            log.info("Processing networking model: %s" % (key))
+
+            log.info("There are %d client engines to process for this networking mode (%s)" % (len(settings["networking"][test_id][key]), key))
+            for obj in settings["networking"][test_id][key]:
+                log.info("Processing client engine %s" % (obj["client-engine"]))
+
+                if obj["service-ip"] is not None:
+                    log.info("Creating a message to send to the client engine (%s) with the service IP address information" % (obj["client-engine"]))
+
+                    user_object = {
+                        "svc": {
+                            "ip": obj["service-ip"],
+                            "ports": obj["ports"]
+                        }
+                    }
+
+                    msg = endpoints.create_roadblock_msg("follower", obj["client-engine"], "user-object", user_object)
+
+                    msg_file = tx_msgs_dir + "/service-ip-" + obj["server-engine"] + ".json"
+                    log.info("Writing follower service-ip message to '%s'" % (msg_file))
+                    with open(msg_file, "w", encoding = "ascii") as msg_file_fp:
+                        msg_file_fp.write(endpoints.dump_json(msg))
+                else:
+                    log.warning("A service IP address is not available for this client engine (%s) which likely indicates a prior error during process a message from it's matching server engine (%s)" % (obj["client-engine"], obj["server-engine"]))
+    else:
+        log.info("No IP address messages to send to clients")
+
+    log.info("Returning from test_start() for '%s' (<iteration>-<sample>-<attempt>)" % (test_id))
+    return
+
+def test_stop(test_id):
+    """
+    Perform endpoint responsibilties that must be completed after an iteration test sample
+
+    Args:
+        test_id (str): A string of the form "<iteration>:<sample>:<attempt>" used to identify the current test
+
+    Globals:
+        log: a logger instance
+        settings (dict): the one data structure to rule then all
+
+    Returns:
+        None
+    """
+    log.info("Running test_stop() for '%s' (<iteration>-<sample>-<attempt>)" % (test_id))
+
+    endpoint = settings["run-file"]["endpoints"][args.endpoint_index]
+
+    with endpoints.remote_connection(settings["run-file"]["endpoints"][args.endpoint_index]["host"],
+                                     settings["run-file"]["endpoints"][args.endpoint_index]["user"], validate = False) as con:
+        log.info("Deleting services for networking models")
+        for key in settings["networking"][test_id].keys():
+            log.info("Processing networking model: %s" % (key))
+
+            log.info("There are %d server engines to process for this networking mode (%s)" % (len(settings["networking"][test_id][key]), key))
+            for obj in settings["networking"][test_id][key]:
+                log.info("Processing server engine %s" % (obj["server-engine"]))
+
+                if len(obj["crds"]) == 0:
+                    log.info("There are no CRDs to process")
+                    continue
+
+                for crd in obj["crds"]:
+                    log.info("Processing %s CRD" % (crd["type"]))
+
+                    if not crd["created"]:
+                        log.info("This CRD was not created so it does not need to be deleted")
+                        continue
+
+                    cmd = "%s delete --filename -" % (settings["misc"]["k8s-bin"])
+                    result = endpoints.run_remote(con, cmd, debug = settings["misc"]["debug-output"], stdin = endpoints.dump_json(crd["crd"]))
+                    endpoints.log_result(result)
+                    if result.exited != 0:
+                        log.error("Failed to delete %s CRD" % (crd["type"]))
+                    else:
+                        log.info("Deleted %s CRD" % (crd["type"]))
+                        crd["deleted"] = True
+
+        service_status(con)
+
+    log.info("Returning from test_stop() for '%s' (<iteration>-<sample>-<attempt>)" % (test_id))
+    return
+
+def service_status(connection):
+    """
+    Get the status of network services on the cluster
+
+    Args:
+         connection (Fabric Connection): The connection to use to run the commands remotely
+
+    Globals:
+        log: a logger instance
+        settings (dict): the one data structure to rule then all
+
+    Returns:
+        None
+    """
+    endpoint = settings["run-file"]["endpoints"][args.endpoint_index]
+
+    log.info("Cluster/Namespace status:")
+    for subcmd in [ "get svc", "get endpoints" ]:
+        cmd = "%s %s --namespace %s --output wide" % (settings["misc"]["k8s-bin"], subcmd, endpoint["namespace"]["name"])
+        result = endpoints.run_remote(connection, cmd, debug = settings["misc"]["debug-output"])
+        endpoints.log_result(result)
+
+        cmd = "%s %s --namespace %s --output json" % (settings["misc"]["k8s-bin"], subcmd, endpoint["namespace"]["name"])
+        result = endpoints.run_remote(connection, cmd, debug = settings["misc"]["debug-output"])
+        endpoints.log_result(result)
+
+    return
+
 def main():
     """
     Main control block
@@ -1911,8 +2585,8 @@ def main():
             kube_callbacks = {
                 "engine-init": engine_init,
                 "collect-sysinfo": collect_sysinfo,
-                "test-start": None,
-                "test-stop": None,
+                "test-start": test_start,
+                "test-stop": test_stop,
                 "remote-cleanup": kube_cleanup
             }
             if early_abort and not "new-followers" in settings["engines"]:
