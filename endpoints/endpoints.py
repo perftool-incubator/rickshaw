@@ -1535,7 +1535,7 @@ def process_bench_roadblocks(callbacks = None, roadblock_id = None, endpoint_lab
             engine_init_msgs = None
             if callback in callbacks and callbacks[callback] is not None:
                 log.info("Calling endpoint specified callback for '%s'" % (callback))
-                engine_init_msgs = callbacks[callback]()
+                engine_init_msgs = callbacks[callback](test_id)
             else:
                 log.info("Calling endpoint did not specify a callback for '%s'" % (callback))
 

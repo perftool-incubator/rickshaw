@@ -1465,12 +1465,12 @@ def test_start(msgs_dir, test_id, tx_msgs_dir):
     log.info("Returning from test_start()")
     return
 
-def test_stop():
+def test_stop(test_id):
     """
     Perform endpoint responsibilties that must be completed after an iteration test sample
 
     Args:
-        None
+        test_id (str): A string of the form "<iteration>:<sample>:<attempt>" used to identify the current test
 
     Globals:
         log: a logger instance
