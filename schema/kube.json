@@ -50,6 +50,11 @@
             "type": "string",
             "minLength": 1
         },
+	"metallb-pool": {
+	    "description": "This is a name of a MetalLB address pool to use for providing ingress load balancing for external clients",
+	    "type": "string",
+	    "minLength": 1
+	},
         "namespace": {
             "description": "This object is used to configure the k8s namespace that will be used to create objects in. There are three different versions of this object to choose from.  NOTE:  If there is a collision in the namespace between two runs the 'newest' one will destroy all objects in the namespace to start with a clean slate.  This behavior is present to ensure that previously failed runs are properly cleaned up automatically.",
             "oneOf": [
