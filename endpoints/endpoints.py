@@ -81,7 +81,7 @@ def log_result(result, level = None):
         log.error("Unknown level '%s' specified" % (level))
         return log.error(msg, stacklevel = 2)
 
-def run_remote(connection, command, validate = False, debug = False, stdin = None):
+def run_remote(connection, command, validate = False, debug = False, stdin = None, env = None):
     """
     Run a command on a remote server using an existing Fabric connection
 
@@ -91,6 +91,7 @@ def run_remote(connection, command, validate = False, debug = False, stdin = Non
         validate (bool): Is the function being called from validation mode (which means that logging cannot be used)
         debug (bool): Is debug output enabled during validation mode
         stdin (str): A string to supply as STDIN to the command being run
+        env (dict): A dictionary of environment variables to supply to the remote command being executed
 
     Globals:
         log: a logger instance
@@ -98,7 +99,7 @@ def run_remote(connection, command, validate = False, debug = False, stdin = Non
     Returns:
         Fabric run result (obj)
     """
-    debug_msg = "on remote '%s' as '%s' running command '%s' with input '%s'" % (connection.host, connection.user, command, stdin)
+    debug_msg = "on remote '%s' as '%s' running command '%s' with input '%s' and environment variables '%s'" % (connection.host, connection.user, command, stdin, env)
     if validate:
         if debug:
             validate_debug(debug_msg)
@@ -107,7 +108,7 @@ def run_remote(connection, command, validate = False, debug = False, stdin = Non
 
     input_stream = None
     if stdin is not None:
-        result = connection.run("mktemp", hide = True)
+        result = connection.run("mktemp", hide = True, env = env)
         remote_temp_filename = None
         if result.exited == 0:
             remote_temp_filename = result.stdout.strip()
@@ -154,7 +155,7 @@ def run_remote(connection, command, validate = False, debug = False, stdin = Non
         else:
             log.debug(msg)
 
-        real_result = connection.run(command, hide = True, warn = True)
+        real_result = connection.run(command, hide = True, warn = True, env = env)
 
         msg = "Removing local temporary file: %s" % (local_temp_filename)
         if validate:
@@ -169,7 +170,7 @@ def run_remote(connection, command, validate = False, debug = False, stdin = Non
             validate_debug(msg)
         else:
             log.debug(msg)
-        result = connection.run("rm -v %s" % (remote_temp_filename), hide = True)
+        result = connection.run("rm -v %s" % (remote_temp_filename), hide = True, env = env)
         if result.exited != 0:
             log_result(result)
             msg = "Failed to remove remote temporary file: %s" % (remote_temp_filename)
@@ -180,9 +181,9 @@ def run_remote(connection, command, validate = False, debug = False, stdin = Non
 
         return real_result
     else:
-        return connection.run(command, hide = True, warn = True)
+        return connection.run(command, hide = True, warn = True, env = env)
 
-def run_local(command, validate = False, debug = False):
+def run_local(command, validate = False, debug = False, env = None):
     """
     Run a command on the local machine using Invoke
 
@@ -190,6 +191,7 @@ def run_local(command, validate = False, debug = False):
         command (str): The command to run on the local system
         validate (bool): Is the function being called from validation mode (which means that logging cannot be used)
         debug (bool): Is debug output enabled during validation mode
+        env (dict): A dictionary of environment variables to supply to the remote command being executed
 
     Globals:
         log: a logger instance
@@ -197,14 +199,14 @@ def run_local(command, validate = False, debug = False):
     Returns:
         an Invoke run result
     """
-    debug_msg = "running local command '%s'" % (command)
+    debug_msg = "running local command '%s' with environment variables '%s'" % (command, env)
     if validate:
         if debug:
             validate_debug(debug_msg)
     else:
         log.debug(debug_msg, stacklevel = 2)
 
-    return run(command, hide = True, warn = True)
+    return run(command, hide = True, warn = True, env = env)
 
 def get_result_log_level(result):
     """
