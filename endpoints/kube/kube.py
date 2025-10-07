@@ -244,13 +244,14 @@ def normalize_endpoint_settings(endpoint, rickshaw):
 
     return endpoint
 
-def find_k8s_bin(validate, connection):
+def find_k8s_bin(validate, connection, remote_env):
     """
     Figure out what the K8S control binary is for this environment
 
     Args:
         validate (bool): Is the caller the validate function
         connection (Fabric): The Fabric connection to use to run commands
+        remote_env (dict): a dictionary of environment variables to present on the remote side
 
     Globals:
         args (namespace): the script's CLI parameters
@@ -263,15 +264,15 @@ def find_k8s_bin(validate, connection):
     if args.log_level == "debug":
         debug_output = True
 
-    result = endpoints.run_remote(connection, "oc", validate = validate, debug = debug_output)
+    result = endpoints.run_remote(connection, "oc", validate = validate, debug = debug_output, env = remote_env)
     if result.exited == 0:
         return "oc"
 
-    result = endpoints.run_remote(connection, "kubectl", validate = validate, debug = debug_output)
+    result = endpoints.run_remote(connection, "kubectl", validate = validate, debug = debug_output, env = remote_env)
     if result.exited == 0:
         return "kubectl"
 
-    result = endpoints.run_remote(connection, "microk8s kubectl", validate = validate, debug = debug_output)
+    result = endpoints.run_remote(connection, "microk8s kubectl", validate = validate, debug = debug_output, env = remote_env)
     if result.exited == 0:
         return "microk8s kubectl"
 
@@ -375,19 +376,24 @@ def validate():
             result = endpoints.run_remote(con, "uptime", validate = True, debug = debug_output)
             endpoints.validate_comment("remote login verification for %s with user %s: rc=%d and stdout=[%s] and stderr=[%s]" % (endpoint_settings["host"], endpoint_settings["user"], result.exited, result.stdout.rstrip('\n'), result.stderr.rstrip('\n')))
 
-            k8s_bin = find_k8s_bin(True, con)
+            remote_env = {}
+            if "kubeconfig" in endpoint_settings:
+                endpoints.validate_comment("found kubeconfig user override with value '%s'" % (endpoint_settings["kubeconfig"]))
+                remote_env["KUBECONFIG"] = endpoint_settings["kubeconfig"]
+
+            k8s_bin = find_k8s_bin(True, con, remote_env)
             if k8s_bin is None:
                 endpoints.validate_error("Failed to determine the k8s control binary")
             else:
                 endpoints.validate_comment("determined k8s control binary is '%s'" % (k8s_bin))
 
-                result = endpoints.run_remote(con, k8s_bin + " version", validate = True, debug = debug_output)
+                result = endpoints.run_remote(con, k8s_bin + " version", validate = True, debug = debug_output, env = remote_env)
                 result.stdout = re.sub(r'\n', ' | ', result.stdout)
                 endpoints.validate_comment("remote '%s' presence check for %s: rc=%d stdout=[%s] and stderr=[%s]" % (k8s_bin, endpoint_settings["host"], result.exited, result.stdout.rstrip(' | '), result.stderr.rstrip('\n')))
                 if result.exited != 0:
                     endpoints.validate_error("Failed to run '%s version' on endpoint host '%s' as user '%s'" % (k8s_bin, endpoint_settings["host"], endpoint_settings["user"]))
 
-                result = endpoints.run_remote(con, k8s_bin + " get nodes", validate = True, debug = debug_output)
+                result = endpoints.run_remote(con, k8s_bin + " get nodes", validate = True, debug = debug_output, env = remote_env)
                 result.stdout = re.sub(r'\n', ' | ', result.stdout)
                 endpoints.validate_comment("remote '%s' functional check for %s: rc=%d stdout=[%s] and stderr=[%s]" % (k8s_bin, endpoint_settings["host"], result.exited, result.stdout.rstrip(' | '), result.stderr.rstrip('\n')))
                 if result.exited != 0:
@@ -429,9 +435,14 @@ def check_base_requirements():
     else:
         log.info("client-1 bench command directory found [%s]" % (path))
 
+    settings["misc"]["remote-env"] = {}
+    if "kubeconfig" in settings["run-file"]["endpoints"][args.endpoint_index]:
+        log.info("found kubeconfig user override with value '%s'" % (settings["run-file"]["endpoints"][args.endpoint_index]["kubeconfig"]))
+        settings["misc"]["remote-env"]["KUBECONFIG"] = settings["run-file"]["endpoints"][args.endpoint_index]["kubeconfig"]
+
     with endpoints.remote_connection(settings["run-file"]["endpoints"][args.endpoint_index]["host"],
                                      settings["run-file"]["endpoints"][args.endpoint_index]["user"], validate = False) as con:
-        settings["misc"]["k8s-bin"] = find_k8s_bin(False, con)
+        settings["misc"]["k8s-bin"] = find_k8s_bin(False, con, settings["misc"]["remote-env"])
         if settings["misc"]["k8s-bin"] is None:
             return 1
         else:
@@ -462,7 +473,7 @@ def clean_k8s_namespace(connection):
     for component in [ "pods", "services" ]:
         log.info("Cleaning component: %s" % (component))
         cmd = "%s delete --namespace %s %s --all" % (settings["misc"]["k8s-bin"], endpoint["namespace"]["name"], component)
-        result = endpoints.run_remote(connection, cmd, debug = settings["misc"]["debug-output"])
+        result = endpoints.run_remote(connection, cmd, debug = settings["misc"]["debug-output"], env = settings["misc"]["remote-env"])
         endpoints.log_result(result)
         if result.exited != 0:
             component_errors = True
@@ -497,7 +508,7 @@ def init_k8s_namespace():
                                      settings["run-file"]["endpoints"][args.endpoint_index]["user"]) as con:
         namespace_exists = False
         cmd = "%s get namespace %s" % (settings["misc"]["k8s-bin"], endpoint["namespace"]["name"])
-        result = endpoints.run_remote(con, cmd, debug = settings["misc"]["debug-output"])
+        result = endpoints.run_remote(con, cmd, debug = settings["misc"]["debug-output"], env = settings["misc"]["remote-env"])
         endpoints.log_result(result, level = "info")
         if result.exited == 0:
             namespace_exists = True
@@ -509,7 +520,7 @@ def init_k8s_namespace():
         else:
             log.info("No namespace '%s' found, creating it" % (endpoint["namespace"]["name"]))
             cmd = "%s create namespace %s" % (settings["misc"]["k8s-bin"], endpoint["namespace"]["name"])
-            result = endpoints.run_remote(con, cmd, debug = settings["misc"]["debug-output"])
+            result = endpoints.run_remote(con, cmd, debug = settings["misc"]["debug-output"], env = settings["misc"]["remote-env"])
             endpoints.log_result(result)
             if result.exited != 0:
                 return 1
@@ -540,13 +551,13 @@ def get_k8s_config():
     with endpoints.remote_connection(settings["run-file"]["endpoints"][args.endpoint_index]["host"],
                                      settings["run-file"]["endpoints"][args.endpoint_index]["user"]) as con:
         cmd = "%s get nodes" % (settings["misc"]["k8s-bin"])
-        result = endpoints.run_remote(con, cmd, debug = settings["misc"]["debug-output"])
+        result = endpoints.run_remote(con, cmd, debug = settings["misc"]["debug-output"], env = settings["misc"]["remote-env"])
         endpoints.log_result(result)
         if result.exited != 0:
             return 1
 
         cmd = "%s get nodes --output json" % (settings["misc"]["k8s-bin"])
-        result = endpoints.run_remote(con, cmd, debug = settings["misc"]["debug-output"])
+        result = endpoints.run_remote(con, cmd, debug = settings["misc"]["debug-output"], env = settings["misc"]["remote-env"])
         endpoints.log_result(result)
         if result.exited == 0:
             settings["misc"]["k8s"]["nodes"]["cluster"] = json.loads(result.stdout)
@@ -1035,7 +1046,7 @@ def verify_pods_running(connection, pods, pod_details, abort_event):
 
         log.info("Collecting pod status for namespace '%s'" % (endpoint["namespace"]["name"]))
         cmd = "%s get pods --namespace %s --output json" % (settings["misc"]["k8s-bin"], endpoint["namespace"]["name"])
-        result = endpoints.run_remote(connection, cmd, debug = settings["misc"]["debug-output"])
+        result = endpoints.run_remote(connection, cmd, debug = settings["misc"]["debug-output"], env = settings["misc"]["remote-env"])
         endpoints.log_result(result)
         if result.exited != 0:
             return None
@@ -1213,7 +1224,7 @@ def create_cs_pods(cpu_partitioning = None, abort_event = None):
             engine_name = "%s-%d" % (engine["role"], engine["id"])
             log.info("Validating CRD for '%s'" % (engine_name))
             cmd = "%s create --filename - --dry-run=server --validate=strict" % (settings["misc"]["k8s-bin"])
-            result = endpoints.run_remote(con, cmd, debug = settings["misc"]["debug-output"], stdin = endpoints.dump_json(engine["crd"]))
+            result = endpoints.run_remote(con, cmd, debug = settings["misc"]["debug-output"], stdin = endpoints.dump_json(engine["crd"]), env = settings["misc"]["remote-env"])
             endpoints.log_result(result)
             if result.exited != 0:
                 log.error("Did not validate CRD for '%s'" % (engine_name))
@@ -1237,7 +1248,7 @@ def create_cs_pods(cpu_partitioning = None, abort_event = None):
             engine_name = "%s-%d" % (engine["role"], engine["id"])
             log.info("Creating CRD for '%s'" % (engine_name))
             cmd = "%s create --filename -" % (settings["misc"]["k8s-bin"])
-            result = endpoints.run_remote(con, cmd, debug = settings["misc"]["debug-output"], stdin = endpoints.dump_json(engine["crd"]))
+            result = endpoints.run_remote(con, cmd, debug = settings["misc"]["debug-output"], stdin = endpoints.dump_json(engine["crd"]), env = settings["misc"]["remote-env"])
             endpoints.log_result(result)
             if result.exited != 0:
                 log.error("Did not create CRD for '%s'" % (engine_name))
@@ -1419,7 +1430,7 @@ def create_tools_pods(abort_event):
             pod_name = "%s-%d" % (pod["role"], pod["id"])
             log.info("Validating CRD for pod '%s'" % (pod_name))
             cmd = "%s create --filename - --dry-run=server --validate=strict" % (settings["misc"]["k8s-bin"])
-            result = endpoints.run_remote(con, cmd, debug = settings["misc"]["debug-output"], stdin = endpoints.dump_json(pod["crd"]))
+            result = endpoints.run_remote(con, cmd, debug = settings["misc"]["debug-output"], stdin = endpoints.dump_json(pod["crd"]), env = settings["misc"]["remote-env"])
             endpoints.log_result(result)
             if result.exited != 0:
                 log.error("Did not validate CRD for pod '%s'" % (pod_name))
@@ -1443,7 +1454,7 @@ def create_tools_pods(abort_event):
             pod_name = "%s-%d" % (pod["role"], pod["id"])
             log.info("Creating CRD for pod '%s'" % (pod_name))
             cmd = "%s create --filename -" % (settings["misc"]["k8s-bin"])
-            result = endpoints.run_remote(con, cmd, debug = settings["misc"]["debug-output"], stdin = endpoints.dump_json(pod["crd"]))
+            result = endpoints.run_remote(con, cmd, debug = settings["misc"]["debug-output"], stdin = endpoints.dump_json(pod["crd"]), env = settings["misc"]["remote-env"])
             endpoints.log_result(result)
             if result.exited != 0:
                 log.error("Did not create CRD for pod '%s'" % (pod_name))
@@ -1519,7 +1530,7 @@ def kube_cleanup():
 
         log.info("Current K8S namespace '%s' status" % (endpoint["namespace"]["name"]))
         cmd = "%s get all --namespace %s --output wide" % (settings["misc"]["k8s-bin"], endpoint["namespace"]["name"])
-        result = endpoints.run_remote(con, cmd, debug = settings["misc"]["debug-output"])
+        result = endpoints.run_remote(con, cmd, debug = settings["misc"]["debug-output"], env = settings["misc"]["remote-env"])
         endpoints.log_result(result)
         if result.exited != 0:
             log.error(cleanup_error)
@@ -1539,7 +1550,7 @@ def kube_cleanup():
                                                                        pod,
                                                                        endpoint["namespace"]["name"],
                                                                        engine)
-                result = endpoints.run_remote(con, cmd, debug = settings["misc"]["debug-output"])
+                result = endpoints.run_remote(con, cmd, debug = settings["misc"]["debug-output"], env = settings["misc"]["remote-env"])
                 if result.exited == 0:
                     log_file = "%s/%s.txt.xz" % (settings["dirs"]["local"]["engine-logs"], engine)
                     with lzma.open(log_file, "wt", encoding="ascii") as lfh:
@@ -1559,7 +1570,7 @@ def kube_cleanup():
             else:
                 log.info("Deleting namepsace: %s" % (endpoint["namespace"]["name"]))
                 cmd = "%s delete namespace %s" % (settings["misc"]["k8s-bin"], endpoint["namespace"]["name"])
-                result = endpoints.run_remote(con, cmd, debug = settings["misc"]["debug-output"])
+                result = endpoints.run_remote(con, cmd, debug = settings["misc"]["debug-output"], env = settings["misc"]["remote-env"])
                 endpoints.log_result(result)
                 if result.exited != 0:
                     log.error("Failed to delete namespace: %s" % (endpoint["namespace"]["name"]))
@@ -1654,7 +1665,7 @@ def collect_sysinfo():
     with endpoints.remote_connection(settings["run-file"]["endpoints"][args.endpoint_index]["host"],
                                      settings["run-file"]["endpoints"][args.endpoint_index]["user"], validate = False) as con:
         cmd = "%s cluster-info" % (settings["misc"]["k8s-bin"])
-        result = endpoints.run_remote(con, cmd, debug = settings["misc"]["debug-output"])
+        result = endpoints.run_remote(con, cmd, debug = settings["misc"]["debug-output"], env = settings["misc"]["remote-env"])
         if result.exited != 0:
             log.error("Failed to collect basic cluster-info")
             endpoints.log_result(result)
@@ -1665,7 +1676,7 @@ def collect_sysinfo():
             log.info("Wrote basic cluster-info to '%s'" % (out_file))
 
         cmd = "%s cluster-info dump" % (settings["misc"]["k8s-bin"])
-        result = endpoints.run_remote(con, cmd, debug = settings["misc"]["debug-output"])
+        result = endpoints.run_remote(con, cmd, debug = settings["misc"]["debug-output"], env = settings["misc"]["remote-env"])
         if result.exited != 0:
             log.error("Failed to collect cluster-info dump")
             endpoints.log_result(result)
@@ -1686,14 +1697,14 @@ def collect_sysinfo():
         if collect_must_gather:
             log.info("Going to collect OpenShift must-gather as requested")
 
-            result = endpoints.run_remote(con, "mktemp --directory", debug = settings["misc"]["debug-output"])
+            result = endpoints.run_remote(con, "mktemp --directory", debug = settings["misc"]["debug-output"], env = settings["misc"]["remote-env"])
             if result.exited == 0:
                 remote_temp_directory = result.stdout.strip()
                 log.info("Created remote temporary directory '%s'" % (remote_temp_directory))
 
                 log.info("Running OpenShift must-gather and logging to remote directory '%s'" % (remote_temp_directory))
                 cmd = "%s adm must-gather --dest-dir=%s" % (settings["misc"]["k8s-bin"], remote_temp_directory)
-                result = endpoints.run_remote(con, cmd, debug = settings["misc"]["debug-output"])
+                result = endpoints.run_remote(con, cmd, debug = settings["misc"]["debug-output"], env = settings["misc"]["remote-env"])
                 out_file = settings["dirs"]["local"]["sysinfo"] + "/must-gather.txt.xz"
                 log.info("Logging OpenShift must-gather output to '%s'" % (out_file))
                 with lzma.open(out_file, "wt", encoding="ascii") as ofh:
@@ -1706,7 +1717,7 @@ def collect_sysinfo():
                 else:
                     log.info("OpenShift must-gather completed without errors")
 
-                result = endpoints.run_remote(con, "mktemp", debug = settings["misc"]["debug-output"])
+                result = endpoints.run_remote(con, "mktemp", debug = settings["misc"]["debug-output"], env = settings["misc"]["remote-env"])
                 if result.exited == 0:
                     remote_temp_file = result.stdout.strip()
 
@@ -1715,7 +1726,7 @@ def collect_sysinfo():
                     # is perceived to be maximum compatibility with
                     # what is available on the remote side
                     cmd = "tar --create --gzip --directory %s --file %s ." % (remote_temp_directory, remote_temp_file)
-                    result = endpoints.run_remote(con, cmd, debug = settings["misc"]["debug-output"])
+                    result = endpoints.run_remote(con, cmd, debug = settings["misc"]["debug-output"], env = settings["misc"]["remote-env"])
                     if result.exited != 0:
                         log.error("Failed to create remote archive")
                         endpoints.log_result(result)
@@ -1741,7 +1752,7 @@ def collect_sysinfo():
 
                     log.info("Deleting remote temporary file '%s'" % (remote_temp_file))
                     cmd = "rm %s" % (remote_temp_file)
-                    result = endpoints.run_remote(con, cmd, debug = settings["misc"]["debug-output"])
+                    result = endpoints.run_remote(con, cmd, debug = settings["misc"]["debug-output"], env = settings["misc"]["remote-env"])
                     if result.exited != 0:
                         log.error("Failed to delete remote temporary file '%s'" % (remote_temp_file))
                         endpoints.log_result(result)
@@ -1753,7 +1764,7 @@ def collect_sysinfo():
 
                 log.info("Delete remote temporary directory '%s'" % (remote_temp_directory))
                 cmd = "rm --recursive %s" % (remote_temp_directory)
-                result = endpoints.run_remote(con, cmd, debug = settings["misc"]["debug-output"])
+                result = endpoints.run_remote(con, cmd, debug = settings["misc"]["debug-output"], env = settings["misc"]["remote-env"])
                 if result.exited != 0:
                     log.error("Failed to delete remote temporary directory '%s'" % (remote_temp_directory))
                     endpoints.log_result(result)
@@ -2222,7 +2233,7 @@ def test_start(msgs_dir, test_id, tx_msgs_dir):
                     log.info("Processing %s CRD" % (crd["type"]))
 
                     cmd = "%s create --filename - --dry-run=server --validate=strict" % (settings["misc"]["k8s-bin"])
-                    result = endpoints.run_remote(con, cmd, debug = settings["misc"]["debug-output"], stdin = endpoints.dump_json(crd["crd"]))
+                    result = endpoints.run_remote(con, cmd, debug = settings["misc"]["debug-output"], stdin = endpoints.dump_json(crd["crd"]), env = settings["misc"]["remote-env"])
                     endpoints.log_result(result)
                     if result.exited != 0:
                         log.error("Failed to validate %s CRD" % (crd["type"]))
@@ -2255,7 +2266,7 @@ def test_start(msgs_dir, test_id, tx_msgs_dir):
                         log.info("Processing %s CRD" % (crd["type"]))
 
                         cmd = "%s create --filename -" % (settings["misc"]["k8s-bin"])
-                        result = endpoints.run_remote(con, cmd, debug = settings["misc"]["debug-output"], stdin = endpoints.dump_json(crd["crd"]))
+                        result = endpoints.run_remote(con, cmd, debug = settings["misc"]["debug-output"], stdin = endpoints.dump_json(crd["crd"]), env = settings["misc"]["remote-env"])
                         endpoints.log_result(result)
                         if result.exited != 0:
                             log.error("Failed to create %s CRD" % (crd["type"]))
@@ -2293,7 +2304,7 @@ def test_start(msgs_dir, test_id, tx_msgs_dir):
                         log.info("Getting IP address for a service")
 
                         cmd = "%s get svc/%s --namespace %s --output json" % (settings["misc"]["k8s-bin"], obj["crds"][0]["crd"]["metadata"]["name"], endpoint["namespace"]["name"])
-                        result = endpoints.run_remote(con, cmd, debug = settings["misc"]["debug-output"])
+                        result = endpoints.run_remote(con, cmd, debug = settings["misc"]["debug-output"], env = settings["misc"]["remote-env"])
                         endpoints.log_result(result)
                         if result.exited != 0:
                             log.error("Failed to retrieve service information")
@@ -2314,7 +2325,7 @@ def test_start(msgs_dir, test_id, tx_msgs_dir):
                         log.info("Getting IP address for a ingress-lb")
 
                         cmd = "%s get svc/%s --namespace %s --output json" % (settings["misc"]["k8s-bin"], obj["crds"][0]["crd"]["metadata"]["name"], endpoint["namespace"]["name"])
-                        result = endpoints.run_remote(con, cmd, debug = settings["misc"]["debug-output"])
+                        result = endpoints.run_remote(con, cmd, debug = settings["misc"]["debug-output"], env = settings["misc"]["remote-env"])
                         endpoints.log_result(result)
                         if result.exited != 0:
                             log.error("Failed to retrieve service information")
@@ -2419,7 +2430,7 @@ def test_stop(test_id):
                         continue
 
                     cmd = "%s delete --filename -" % (settings["misc"]["k8s-bin"])
-                    result = endpoints.run_remote(con, cmd, debug = settings["misc"]["debug-output"], stdin = endpoints.dump_json(crd["crd"]))
+                    result = endpoints.run_remote(con, cmd, debug = settings["misc"]["debug-output"], stdin = endpoints.dump_json(crd["crd"]), env = settings["misc"]["remote-env"])
                     endpoints.log_result(result)
                     if result.exited != 0:
                         log.error("Failed to delete %s CRD" % (crd["type"]))
@@ -2451,11 +2462,11 @@ def service_status(connection):
     log.info("Cluster/Namespace status:")
     for subcmd in [ "get svc", "get endpoints" ]:
         cmd = "%s %s --namespace %s --output wide" % (settings["misc"]["k8s-bin"], subcmd, endpoint["namespace"]["name"])
-        result = endpoints.run_remote(connection, cmd, debug = settings["misc"]["debug-output"])
+        result = endpoints.run_remote(connection, cmd, debug = settings["misc"]["debug-output"], env = settings["misc"]["remote-env"])
         endpoints.log_result(result)
 
         cmd = "%s %s --namespace %s --output json" % (settings["misc"]["k8s-bin"], subcmd, endpoint["namespace"]["name"])
-        result = endpoints.run_remote(connection, cmd, debug = settings["misc"]["debug-output"])
+        result = endpoints.run_remote(connection, cmd, debug = settings["misc"]["debug-output"], env = settings["misc"]["remote-env"])
         endpoints.log_result(result)
 
     return

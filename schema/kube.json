@@ -50,6 +50,11 @@
             "type": "string",
             "minLength": 1
         },
+        "kubeconfig": {
+            "description": "This is a optional path to use for overriding the default value for KUBECONFIG in the environment",
+            "type": "string",
+            "minLength": 1
+        },
 	"metallb-pool": {
 	    "description": "This is a name of a MetalLB address pool to use for providing ingress load balancing for external clients",
 	    "type": "string",
