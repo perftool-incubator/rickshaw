@@ -1067,6 +1067,10 @@ def verify_pods_running(connection, pods, pod_details, abort_event):
                 continue
 
             if pod_name in unverified_pods:
+                if not "containerStatuses" in pod["status"]:
+                    log.info("containerStatuses is not yet available for pod '%s'" % (pod_name))
+                    break
+
                 log.info("Checking status of pod '%s'" % (pod_name))
                 running_containers = []
                 valid_configuration = True
