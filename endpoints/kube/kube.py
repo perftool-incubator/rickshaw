@@ -122,7 +122,7 @@ def normalize_endpoint_settings(endpoint, rickshaw):
                 for key in cfg_block["settings"].keys():
                     endpoint["engines"]["defaults"]["settings"][key] = cfg_block["settings"][key]
                 if "verifications" in cfg_block:
-                    for key in cfg_block["verifications"].keys:
+                    for key in cfg_block["verifications"].keys():
                         endpoint["engines"]["defaults"]["verifications"][key] = cfg_block["verifications"][key]
     if not default_cfg_block_idx is None:
         del endpoint["config"][default_cfg_block_idx]
