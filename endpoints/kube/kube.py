@@ -53,6 +53,11 @@ endpoint_default_settings = {
     }
 }
 
+# this data structure is specifically created to be separate from
+# everything else so that will not be logged due to the nature of it's
+# contents (authorization tokens)
+image_pull_secret_crds = dict()
+
 endpoint_default_verifications = dict()
 
 def normalize_endpoint_settings(endpoint, rickshaw):
@@ -470,7 +475,7 @@ def clean_k8s_namespace(connection):
     log.info("Cleaning namespace '%s'" % (endpoint["namespace"]["name"]))
 
     component_errors = False
-    for component in [ "pods", "services" ]:
+    for component in [ "pods", "services", "secrets" ]:
         log.info("Cleaning component: %s" % (component))
         cmd = "%s delete --namespace %s %s --all" % (settings["misc"]["k8s-bin"], endpoint["namespace"]["name"], component)
         result = endpoints.run_remote(connection, cmd, debug = settings["misc"]["debug-output"], env = settings["misc"]["remote-env"])
@@ -669,6 +674,7 @@ def compile_object_configs():
 
 def create_pod_crd(role = None, id = None, node = None):
     """
+    Create a pod CRD
 
     Args:
         None
@@ -677,6 +683,7 @@ def create_pod_crd(role = None, id = None, node = None):
         args (namespace): the script's CLI parameters
         log: a logger instance
         settings (dict): the one data structure to rule them all
+        image_pull_secret_crds (dict): a data structure to hold image pull secret CRDs so that they are not logged
 
     Returns:
         crd, 0: success
@@ -848,6 +855,51 @@ def create_pod_crd(role = None, id = None, node = None):
             return crd, 1
         else:
             log.info("Found image '%s' for container '%s'" % (image, container_name))
+
+        if "::" in image:
+            # this image has a pull token that must be handled
+
+            fields = image.split("::")
+            image = fields[0]
+            token_file = fields[1]
+
+            log.info("Processing image pull secret '%s' for image '%s'" % (token_file, image))
+
+            if not "imagePullSecrets" in crd["spec"]:
+                crd["spec"]["imagePullSecrets"] = []
+
+            if not "pull-secrets" in settings["misc"]:
+                settings["misc"]["pull-secrets"] = {}
+
+            secret_name = endpoints.sha256_hash(token_file)
+            log.info("Image pull secret is named '%s'" % (secret_name))
+
+            if not secret_name in settings["misc"]["pull-secrets"]:
+                log.info("Creating CRD for image pull secret named '%s'" % (secret_name))
+
+                settings["misc"]["pull-secrets"][secret_name] = {
+                    "validated": False,
+                    "created": False,
+                    "failed": False
+                }
+
+                # the actual pull secret CRDs are stored outside of
+                # the settings data structure to prevent the secret
+                # itself from being logged
+                image_pull_secret_crds[secret_name] = create_pull_secret_crd(secret_name, token_file)
+            else:
+                log.info("CRD for image pull secret named '%s' already exists" % (secret_name))
+
+            add_secret = True
+            for secret in crd["spec"]["imagePullSecrets"]:
+                if secret["name"] == secret_name:
+                    add_secret = False
+
+            if add_secret:
+                log.info("Adding image pull secret '%s' to pod spec" % (secret_name))
+                crd["spec"]["imagePullSecrets"].append({ "name": secret_name })
+            else:
+                log.info("Image pull secret '%s' already added to pod spec" % (secret_name))
 
         container = {
             "name": container_name,
@@ -1160,6 +1212,7 @@ def create_cs_pods(cpu_partitioning = None, abort_event = None):
         args (namespace): the script's CLI parameters
         log: a logger instance
         settings (dict): the one data structure to rule them all
+        image_pull_secret_crds (dict): a data structure to hold image pull secret CRDs so that they are not logged
 
     Returns:
         0
@@ -1221,6 +1274,23 @@ def create_cs_pods(cpu_partitioning = None, abort_event = None):
 
     with endpoints.remote_connection(settings["run-file"]["endpoints"][args.endpoint_index]["host"],
                                      settings["run-file"]["endpoints"][args.endpoint_index]["user"], validate = False) as con:
+        if "pull-secrets" in settings["misc"] and len(settings["misc"]["pull-secrets"]):
+            log.info("Validating image pull secret CRDs")
+            for secret in settings["misc"]["pull-secrets"].keys():
+                if settings["misc"]["pull-secrets"][secret]["failed"] or settings["misc"]["pull-secrets"][secret]["validated"]:
+                    continue
+
+                log.info("Validating image pull secret CRD for '%s'" % (secret))
+                cmd = "%s create --filename - --dry-run=server --validate=strict" % (settings["misc"]["k8s-bin"])
+                result = endpoints.run_remote(con, cmd, debug = settings["misc"]["debug-output"], stdin = endpoints.dump_json(image_pull_secret_crds[secret]), env = settings["misc"]["remote-env"])
+                endpoints.log_result(result)
+                if result.exited != 0:
+                    log.error("Did not validate image pull secret CRD for '%s'" % (secret))
+                    settings["misc"]["pull-secrets"][secret]["failed"] = True
+                else:
+                    log.info("Validated image pull secret CRD for '%s'" % (secret))
+                    settings["misc"]["pull-secrets"][secret]["validated"] = True
+
         log.info("Validating CRDs")
         invalid_crds = []
         valid_crds = []
@@ -1243,6 +1313,23 @@ def create_cs_pods(cpu_partitioning = None, abort_event = None):
         if len(invalid_crds) > 0:
             log.error("Failed to validate the CRDs for these %d engines: %s" % (len(invalid_crds), invalid_crds))
             return 1
+
+        if "pull-secrets" in settings["misc"] and len(settings["misc"]["pull-secrets"]):
+            log.info("Creating image pull secret CRDs")
+            for secret in settings["misc"]["pull-secrets"].keys():
+                if settings["misc"]["pull-secrets"][secret]["failed"] or settings["misc"]["pull-secrets"][secret]["created"]:
+                    continue
+
+                log.info("Creating image pull secret CRD for '%s'" % (secret))
+                cmd = "%s create --filename -" % (settings["misc"]["k8s-bin"])
+                result = endpoints.run_remote(con, cmd, debug = settings["misc"]["debug-output"], stdin = endpoints.dump_json(image_pull_secret_crds[secret]), env = settings["misc"]["remote-env"])
+                endpoints.log_result(result)
+                if result.exited != 0:
+                    log.error("Did not create image pull secret CRD for '%s'" % (secret))
+                    settings["misc"]["pull-secrets"][secret]["failed"] = True
+                else:
+                    log.info("Created image pull secret CRD for '%s'" % (secret))
+                    settings["misc"]["pull-secrets"][secret]["created"] = True
 
         log.info("Creating CRDs")
         failed_crds = []
@@ -1315,6 +1402,7 @@ def create_tools_pods(abort_event):
         args (namespace): the script's CLI parameters
         log: a logger instance
         settings (dict): the one data structure to rule them all
+        image_pull_secret_crds (dict): a data structure to hold image pull secret CRDs so that they are not logged
 
     Returns:
         0
@@ -1427,6 +1515,23 @@ def create_tools_pods(abort_event):
 
     with endpoints.remote_connection(settings["run-file"]["endpoints"][args.endpoint_index]["host"],
                                      settings["run-file"]["endpoints"][args.endpoint_index]["user"], validate = False) as con:
+        if "pull-secrets" in settings["misc"] and len(settings["misc"]["pull-secrets"]):
+            log.info("Validating image pull secret CRDs")
+            for secret in settings["misc"]["pull-secrets"].keys():
+                if settings["misc"]["pull-secrets"][secret]["failed"] or settings["misc"]["pull-secrets"][secret]["validated"]:
+                    continue
+
+                log.info("Validating image pull secret CRD for '%s'" % (secret))
+                cmd = "%s create --filename - --dry-run=server --validate=strict" % (settings["misc"]["k8s-bin"])
+                result = endpoints.run_remote(con, cmd, debug = settings["misc"]["debug-output"], stdin = endpoints.dump_json(image_pull_secret_crds[secret]), env = settings["misc"]["remote-env"])
+                endpoints.log_result(result)
+                if result.exited != 0:
+                    log.error("Did not validate image pull secret CRD for '%s'" % (secret))
+                    settings["misc"]["pull-secrets"][secret]["failed"] = True
+                else:
+                    log.info("Validated image pull secret CRD for '%s'" % (secret))
+                    settings["misc"]["pull-secrets"][secret]["validated"] = True
+
         log.info("Validating CRDs")
         invalid_crds = []
         valid_crds = []
@@ -1449,6 +1554,23 @@ def create_tools_pods(abort_event):
         if len(invalid_crds) > 0:
             log.error("Failed to validate the CRDs for these %d pods: %s" % (len(invalid_crds), invalid_crds))
             return 1
+
+        if "pull-secrets" in settings["misc"] and len(settings["misc"]["pull-secrets"]):
+            log.info("Creating image pull secret CRDs")
+            for secret in settings["misc"]["pull-secrets"].keys():
+                if settings["misc"]["pull-secrets"][secret]["failed"] or settings["misc"]["pull-secrets"][secret]["created"]:
+                    continue
+
+                log.info("Creating image pull secret CRD for '%s'" % (secret))
+                cmd = "%s create --filename -" % (settings["misc"]["k8s-bin"])
+                result = endpoints.run_remote(con, cmd, debug = settings["misc"]["debug-output"], stdin = endpoints.dump_json(image_pull_secret_crds[secret]), env = settings["misc"]["remote-env"])
+                endpoints.log_result(result)
+                if result.exited != 0:
+                    log.error("Did not create image pull secret CRD for '%s'" % (secret))
+                    settings["misc"]["pull-secrets"][secret]["failed"] = True
+                else:
+                    log.info("Created image pull secret CRD for '%s'" % (secret))
+                    settings["misc"]["pull-secrets"][secret]["created"] = True
 
         log.info("Creating CRDs")
         failed_crds = []
@@ -2474,6 +2596,47 @@ def service_status(connection):
         endpoints.log_result(result)
 
     return
+
+def create_pull_secret_crd(name, token_file):
+    """
+    Create a pull secret CRD from a JSON token authorization file
+
+    Args:
+        name (str): the name to use for the pull secret
+        token_file (str): the path to the token file to use for the secret
+
+    Globals:
+
+    Returns:
+        crd (dict): the final CRD that was built
+    """
+    log.info("Building a image pull secret CRD called '%s' for '%s'" % (name, token_file))
+
+    crd = {
+        "apiVersion": "v1",
+        "kind": "Secret",
+        "metadata": {
+            "name": name,
+            "namespace": settings["run-file"]["endpoints"][args.endpoint_index]["namespace"]["name"]
+        },
+        "type": "kubernetes.io/dockerconfigjson",
+        "data": {
+            ".dockerconfigjson": None
+        }
+    }
+
+    # the CRD is intentionally printed prior to adding the token so
+    # that it does not end up in the logs for security reasons
+    log.info("Created image pull secret CRD:\n%s" % (endpoints.dump_json(crd)))
+
+    token = ""
+    with open(token_file, "r", encoding = "ascii") as fh:
+        for line in fh:
+            token += line
+
+    crd["data"][".dockerconfigjson"] = endpoints.base64_encode(token)
+
+    return crd
 
 def main():
     """
