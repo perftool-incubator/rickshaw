@@ -3,9 +3,11 @@ Module with common code for use by all endpoints written in Python
 """
 
 import argparse
+import base64
 import calendar
 from fabric import Connection
 from invoke import run
+import hashlib
 import json
 import logging
 import os
@@ -2085,3 +2087,41 @@ def get_profiler_userenv(settings, id):
         log.error("Could not find profiler %s in image-map" % (profiler_name))
 
     return None
+
+def base64_encode(string):
+    """
+    Convert a string to base64 encoding
+
+    Args:
+        string (str): the input string to convert
+
+    Globals:
+        None
+
+    Returns:
+        b64 (str): the base64 encoded string
+    """
+    str_bytes = string.encode("utf-8")
+    b64_bytes = base64.b64encode(str_bytes)
+    b64_string = b64_bytes.decode("utf-8")
+
+    return b64_string
+
+def sha256_hash(string):
+    """
+    Convert a string to a sha256 hash
+
+    Args:
+        string (str): the input string to convert
+
+    Globals:
+        None
+
+    Returns:
+        sha256_string (str): the sha256 hash string
+    """
+    str_bytes = string.encode("utf-8")
+    sha256_obj = hashlib.sha256(str_bytes)
+    sha256_string = sha256_obj.hexdigest()
+
+    return sha256_string
