@@ -2069,9 +2069,14 @@ def remote_image_manager(thread_name, remote_name, connection, image_max_cache_s
     image_expiration = endpoints.image_expiration_gmepoch()
     thread_logger(thread_name, "Images evaludated by their expiration data will be considered expired if it is before %d" % (image_expiration), remote_name = remote_name, log_prefix = log_prefix)
 
-    expiration_weeks = int(settings["rickshaw"]["quay"]["image-expiration"].rstrip("w"))
-    image_created_expiration = endpoints.image_created_expiration_gmepoch(expiration_weeks)
-    thread_logger(thread_name, "Images evaludated by their creation data will be considered expired if it is before %d (%d weeks ago)" % (image_created_expiration, expiration_weeks), remote_name = remote_name, log_prefix = log_prefix)
+    if "w" in settings["rickshaw"]["quay"]["image-expiration"]:
+        expiration_weeks = int(settings["rickshaw"]["quay"]["image-expiration"].rstrip("w"))
+        image_created_expiration = endpoints.image_created_expiration_gmepoch(expiration_weeks, "weeks")
+        thread_logger(thread_name, "Images evaludated by their creation data will be considered expired if it is before %d (%d weeks ago)" % (image_created_expiration, expiration_weeks), remote_name = remote_name, log_prefix = log_prefix)
+    elif "d" in settings["rickshaw"]["quay"]["image-expiration"]:
+        expiration_days = int(settings["rickshaw"]["quay"]["image-expiration"].rstrip("d"))
+        image_created_expiration = endpoints.image_created_expiration_gmepoch(expiration_days, "days")
+        thread_logger(thread_name, "Images evaludated by their creation data will be considered expired if it is before %d (%d days ago)" % (image_created_expiration, expiration_days), remote_name = remote_name, log_prefix = log_prefix)
 
     deletes = []
     for image in images["rickshaw"].keys():
