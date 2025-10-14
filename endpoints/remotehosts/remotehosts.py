@@ -1794,10 +1794,16 @@ def remote_image_manager(thread_name, remote_name, connection, image_max_cache_s
                 if "refresh-expiration" in settings["crucible"]["registries"]["engines"][registry]["quay"]:
                     expiration_refresh_registries.append(registry)
 
-                expiration_weeks = int(settings["crucible"]["registries"]["engines"][registry]["quay"]["expiration-length"].rstrip("w"))
-                image_created_expiration = endpoints.image_created_expiration_gmepoch(expiration_weeks)
-                expiration_create_registries[settings["crucible"]["registries"]["engines"][registry]["url"]] = image_created_expiration
-                thread_logger("Images from the %s registry evaluated by their creation data will be considered expired if it is before %d (%d weeks ago)" % (registry, image_created_expiration, expiration_weeks), remote_name = remote_name, log_prefix = log_prefix)
+                if "w" in settings["crucible"]["registries"]["engines"][registry]["quay"]["expiration-length"]:
+                    expiration_weeks = int(settings["crucible"]["registries"]["engines"][registry]["quay"]["expiration-length"].rstrip("w"))
+                    image_created_expiration = endpoints.image_created_expiration_gmepoch(expiration_weeks, "weeks")
+                    expiration_create_registries[settings["crucible"]["registries"]["engines"][registry]["url"]] = image_created_expiration
+                    thread_logger("Images from the %s registry evaluated by their creation data will be considered expired if it is before %d (%d weeks ago)" % (registry, image_created_expiration, expiration_weeks), remote_name = remote_name, log_prefix = log_prefix)
+                elif "d" in settings["crucible"]["registries"]["engines"][registry]["quay"]["expiration-length"]:
+                    expiration_days = int(settings["crucible"]["registries"]["engines"][registry]["quay"]["expiration-length"].rstrip("d"))
+                    image_created_expiration = endpoints.image_created_expiration_gmepoch(expiration_days, "days")
+                    expiration_create_registries[settings["crucible"]["registries"]["engines"][registry]["url"]] = image_created_expiration
+                    thread_logger("Images from the %s registry evaluated by their creation data will be considered expired if it is before %d (%d days ago)" % (registry, image_created_expiration, expiration_days), remote_name = remote_name, log_prefix = log_prefix)
 
     if len(expiration_refresh_registries) > 0:
         thread_logger("Using the quay API to look for image expiration timestamps in these registries: %s" % (expiration_refresh_registries), remote_name = remote_name, log_prefix = log_prefix)
