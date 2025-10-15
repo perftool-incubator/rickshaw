@@ -806,22 +806,27 @@ def gmtimestamp_to_gmepoch(gmtimestamp):
 
     return gmepoch
 
-def image_created_expiration_gmepoch(weeks):
+def image_created_expiration_gmepoch(value, unit):
     """
     Determine the UTC epoch timetamp that any image created before is expired
 
     Args:
-        weeks (int): The number of weeks to consider as the expiration time post creation
+        value (int): The number of units to consider as teh expiration time post creation
+        unit (str): The unit of the value -- either "days" or "weeks"
 
     Globals:
         None
 
     Returns:
-        gmepoch (int): A UTC epoch timestamp such as 1712949457 from X weeks ago.  Any image with a creation
+        gmepoch (int): A UTC epoch timestamp such as 1712949457 from <value> <units> ago.  Any image with a creation
                        date older than this is expired
     """
-    #       seconds/min  minutes/hour  hours/day  days/week  weeks
-    delta = 60           * 60          * 24       * 7        * weeks
+    if unit == "weeks":
+        #       seconds/min  minutes/hour  hours/day  days/week  weeks
+        delta = 60           * 60          * 24       * 7        * value
+    elif unit == "days":
+        #       seconds/min  minutes/jour  hours/day  days
+        delta = 60           * 60          * 24       * value
 
     gmepoch = calendar.timegm(time.gmtime()) - delta
 
