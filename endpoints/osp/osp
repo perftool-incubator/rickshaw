@@ -228,7 +228,7 @@ function create_servers() {
     ref1=""
     local instances=""
 
-    ssh_id=$(sed -z 's/\n/\\n/g' ${config_dir}/rickshaw_id.rsa)
+    ssh_id=$(sed -z 's/\n/\\n/g' ${config_dir}/ssh/${run_id})
 
     # One openstack server (VM, instance, etc) is created per client and server benchmark engine
     # Servers are not created for collecting tools on compute, controller, network nodes.

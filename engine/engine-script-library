@@ -172,7 +172,7 @@ function archive_to_controller() {
                        -o ControlPersist=60 \
                        -o StrictHostKeyChecking=no \
                        -o ConnectionAttempts=10 \
-                       -i "/tmp/rickshaw_id.rsa" \
+                       -i "/tmp/rickshaw_ssh_id" \
                        ${dest_host} "dd of=${dest}"
         ssh_rc=$?
         echo "ssh exit code: $ssh_rc"

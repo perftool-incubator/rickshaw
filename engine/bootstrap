@@ -196,7 +196,7 @@ if [ -z "$max_sample_failures" ]; then
     echo "[WARNING] --max-sample-failures was not used, so setting to default of $max_sample_failures"
 fi
 
-export ssh_id_file="/tmp/rickshaw_id.rsa"
+export ssh_id_file="/tmp/rickshaw_ssh_id"
 if [ ! -z "$ssh_id" ]; then
     echo "Creating ${ssh_id_file} from \$ssh_id environment variable"
     echo -e "$ssh_id" > $ssh_id_file

@@ -839,7 +839,7 @@ function build_pod_spec() {
         echo "          {" >>$json
         echo "            \"name\": \"ssh_id\"," >>$json
         printf "            \"value\": \"" >>$json
-        sed -z 's/\n/\\n/g' $config_dir/rickshaw_id.rsa >>$json
+        sed -z 's/\n/\\n/g' ${config_dir}/ssh/${run_id} >>$json
         echo "\"" >>$json
         echo "      }" >>$json
         if [ "$type" == "cs" ]; then

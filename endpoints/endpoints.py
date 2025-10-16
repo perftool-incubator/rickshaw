@@ -1780,6 +1780,8 @@ def init_settings(settings, args):
 
     settings["misc"] = dict()
 
+    settings["misc"]["run-id"] = args.run_id
+
     settings["misc"]["debug-output"] = False
     if args.log_level == "debug":
         settings["misc"]["debug-output"] = True
@@ -1924,7 +1926,7 @@ def load_settings(settings, endpoint_name = None, run_file = None, rickshaw_dir 
     log.info("Loading SSH private key into misc settings")
     settings["misc"]["ssh-private-key"] = ""
     try:
-        with open(settings["dirs"]["local"]["conf"] + "/rickshaw_id.rsa", "r", encoding = "ascii") as ssh_private_key:
+        with open(settings["dirs"]["local"]["conf"] + "/ssh/" + settings["misc"]["run-id"], "r", encoding = "ascii") as ssh_private_key:
             for line in ssh_private_key:
                 line = re.sub(r"\n", r"\\n", line)
                 settings["misc"]["ssh-private-key"] += line

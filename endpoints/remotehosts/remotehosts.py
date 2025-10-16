@@ -1036,8 +1036,8 @@ def create_chroot(thread_name, remote_name, engine_name, container_name, connect
 
             create_info["mounts"]["regular"].append(mount["dest"])
 
-    local_ssh_private_key_file = settings["dirs"]["local"]["conf"] + "/rickshaw_id.rsa"
-    remote_ssh_private_key_file = create_info["mount"] + "/tmp/" + "rickshaw_id.rsa"
+    local_ssh_private_key_file = settings["dirs"]["local"]["conf"] + "/ssh/" + args.run_id
+    remote_ssh_private_key_file = create_info["mount"] + "/tmp/" + "rickshaw_ssh_id"
     result = connection.put(local_ssh_private_key_file, remote_ssh_private_key_file)
     thread_logger("Copied %s to %s:%s" % (local_ssh_private_key_file, connection.host, remote_ssh_private_key_file), remote_name = remote_name, engine_name = engine_name)
 
@@ -1620,7 +1620,7 @@ def remove_ssh_private_key(connection, thread_name, remote_name, engine_name):
     Returns:
         None
     """
-    remote_ssh_private_key = settings["dirs"]["remote"]["data"] + "/rickshaw_id.rsa"
+    remote_ssh_private_key = settings["dirs"]["remote"]["data"] + "/rickshaw_ssh_id"
     result = endpoints.run_remote(connection, "if [ -e \"" + remote_ssh_private_key + "\" ]; then rm --verbose \"" + remote_ssh_private_key + "\"; else echo \"ssh private key already removed\"; fi")
     thread_logger("Removal of ssh private key '%s' resulted in return code %d:\nstdout:\n%sstderr:\n%s" % (remote_ssh_private_key, result.exited, result.stdout, result.stderr), log_level = endpoints.get_result_log_level(result), remote_name = remote_name, engine_name = engine_name)
 
