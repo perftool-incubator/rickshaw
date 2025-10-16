@@ -268,7 +268,6 @@ def check_base_requirements():
         None
 
     Globals:
-        args (namespace): the script's CLI parameters
         log: a logger instance
         settings (dict): the one data structure to rule then all
 
@@ -277,11 +276,11 @@ def check_base_requirements():
     """
     log.info("Checking base requirements")
 
-    if args.run_id == "":
+    if settings["misc"]["run-id"] == "":
         log.error("The run ID was not provided")
         return 1
     else:
-        log.info("run-id: %s" % (args.run_id))
+        log.info("run-id: %s" % (settings["misc"]["run-id"]))
 
     path = Path(settings["dirs"]["local"]["engine-cmds"] + "/client/1")
     if not path.is_dir():
@@ -498,7 +497,7 @@ def image_pull_worker_thread(thread_id, work_queue, threads_rcs):
                         loglevel = "error"
                     thread_logger("Attempted to remove %s with return code %d:\nstdout:\n%sstderr:\n%s" % (remote_auth_file, result.exited, result.stdout, result.stderr), log_level = loglevel, remote_name = remote)
 
-                result = endpoints.run_remote(c, "echo '" + image_info["image"] + " " + str(int(time.time())) + " " + args.run_id + "' >> " + settings["dirs"]["remote"]["base"] + "/remotehosts-container-image-census")
+                result = endpoints.run_remote(c, "echo '" + image_info["image"] + " " + str(int(time.time())) + " " + settings["misc"]["run-id"] + "' >> " + settings["dirs"]["remote"]["base"] + "/remotehosts-container-image-census")
                 loglevel = "info"
                 if result.exited != 0:
                     loglevel = "error"
@@ -1036,7 +1035,7 @@ def create_chroot(thread_name, remote_name, engine_name, container_name, connect
 
             create_info["mounts"]["regular"].append(mount["dest"])
 
-    local_ssh_private_key_file = settings["dirs"]["local"]["conf"] + "/ssh/" + args.run_id
+    local_ssh_private_key_file = settings["dirs"]["local"]["conf"] + "/ssh/" + settings["misc"]["run-id"]
     remote_ssh_private_key_file = create_info["mount"] + "/tmp/" + "rickshaw_ssh_id"
     result = connection.put(local_ssh_private_key_file, remote_ssh_private_key_file)
     thread_logger("Copied %s to %s:%s" % (local_ssh_private_key_file, connection.host, remote_ssh_private_key_file), remote_name = remote_name, engine_name = engine_name)
@@ -1203,7 +1202,7 @@ def launch_engines_worker_thread(thread_id, work_queue, threads_rcs):
             for engine in remote["engines"]:
                 for engine_id in engine["ids"]:
                     engine_name = "%s-%s" % (engine["role"], str(engine_id))
-                    container_name = "%s_%s" % (args.run_id, engine_name)
+                    container_name = "%s_%s" % (settings["misc"]["run-id"], engine_name)
                     thread_logger("Creating engine '%s'" % (engine_name), remote_name = remote_name, engine_name = engine_name)
                     thread_logger("Container name will be '%s'" % (container_name), remote_name = remote_name, engine_name = engine_name)
 
@@ -1271,7 +1270,7 @@ def launch_engines_worker_thread(thread_id, work_queue, threads_rcs):
             for engine in remote["engines"]:
                 for engine_id in engine["ids"]:
                     engine_name = "%s-%s" % (engine["role"], str(engine_id))
-                    container_name = "%s_%s" % (args.run_id, engine_name)
+                    container_name = "%s_%s" % (settings["misc"]["run-id"], engine_name)
                     thread_logger("Starting engine '%s'" % (engine_name), remote_name = remote_name, engine_name = engine_name)
 
                     osruntime = None
@@ -2083,7 +2082,7 @@ def shutdown_engines_worker_thread(thread_id, work_queue, threads_rcs):
             for engine in remote["engines"]:
                 for engine_id in engine["ids"]:
                     engine_name = "%s-%s" % (engine["role"], str(engine_id))
-                    container_name = "%s_%s" % (args.run_id, engine_name)
+                    container_name = "%s_%s" % (settings["misc"]["run-id"], engine_name)
                     thread_logger("Processing engine '%s'" % (engine_name), remote_name = remote_name, engine_name = engine_name)
                     thread_logger("Container name is '%s'" % (container_name), remote_name = remote_name, engine_name = engine_name)
 
