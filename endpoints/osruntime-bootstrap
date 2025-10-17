@@ -220,7 +220,7 @@ function launch_osruntime() {
         base_cmd+=" --image=$image"
         base_cmd+=" --disable-tools=$disable_tools"
 
-        ssh_id_file=$container_mount/tmp/rickshaw_id.rsa
+        ssh_id_file=$container_mount/tmp/rickshaw_ssh_id
         echo -e "$ssh_id" >$ssh_id_file
         cat $ssh_id_file
         chmod 600 $ssh_id_file

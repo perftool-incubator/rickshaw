@@ -436,8 +436,8 @@ function base_req_check() {
     if [ ! -d "$base_run_dir" ]; then
         exit_error "The run directory [$base_run_dir] does not exist" endpoint-deploy-begin
     fi
-    if [ ! -e "$config_dir/rickshaw_id.rsa" ]; then
-        exit_error "Could not find $config_dir/rickshaw_id.rsa" endpoint-deploy-begin
+    if [ ! -e "${config_dir}/ssh/${run_id}" ]; then
+        exit_error "Could not find ${config_dir}/ssh/${run_id}" endpoint-deploy-begin
     fi
     if [ ! -e "$engine_bench_cmds_dir/client/1" ]; then
         exit_error "client bench cmd file $engine_bench_cmds_dir/client/1 not found" endpoint-deploy-begin

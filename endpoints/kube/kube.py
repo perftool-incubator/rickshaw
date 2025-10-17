@@ -427,11 +427,11 @@ def check_base_requirements():
     """
     log.info("Checking base requirements")
 
-    if args.run_id == "":
+    if settings["misc"]["run-id"] == "":
         log.error("The run ID was not provided")
         return 1
     else:
-        log.info("run-id: %s" % (args.run_id))
+        log.info("run-id: %s" % (settings["misc"]["run-id"]))
 
     path = Path(settings["dirs"]["local"]["engine-cmds"] + "/client/1")
     if not path.is_dir():

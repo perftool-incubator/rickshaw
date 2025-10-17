@@ -1326,7 +1326,7 @@ sub source_container_image {
                 if ($current_expiration >= $refresh_expiration) {
                     log_print sprintf "\tThe current expiration (%d / %s) is greater than or equal to the refresh expiration so not refreshing\n", $current_expiration, quay_image_refresh_formatted_timestamp($current_expiration);
                 } elsif (($refresh_expiration - $current_expiration) <= $time_buffer) {
-                    log_print sprintf "\tSkipping refresh expiration because the current expiration (%d / %s) is less than %d day(s) (%d seconds) ago\n", $current_expiration, quay_image_refresh_formatted_timestamp($current_expiration), $time_buffer_days, $time_buffer;
+                    log_print sprintf "\tSkipping expiration refresh because the current expiration (%d / %s) is less than %d day(s) (%d seconds) older than the new expiration\n", $current_expiration, quay_image_refresh_formatted_timestamp($current_expiration), $time_buffer_days, $time_buffer;
                 } else {
                     my $refresh_cmd = 'curl --silent' .
                                       ' -X PUT -H "Authorization: Bearer ' . $quay_refresh_expiration_tokens{$registry_type} . '"' .
@@ -3049,20 +3049,6 @@ sub prepare_bench_tool_engines() {
     }
 }
 
-sub add_ssh_keys() {
-    # Create temporary ssh keys so endpoint clients/servers can pull/push data
-    my $keygen_cmd = 'ssh-keygen -f ' . $config_dir . '/rickshaw_id.rsa -P "" 2>&1';
-    ($keygen_cmd, my $keygen_output, my $keygen_cmd_rc) = run_cmd($keygen_cmd);
-    system('cat ' . $config_dir . '/rickshaw_id.rsa.pub >>/root/.ssh/authorized_keys');
-}
-
-sub remove_ssh_keys() {
-    my $remove_key_command = 'grep -v -x -F -f ' . $config_dir . '/rickshaw_id.rsa.pub /root/.ssh/authorized_keys > /root/.ssh/authorized_keys.new';
-    system($remove_key_command);
-    my $replace_keys_command = 'mv /root/.ssh/authorized_keys.new /root/.ssh/authorized_keys';
-    system($replace_keys_command);
-}
-
 sub deploy_endpoints() {
     # Deploy ths endpoints so they are ready to run benchmark and tools.
     # Each endpoint is responible for launching a osruntime for each client and server.
@@ -3512,12 +3498,10 @@ foreach my $bench_or_tool (sort (keys %image_ids)) {
 }
 debug_log(sprintf "image_ids(after):\n" . Dumper \%image_ids);
 
-add_ssh_keys();
 deploy_endpoints();
 process_roadblocks();
 wait_for_endpoints();
 organize_run_data();
-remove_ssh_keys();
 
 my $run_file = $run_dir . "/rickshaw-run.json";
 $run{'rickshaw-run'}{'schema'}{'version'} = "2020.03.18";
