@@ -289,6 +289,13 @@
         "quay-expiration-length": {
           "type": "string"
         },
+        "quay-refresh-expiration-require-success": {
+          "type": "string",
+          "enum": [
+            "false",
+            "true"
+          ]
+        },
         "quay-refresh-expiration-api-url": {
           "type": "string"
         },
