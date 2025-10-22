@@ -243,10 +243,8 @@ sub do_roadblock {
     my $rb_log_file = $roadblock_logs_dir . "/" . $label . ".txt";
     (my $date_cmd, my $date, my $date_rc) = run_cmd('date');
     chomp $date;
-    log_print sprintf "Roadblock: %s ", $date;
+    log_print sprintf "Roadblock: %s role: %s uuid: %s\n", $date, $role, $uuid;
 
-    log_print sprintf "role: %s ", $role;
-    log_print sprintf "uuid: %s\n", $uuid;
     my $cmd = $base_rb_leader_cmd .
         " --leader-id=controller" .
         " --uuid=" . $uuid .
