@@ -854,7 +854,7 @@ def create_podman(thread_name, remote_name, engine_name, container_name, connect
     mandatory_mounts = [
         {
             "src": settings["dirs"]["remote"]["data"],
-            "dest": "/tmp"
+            "dest": "/shared-engines-dir"
         },
         {
             "src": "/lib/firmware"
@@ -970,7 +970,7 @@ def create_chroot(thread_name, remote_name, engine_name, container_name, connect
     mandatory_mounts = [
         {
             "src": settings["dirs"]["remote"]["data"],
-            "dest": "/tmp",
+            "dest": "/shared-engines-dir",
             "rbind": False
         },
         {

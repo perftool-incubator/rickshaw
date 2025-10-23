@@ -741,6 +741,22 @@ def create_pod_crd(role = None, id = None, node = None):
             }
         ]
 
+    crd["spec"]["volumes"] = [
+        {
+            "name": "shared-engines-dir",
+            "emptyDir": {
+                "sizeLimit": "10Mi"
+            }
+        },
+        {
+            "name": "hostfs-firmware",
+            "hostPath": {
+                "path": "/lib/firmware",
+                "type": "Directory"
+                }
+        }
+    ]
+
     if role == "worker" or role == "master":
         # guarantee specific node placement
         crd["spec"]["nodeSelector"] = {
@@ -753,29 +769,24 @@ def create_pod_crd(role = None, id = None, node = None):
         crd["spec"]["hostIPC"] = True
 
         # specific filesystem access is required
-        crd["spec"]["volumes"] = [
-            {
-                "name": "hostfs-run",
-                "hostPath": {
-                    "path": "/var/run",
-                    "type": "Directory"
+        crd["spec"]["volumes"].extend(
+            [
+                {
+                    "name": "hostfs-run",
+                    "hostPath": {
+                        "path": "/var/run",
+                        "type": "Directory"
+                    }
+                },
+                {
+                    "name": "hostfs-modules",
+                    "hostPath": {
+                        "path": "/lib/modules",
+                        "type": "Directory"
+                    }
                 }
-            },
-            {
-                "name": "hostfs-firmware",
-                "hostPath": {
-                    "path": "/lib/firmware",
-                    "type": "Directory"
-                }
-            },
-            {
-                "name": "hostfs-modules",
-                "hostPath": {
-                    "path": "/lib/modules",
-                    "type": "Directory"
-                }
-            }
-        ]
+            ]
+        )
 
     if role == "client" or role == "server":
         if "securityContext" in pod_settings and "pod" in pod_settings["securityContext"]:
@@ -789,16 +800,6 @@ def create_pod_crd(role = None, id = None, node = None):
 
         if "hostNetwork" in pod_settings:
             crd["spec"]["hostNetwork"] = pod_settings["hostNetwork"]
-
-        crd["spec"]["volumes"] = [
-            {
-                "name": "hostfs-firmware",
-                "hostPath": {
-                    "path": "/lib/firmware",
-                    "type": "Directory"
-                }
-            }
-        ]
 
         if "volumes" in pod_settings:
             for volume in pod_settings["volumes"]:
@@ -964,36 +965,38 @@ def create_pod_crd(role = None, id = None, node = None):
                 "value": str(cpu_partitioning)
             })
 
+        container["volumeMounts"] = [
+            {
+                "mountPath": "/shared-engines-dir",
+                "name": "shared-engines-dir"
+            },
+            {
+                "mountPath": "/lib/firmware",
+                "name": "hostfs-firmware"
+            }
+        ]
+
         if role == "worker" or role == "master":
             container["securityContext"] = {
                 "privileged": True
             }
 
-            container["volumeMounts"] = [
-                {
-                    "mountPath": "/var/run",
-                    "name": "hostfs-run"
-                },
-                {
-                    "mountPath": "/lib/firmware",
-                    "name": "hostfs-firmware"
-                },
-                {
-                    "mountPath": "/lib/modules",
-                    "name": "hostfs-modules"
-                }
-            ]
+            container["volumeMounts"].extend(
+                [
+                    {
+                        "mountPath": "/var/run",
+                        "name": "hostfs-run"
+                    },
+                    {
+                        "mountPath": "/lib/modules",
+                        "name": "hostfs-modules"
+                    }
+                ]
+            )
 
         if role == "client" or role == "server":
             if "securityContext" in pod_settings and "container" in pod_settings["securityContext"]:
                 container["securityContext"] = copy.deepcopy(pod_settings["securityContext"]["container"])
-
-            container["volumeMounts"] = [
-                {
-                    "mountPath": "/lib/firmware",
-                    "name": "hostfs-firmware"
-                }
-            ]
 
             if "volumes" in pod_settings:
                 for volume in pod_settings["volumes"]:
