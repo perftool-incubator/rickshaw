@@ -1,4 +1,5 @@
-The kube endpoint is currently undergoing active development and
-testing to ensure that it is ready for production usage.  While you
-can use it, please be aware that it may still have bugs and/or missing
-functionality that could impact it's usage.
+The kube endpoint is currently undergoing testing to ensure that it is
+ready for production usage.  While you can use it, and are encouraged
+to do, please be aware that it shoud be considered beta level software
+at this point.  Please provide any feedback you have by filing a
+GitHub issue at https://github.com/perftool-incubator/rickshaw/issues/new.
