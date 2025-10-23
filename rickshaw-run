@@ -243,10 +243,8 @@ sub do_roadblock {
     my $rb_log_file = $roadblock_logs_dir . "/" . $label . ".txt";
     (my $date_cmd, my $date, my $date_rc) = run_cmd('date');
     chomp $date;
-    log_print sprintf "Roadblock: %s ", $date;
+    log_print sprintf "Roadblock: %s role: %s uuid: %s\n", $date, $role, $uuid;
 
-    log_print sprintf "role: %s ", $role;
-    log_print sprintf "uuid: %s\n", $uuid;
     my $cmd = $base_rb_leader_cmd .
         " --leader-id=controller" .
         " --uuid=" . $uuid .
@@ -1347,7 +1345,13 @@ sub source_container_image {
                         } else {
                             if ($refresh_attempts > $max_refresh_attempts) {
                                 log_print sprintf "\tFailed to refresh expiration on %d attempts (currently %d / %s)\n", $max_refresh_attempts, $current_expiration, quay_image_refresh_formatted_timestamp($current_expiration);
-                                exit 1;
+
+                                if ($run{'registries'}{$registry_type}{'quay-refresh-expiration-require-success'} eq "true") {
+                                    log_print "\tExpiration refresh success is required, exiting\n";
+                                    exit 1;
+                                } else {
+                                    log_print "\tExpiration refresh success is not required, continuing\n";
+                                }
                             } else {
                                 sleep 1;
                             }
@@ -2315,11 +2319,29 @@ sub load_settings_info() {
         log_print sprintf "load_settings_info(): loaded public registry quay refresh expiration api url: %s\n", $run{'registries'}{'public'}{'quay-refresh-expiration-api-url'};
     }
 
+    ($rc, $tmp_settings_value) = get_json_setting("engines.public.quay.refresh-expiration.require-success", $registries_settings);
+    if (($rc == 0) && (defined $tmp_settings_value)) {
+        $run{'registries'}{'public'}{'quay-refresh-expiration-require-success'} = $tmp_settings_value;
+        log_print sprintf "load_settings_info(): loaded public registry quay refresh expiration require success: %s\n", $run{'registries'}{'public'}{'quay-refresh-expiration-require-success'};
+    } else {
+        log_print "load_settings_info(): defaulting public registry quay refresh expiration require success: true\n";
+        $run{'registries'}{'public'}{'quay-refresh-expiration-require-success'} = "true";
+    }
+
     if (exists $run{'registries'}{'private'}) {
         ($rc, $tmp_settings_value) = get_json_setting("engines.private.quay.refresh-expiration.api-url", $registries_settings);
         if (($rc == 0) && (defined $tmp_settings_value)) {
             $run{'registries'}{'private'}{'quay-refresh-expiration-api-url'} = $tmp_settings_value;
             log_print sprintf "load_settings_info(): loaded private registry quay refresh expiration api url: %s\n", $run{'registries'}{'private'}{'quay-refresh-expiration-api-url'};
+        }
+
+        ($rc, $tmp_settings_value) = get_json_setting("engines.private.quay.refresh-expiration.require-success", $registries_settings);
+        if (($rc == 0) && (defined $tmp_settings_value)) {
+            $run{'registries'}{'private'}{'quay-refresh-expiration-require-success'} = $tmp_settings_value;
+            log_print sprintf "load_settings_info(): loaded private registry quay refresh expiration require success: %s\n", $run{'registries'}{'private'}{'quay-refresh-expiration-require-success'};
+        } else {
+            log_print "load_settings_info(): defaulting private registry quay refresh expiration require success: true\n";
+            $run{'registries'}{'private'}{'quay-refresh-expiration-require-success'} = "true";
         }
     }
     
