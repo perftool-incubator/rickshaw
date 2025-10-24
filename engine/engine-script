@@ -135,6 +135,10 @@ do_roadblock stop-tools-begin ${default_timeout}
 do_roadblock stop-tools-end ${default_timeout} wait-for "/usr/local/bin/engine-script-library stop_tools '$(pwd)' '${tool_stop_cmds}' '${disable_tools}' '${start_stop_tools_opt}'"
 
 do_roadblock send-data-begin ${default_timeout}
+echo "Size of ${ENGINES_SHARED_DIR}:"
+du -hsc ${ENGINES_SHARED_DIR}
+echo "Contents of ${ENGINES_SHARED_DIR}:"
+ls -laR ${ENGINES_SHARED_DIR}
 do_roadblock send-data-end ${default_timeout} wait-for "/usr/local/bin/engine-script-library send_data '${ssh_id_file}' '${cs_dir}' '${rickshaw_host}' '${archives_dir}/${cs_label}-data.tgz'"
 
 

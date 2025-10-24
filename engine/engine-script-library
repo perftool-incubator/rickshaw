@@ -168,11 +168,11 @@ function archive_to_controller() {
         echo "Trying to tar/ssh fron ${src} to ${dest_host}:${dest}"
         tar czf - . | ssh \
                        -o ControlMaster=auto \
-                       -o ControlPath=/tmp/ssh/sockets/%r@%h-%p \
+                       -o ControlPath=${ENGINES_SHARED_DIR}/ssh/sockets/%r@%h-%p \
                        -o ControlPersist=60 \
                        -o StrictHostKeyChecking=no \
                        -o ConnectionAttempts=10 \
-                       -i "/tmp/rickshaw_ssh_id" \
+                       -i "${ENGINES_SHARED_DIR}/rickshaw_ssh_id" \
                        ${dest_host} "dd of=${dest}"
         ssh_rc=$?
         echo "ssh exit code: $ssh_rc"

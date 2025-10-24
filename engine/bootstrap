@@ -49,9 +49,9 @@ function scp_from_controller() {
     scp_cmd+=" -o BatchMode=yes"
     scp_cmd+=" -v"
     scp_cmd+=" -o ControlMaster=auto"
-    scp_cmd+=" -o ControlPath=/tmp/ssh/sockets/%r@%h-%p"
+    scp_cmd+=" -o ControlPath=${ENGINES_SHARED_DIR}/ssh/sockets/%r@%h-%p"
     scp_cmd+=" -o ControlPersist=60"
-    mkdir -p /tmp/ssh/sockets
+    mkdir -p ${ENGINES_SHARED_DIR}/ssh/sockets
     scp_cmd+=" -o ConnectionAttempts=10"
     scp_cmd+=" -i $ssh_id_file"
     if echo $rickshaw_host | grep -q ":"; then
@@ -196,17 +196,6 @@ if [ -z "$max_sample_failures" ]; then
     echo "[WARNING] --max-sample-failures was not used, so setting to default of $max_sample_failures"
 fi
 
-export ssh_id_file="/tmp/rickshaw_ssh_id"
-if [ ! -z "$ssh_id" ]; then
-    echo "Creating ${ssh_id_file} from \$ssh_id environment variable"
-    echo -e "$ssh_id" > $ssh_id_file
-    cat $ssh_id_file
-    chmod 600 $ssh_id_file
-    echo
-fi
-if [ ! -e $ssh_id_file ]; then
-    exit_error "ssh key $ssh_id_file was not found"
-fi
 export config_dir="$base_run_dir/config"
 export engine_config_dir="$config_dir/engine"
 
@@ -272,9 +261,25 @@ else
 fi
 echo
 
-export json_settings_file="/tmp/rickshaw-settings.json.xz"
+export ENGINES_SHARED_DIR="/shared-engines-dir"
+mkdir -pv "${ENGINES_SHARED_DIR}"
+touch "${ENGINES_SHARED_DIR}/${cs_label}"
 
-scp_from_controller "$ssh_id_file" "$config_dir/rickshaw-settings.json.xz" /tmp
+export ssh_id_file="${ENGINES_SHARED_DIR}/rickshaw_ssh_id"
+if [ ! -z "${ssh_id}" ]; then
+    echo "Creating ${ssh_id_file} from \$ssh_id environment variable"
+    echo -e "${ssh_id}" > $ssh_id_file
+    cat ${ssh_id_file}
+    chmod 600 ${ssh_id_file}
+    echo
+fi
+if [ ! -e ${ssh_id_file} ]; then
+    exit_error "ssh private key ${ssh_id_file} was not found"
+fi
+
+export json_settings_file="${ENGINES_SHARED_DIR}/rickshaw-settings.json.xz"
+
+scp_from_controller "${ssh_id_file}" "$config_dir/rickshaw-settings.json.xz" ${ENGINES_SHARED_DIR}
 if [ ! -e ${json_settings_file} ]; then
     exit_error "Could not find rickshaw-settings.json.xz"
 fi
