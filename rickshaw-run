@@ -1185,7 +1185,7 @@ sub source_container_image {
                     $begin = time();
                     push_local_image($workshop_args[$i]{'tag'}, $registry_type);
                     $end = time();
-                    log_print "\t\tPushing took %d seconds\n", $end - $begin;
+                    log_print sprintf "\t\tPushing took %d seconds\n", $end - $begin;
                     last;
                 }
             } else {
@@ -1492,8 +1492,13 @@ sub process_bench_roadblocks {
             if (exists $messages{'received'}) {
                 for my $message (@{ $messages{'received'} }) {
                     if (exists $$message{'payload'}{'message'}{'user-object'}{'timeout'}) {
-                        $timeout = $$message{'payload'}{'message'}{'user-object'}{'timeout'};
-                        log_print sprintf "Found new client-start-end timeout value: %s\n", $timeout;
+                        my $value = $$message{'payload'}{'message'}{'user-object'}{'timeout'};
+                        if ($value eq "unbounded") {
+                            log_print "A client engine has indicated it will be running an unbounded workload\n";
+                        } else {
+                            $timeout = $value;
+                            log_print sprintf "Found new client-start-end timeout value: %s\n", $timeout;
+                        }
                     }
                 }
             } else {

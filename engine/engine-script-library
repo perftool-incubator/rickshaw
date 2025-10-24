@@ -916,10 +916,17 @@ function process_bench_roadblocks() {
                     runtime=$(${runtime_cmd})
                     runtime_rc=$?
 
+                    echo "Output:"
+                    echo "${runtime}"
+                    echo "Return Code: ${runtime_rc}"
+
                     if [ "${runtime_rc}" -eq 0 -a -n "${runtime}" ]; then
                         if [ "${runtime}" == "-1" ]; then
                             echo "The workload has requested an unbounded roadblock timeout"
                             unbounded_roadblock="yes"
+
+                            echo "announcing intent to run unbounded to ${cs_tx_msgs_dir}"
+                            echo '{"recipient":{"type":"all","id":"all"},"user-object":{"timeout":"unbounded"}}' > "${cs_tx_msgs_dir}/timeout"
                         else
                             # add padding to benchmark runtime so that
                             # there is flexibility on benchmark end
@@ -929,6 +936,16 @@ function process_bench_roadblocks() {
 
                             echo "adding timeout message to ${cs_tx_msgs_dir}"
                             echo '{"recipient":{"type":"all","id":"all"},"user-object":{"timeout":"'${tmp_timeout}'"}}' > "${cs_tx_msgs_dir}/timeout"
+                        fi
+                    else
+                        echo "Not updating roadblock timeout because:"
+
+                        if [ -z "${runtime}" ]; then
+                            echo -e "\tNo runtime value was returned"
+                        fi
+
+                        if [ "${runtime_rc}" -ne 0 ]; then
+                            echo -e "\tA non-zero return code was received"
                         fi
                     fi
                 fi
@@ -947,8 +964,12 @@ function process_bench_roadblocks() {
                     if [ -f ${msgs_log_file} ]; then
                         next_timeout=`jq -r '.received[] | .payload.message."user-object".timeout ' ${msgs_log_file} | grep -v null`
                         if [ ! -z "${next_timeout}" ]; then
-                            timeout=${next_timeout}
-                            printf "Found new client-start-end timeout value: %s\n" ${timeout}
+                            if [ "${next_timeout}" == "unbounded" ]; then
+                                echo "A client engine has indicated it will be running an unbounded workload"
+                            else
+                                timeout=${next_timeout}
+                                printf "Found new client-start-end timeout value: %s\n" ${timeout}
+                            fi
                         else
                             printf "Could not find new client-start-end timeout value!\n"
                         fi
