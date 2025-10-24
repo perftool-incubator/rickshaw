@@ -1185,7 +1185,7 @@ sub source_container_image {
                     $begin = time();
                     push_local_image($workshop_args[$i]{'tag'}, $registry_type);
                     $end = time();
-                    log_print "\t\tPushing took %d seconds\n", $end - $begin;
+                    log_print sprintf "\t\tPushing took %d seconds\n", $end - $begin;
                     last;
                 }
             } else {
