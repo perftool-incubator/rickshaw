@@ -1492,8 +1492,13 @@ sub process_bench_roadblocks {
             if (exists $messages{'received'}) {
                 for my $message (@{ $messages{'received'} }) {
                     if (exists $$message{'payload'}{'message'}{'user-object'}{'timeout'}) {
-                        $timeout = $$message{'payload'}{'message'}{'user-object'}{'timeout'};
-                        log_print sprintf "Found new client-start-end timeout value: %s\n", $timeout;
+                        my $value = $$message{'payload'}{'message'}{'user-object'}{'timeout'};
+                        if ($value eq "unbounded") {
+                            log_print "A client engine has indicated it will be running an unbounded workload\n";
+                        } else {
+                            $timeout = $value;
+                            log_print sprintf "Found new client-start-end timeout value: %s\n", $timeout;
+                        }
                     }
                 }
             } else {

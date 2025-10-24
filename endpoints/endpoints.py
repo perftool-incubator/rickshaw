@@ -1463,8 +1463,11 @@ def process_bench_roadblocks(callbacks = None, roadblock_id = None, endpoint_lab
                     if new_timeout is None:
                         log.warning("Could not find new client-start-end timeout value")
                     else:
-                        timeout = int(new_timeout)
-                        log.info("Found new client-start-end timeout value: %d" % (timeout))
+                        if new_timeout == "unbounded":
+                            log.info("A client engine has indicated it will be running an unbounded workload")
+                        else:
+                            timeout = int(new_timeout)
+                            log.info("Found new client-start-end timeout value: %d" % (timeout))
                 else:
                     log.error("Failed to load %s due to error '%s'" % (msgs_log_file, str(err)))
             else:
