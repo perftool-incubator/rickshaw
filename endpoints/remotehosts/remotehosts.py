@@ -1036,7 +1036,7 @@ def create_chroot(thread_name, remote_name, engine_name, container_name, connect
             create_info["mounts"]["regular"].append(mount["dest"])
 
     local_ssh_private_key_file = settings["dirs"]["local"]["conf"] + "/ssh/" + settings["misc"]["run-id"]
-    remote_ssh_private_key_file = create_info["mount"] + "/tmp/" + "rickshaw_ssh_id"
+    remote_ssh_private_key_file = create_info["mount"] + "/shared-engines-dir/" + "rickshaw_ssh_id"
     result = connection.put(local_ssh_private_key_file, remote_ssh_private_key_file)
     thread_logger("Copied %s to %s:%s" % (local_ssh_private_key_file, connection.host, remote_ssh_private_key_file), remote_name = remote_name, engine_name = engine_name)
 
