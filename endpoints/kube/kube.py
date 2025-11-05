@@ -1915,7 +1915,8 @@ def deployment_roadblock_function(roadblock_id, follower_name, endpoint_deploy_t
                                 label = "endpoint-deploy-begin",
                                 timeout = endpoint_deploy_timeout,
                                 redis_password = roadblock_password,
-                                msgs_dir = roadblock_messages_dir)
+                                msgs_dir = roadblock_messages_dir,
+                                connection_watchdog = settings["rickshaw"]["roadblock"]["connection-watchdog"])
     if rc == 0:
         log.info("endpoint-deploy-begin roadblock succeeded")
     else:
@@ -2703,7 +2704,8 @@ def main():
                                                 deployment_followers = [ deployment_label ],
                                                 roadblock_messages_dir = settings["dirs"]["local"]["roadblock-msgs"],
                                                 roadblock_timeouts = settings["rickshaw"]["roadblock"]["timeouts"],
-                                                early_abort = early_abort)
+                                                early_abort = early_abort,
+                                                roadblock_connection_watchdog = settings["rickshaw"]["roadblock"]["connection-watchdog"])
     if rc != 0:
         log.error("Processing of the pre-deploy roadblocks resulted in an error")
     else:
@@ -2785,7 +2787,8 @@ def main():
                                               max_sample_failures = args.max_sample_failures,
                                               engine_commands_dir = settings["dirs"]["local"]["engine-cmds"],
                                               endpoint_dir = settings["dirs"]["local"]["endpoint"],
-                                              early_abort = early_abort)
+                                              early_abort = early_abort,
+                                              roadblock_connection_watchdog = settings["rickshaw"]["roadblock"]["connection-watchdog"])
         else:
             log.warning("Skipping call to process_raodblocks due to abort deployment")
 
