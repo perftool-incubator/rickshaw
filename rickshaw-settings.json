@@ -6,7 +6,9 @@
             "collect-sysinfo": 1200,
             "engine-start": 1440,
             "move-data": 300
-        }
+        },
+	"connection-watchdog": false,
+	"log-level": "normal"
     },
     "userenvs": {
         "default": {
@@ -17,7 +19,8 @@
     "endpoints": {
         "default": {
             "user": "root"
-        }
+        },
+	"log-level": "normal"
     },
     "workshop": {
         "force-builds": "false"
