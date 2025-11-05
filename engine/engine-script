@@ -37,6 +37,8 @@ echo
 leader=controller
 load_json_setting "roadblock.timeouts.default" default_timeout
 load_json_setting "roadblock.timeouts.collect-sysinfo" collect_sysinfo_timeout
+load_json_setting "roadblock.connection-watchdog" roadblock_connection_watchdog
+load_json_setting "roadblock.log-level" roadblock_log_level
 process_opts
 validate_core_env
 setup_core_env # roadblocks may be used after this

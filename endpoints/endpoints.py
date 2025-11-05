@@ -47,6 +47,7 @@ else:
         exit(2)
     sys.path.append(str(Path(ROADBLOCK_HOME)))
 from roadblock import roadblock
+from roadblock import VERBOSE_DEBUG_LEVEL
 
 roadblock_exits = {
     "success": 0,
@@ -624,7 +625,7 @@ def create_roadblock_msg(recipient_type, recipient_id, payload_type, payload):
 
     return msg
 
-def do_roadblock(roadblock_id = None, label = None, timeout = None, messages = None, wait_for = None, abort = None, follower_id = None, redis_password = None, msgs_dir = None):
+def do_roadblock(roadblock_id = None, label = None, timeout = None, messages = None, wait_for = None, abort = None, follower_id = None, redis_password = None, msgs_dir = None, connection_watchdog = None):
     """
     Run a roadblock
 
@@ -638,6 +639,7 @@ def do_roadblock(roadblock_id = None, label = None, timeout = None, messages = N
         follower_id (str): The follower ID to use to communicate with the leader
         redis_password (str): The password used to connect to the redis server
         msgs_dir (str): The directory where the message log should be saved
+        connection_watchdog (bool): Should the connection watchdog be enabled
 
     Globals:
         None
@@ -703,6 +705,10 @@ def do_roadblock(roadblock_id = None, label = None, timeout = None, messages = N
     if not wait_for is None:
         my_roadblock.set_wait_for_cmd(wait_for)
         my_roadblock.set_wait_for_log(wait_for_log)
+    if connection_watchdog:
+        my_roadblock.set_connection_watchdog("enabled")
+    else:
+        my_roadblock.set_connection_watchdog("disabled")
 
     rc = my_roadblock.run_it()
     result_log_msg = "[%s] Roadblock resulted in return code %d" % (label, rc)
@@ -971,6 +977,8 @@ def setup_logger(log_level):
     match log_level:
         case "debug":
             logging.basicConfig(level = logging.DEBUG, format = log_format, stream = sys.stdout)
+        case "verbose-debug":
+            logging.basicConfig(level = VERBOSE_DEBUG_LEVEL, format = log_format, stream = sys.stdout)
         case "normal" | _:
             logging.basicConfig(level = logging.INFO, format = log_format, stream = sys.stdout)
 
@@ -980,7 +988,7 @@ def setup_logger(log_level):
 
     return logging.getLogger(__file__)
 
-def process_pre_deploy_roadblock(roadblock_id = None, endpoint_label = None, roadblock_password = None, deployment_followers = None, roadblock_messages_dir = None, roadblock_timeouts = None, early_abort = None):
+def process_pre_deploy_roadblock(roadblock_id = None, endpoint_label = None, roadblock_password = None, deployment_followers = None, roadblock_messages_dir = None, roadblock_timeouts = None, early_abort = None, roadblock_connection_watchdog = None):
     """
     Process the beginning and ending roadblocks associated with synchronizing a test
 
@@ -992,6 +1000,7 @@ def process_pre_deploy_roadblock(roadblock_id = None, endpoint_label = None, roa
         roadblock_messages_dir (str): The directory where roadblock messages should be stored
         roadblock_timeouts (dict): The roadblock timeout values from rickshaw-settings
         early_abort (bool): Abort the run as early as possible due to an error early in initialization
+        roadblock_connection_watchdog (bool): Should the connection watchdog be enabled
 
     Globals:
         None
@@ -1029,7 +1038,8 @@ def process_pre_deploy_roadblock(roadblock_id = None, endpoint_label = None, roa
                       messages = deployment_followers_msg_file,
                       redis_password = roadblock_password,
                       msgs_dir = roadblock_messages_dir,
-                      abort = early_abort)
+                      abort = early_abort,
+                      connection_watchdog = roadblock_connection_watchdog)
     if rc != 0:
         return rc
 
@@ -1038,13 +1048,14 @@ def process_pre_deploy_roadblock(roadblock_id = None, endpoint_label = None, roa
                       label = "endpoint-pre-deploy-end",
                       timeout = roadblock_timeouts["default"],
                       redis_password = roadblock_password,
-                      msgs_dir = roadblock_messages_dir)
+                      msgs_dir = roadblock_messages_dir,
+                      connection_watchdog = roadblock_connection_watchdog)
     if rc != 0:
         return rc
 
     return 0
 
-def process_roadblocks(callbacks = None, roadblock_id = None, endpoint_label = None, endpoint_deploy_timeout = None, roadblock_password = None, new_followers = None, roadblock_messages_dir = None, roadblock_timeouts = None, max_sample_failures = None, engine_commands_dir = None, endpoint_dir = None, early_abort = False):
+def process_roadblocks(callbacks = None, roadblock_id = None, endpoint_label = None, endpoint_deploy_timeout = None, roadblock_password = None, new_followers = None, roadblock_messages_dir = None, roadblock_timeouts = None, max_sample_failures = None, engine_commands_dir = None, endpoint_dir = None, early_abort = False, roadblock_connection_watchdog = None):
     """
     Process the beginning and ending roadblocks associated with synchronizing a test
 
@@ -1066,6 +1077,7 @@ def process_roadblocks(callbacks = None, roadblock_id = None, endpoint_label = N
         engine_commands_dir (str): Directory where the engine commands can be found
         endpoint_dir (str): The base endpoint directory for storing endpoint specific information
         early_abort (bool): Abort the run as early as possible due to an error early in initialization
+        roadblock_connection_watchdog (bool): Should the connection watchdog be enabled
 
     Globals:
         None
@@ -1097,7 +1109,8 @@ def process_roadblocks(callbacks = None, roadblock_id = None, endpoint_label = N
                       timeout = endpoint_deploy_timeout,
                       messages = new_followers_msg_file,
                       redis_password = roadblock_password,
-                      msgs_dir = roadblock_messages_dir)
+                      msgs_dir = roadblock_messages_dir,
+                      connection_watchdog = roadblock_connection_watchdog)
     if rc != 0:
         return rc
     rc = do_roadblock(roadblock_id = roadblock_id,
@@ -1106,7 +1119,8 @@ def process_roadblocks(callbacks = None, roadblock_id = None, endpoint_label = N
                       timeout = endpoint_deploy_timeout,
                       redis_password = roadblock_password,
                       msgs_dir = roadblock_messages_dir,
-                      abort = early_abort)
+                      abort = early_abort,
+                      connection_watchdog = roadblock_connection_watchdog)
     if rc != 0:
         return rc
 
@@ -1115,7 +1129,8 @@ def process_roadblocks(callbacks = None, roadblock_id = None, endpoint_label = N
                       label = "engine-init-begin",
                       timeout = roadblock_timeouts["engine-start"],
                       redis_password = roadblock_password,
-                      msgs_dir = roadblock_messages_dir)
+                      msgs_dir = roadblock_messages_dir,
+                      connection_watchdog = roadblock_connection_watchdog)
     if rc != 0:
         return rc
     callback = "engine-init"
@@ -1131,7 +1146,8 @@ def process_roadblocks(callbacks = None, roadblock_id = None, endpoint_label = N
                       timeout = roadblock_timeouts["engine-start"],
                       messages = engine_init_msgs,
                       redis_password = roadblock_password,
-                      msgs_dir = roadblock_messages_dir)
+                      msgs_dir = roadblock_messages_dir,
+                      connection_watchdog = roadblock_connection_watchdog)
     if rc != 0:
         return rc
 
@@ -1140,7 +1156,8 @@ def process_roadblocks(callbacks = None, roadblock_id = None, endpoint_label = N
                       label = "get-data-begin",
                       timeout = roadblock_timeouts["default"],
                       redis_password = roadblock_password,
-                      msgs_dir = roadblock_messages_dir)
+                      msgs_dir = roadblock_messages_dir,
+                      connection_watchdog = roadblock_connection_watchdog)
     if rc != 0:
         return rc
     rc = do_roadblock(roadblock_id = roadblock_id,
@@ -1148,7 +1165,8 @@ def process_roadblocks(callbacks = None, roadblock_id = None, endpoint_label = N
                       label = "get-data-end",
                       timeout = roadblock_timeouts["default"],
                       redis_password = roadblock_password,
-                      msgs_dir = roadblock_messages_dir)
+                      msgs_dir = roadblock_messages_dir,
+                      connection_watchdog = roadblock_connection_watchdog)
     if rc != 0:
         return rc
 
@@ -1157,7 +1175,8 @@ def process_roadblocks(callbacks = None, roadblock_id = None, endpoint_label = N
                       label = "collect-sysinfo-begin",
                       timeout = roadblock_timeouts["collect-sysinfo"],
                       redis_password = roadblock_password,
-                      msgs_dir = roadblock_messages_dir)
+                      msgs_dir = roadblock_messages_dir,
+                      connection_watchdog = roadblock_connection_watchdog)
     if rc != 0:
         return rc
     callback = "collect-sysinfo"
@@ -1172,7 +1191,8 @@ def process_roadblocks(callbacks = None, roadblock_id = None, endpoint_label = N
                       label = "collect-sysinfo-end",
                       timeout = roadblock_timeouts["collect-sysinfo"],
                       redis_password = roadblock_password,
-                      msgs_dir = roadblock_messages_dir)
+                      msgs_dir = roadblock_messages_dir,
+                      connection_watchdog = roadblock_connection_watchdog)
     if rc != 0:
         return rc
 
@@ -1181,7 +1201,8 @@ def process_roadblocks(callbacks = None, roadblock_id = None, endpoint_label = N
                       label = "start-tools-begin",
                       timeout = roadblock_timeouts["default"],
                       redis_password = roadblock_password,
-                      msgs_dir = roadblock_messages_dir)
+                      msgs_dir = roadblock_messages_dir,
+                      connection_watchdog = roadblock_connection_watchdog)
     if rc != 0:
         return rc
     rc = do_roadblock(roadblock_id = roadblock_id,
@@ -1189,7 +1210,8 @@ def process_roadblocks(callbacks = None, roadblock_id = None, endpoint_label = N
                       label = "start-tools-end",
                       timeout = roadblock_timeouts["default"],
                       redis_password = roadblock_password,
-                      msgs_dir = roadblock_messages_dir)
+                      msgs_dir = roadblock_messages_dir,
+                      connection_watchdog = roadblock_connection_watchdog)
     if rc != 0:
         return rc
 
@@ -1201,7 +1223,8 @@ def process_roadblocks(callbacks = None, roadblock_id = None, endpoint_label = N
                                   roadblock_messages_dir = roadblock_messages_dir,
                                   roadblock_timeouts = roadblock_timeouts,
                                   engine_commands_dir = engine_commands_dir,
-                                  endpoint_dir = endpoint_dir)
+                                  endpoint_dir = endpoint_dir,
+                                  roadblock_connection_watchdog = roadblock_connection_watchdog)
     if rc != 0:
         return rc
 
@@ -1210,33 +1233,38 @@ def process_roadblocks(callbacks = None, roadblock_id = None, endpoint_label = N
                  label = "stop-tools-begin",
                  timeout = roadblock_timeouts["default"],
                  redis_password = roadblock_password,
-                 msgs_dir = roadblock_messages_dir)
+                 msgs_dir = roadblock_messages_dir,
+                 connection_watchdog = roadblock_connection_watchdog)
     do_roadblock(roadblock_id = roadblock_id,
                  follower_id = endpoint_label,
                  label = "stop-tools-end",
                  timeout = roadblock_timeouts["default"],
                  redis_password = roadblock_password,
-                 msgs_dir = roadblock_messages_dir)
+                 msgs_dir = roadblock_messages_dir,
+                 connection_watchdog = roadblock_connection_watchdog)
 
     do_roadblock(roadblock_id = roadblock_id,
                  follower_id = endpoint_label,
                  label = "send-data-begin",
                  timeout = roadblock_timeouts["default"],
                  redis_password = roadblock_password,
-                 msgs_dir = roadblock_messages_dir)
+                 msgs_dir = roadblock_messages_dir,
+                 connection_watchdog = roadblock_connection_watchdog)
     do_roadblock(roadblock_id = roadblock_id,
                  follower_id = endpoint_label,
                  label = "send-data-end",
                  timeout = roadblock_timeouts["default"],
                  redis_password = roadblock_password,
-                 msgs_dir = roadblock_messages_dir)
+                 msgs_dir = roadblock_messages_dir,
+                 connection_watchdog = roadblock_connection_watchdog)
 
     do_roadblock(roadblock_id = roadblock_id,
                  follower_id = endpoint_label,
                  label = "endpoint-cleanup-begin",
                  timeout = roadblock_timeouts["default"],
                  redis_password = roadblock_password,
-                 msgs_dir = roadblock_messages_dir)
+                 msgs_dir = roadblock_messages_dir,
+                 connection_watchdog = roadblock_connection_watchdog)
     callback = "remote-cleanup"
     engine_init_msgs = None
     if callback in callbacks and callbacks[callback] is not None:
@@ -1249,11 +1277,12 @@ def process_roadblocks(callbacks = None, roadblock_id = None, endpoint_label = N
                  label = "endpoint-cleanup-end",
                  timeout = roadblock_timeouts["default"],
                  redis_password = roadblock_password,
-                 msgs_dir = roadblock_messages_dir)
+                 msgs_dir = roadblock_messages_dir,
+                 connection_watchdog = roadblock_connection_watchdog)
 
     return 0
 
-def process_bench_roadblocks(callbacks = None, roadblock_id = None, endpoint_label = None, roadblock_password = None, max_sample_failures = None, roadblock_messages_dir = None, roadblock_timeouts = None, engine_commands_dir = None, endpoint_dir = None):
+def process_bench_roadblocks(callbacks = None, roadblock_id = None, endpoint_label = None, roadblock_password = None, max_sample_failures = None, roadblock_messages_dir = None, roadblock_timeouts = None, engine_commands_dir = None, endpoint_dir = None, roadblock_connection_watchdog = None):
     """
     Handle the running and evaluation of roadblocks while looping through the iterations and samples
 
@@ -1272,6 +1301,7 @@ def process_bench_roadblocks(callbacks = None, roadblock_id = None, endpoint_lab
         roadblock_timeouts (dict): The roadblock timeout values from rickshaw-settings
         engine_commands_dir (str): Directory where the engine commands can be found
         endpoint_dir (str): The base endpoint directory for storing endpoint specific information
+        roadblock_connection_watchdog (bool): Should the connection watchdog be enabled
 
     Globals:
         log: a logger instance
@@ -1286,7 +1316,8 @@ def process_bench_roadblocks(callbacks = None, roadblock_id = None, endpoint_lab
                       label = "setup-bench-begin",
                       timeout = roadblock_timeouts["default"],
                       redis_password = roadblock_password,
-                      msgs_dir = roadblock_messages_dir)
+                      msgs_dir = roadblock_messages_dir,
+                      connection_watchdog = roadblock_connection_watchdog)
     if rc != 0:
         return rc
 
@@ -1321,7 +1352,8 @@ def process_bench_roadblocks(callbacks = None, roadblock_id = None, endpoint_lab
                       label = "setup-bench-end",
                       timeout = roadblock_timeouts["default"],
                       redis_password = roadblock_password,
-                      msgs_dir = roadblock_messages_dir)
+                      msgs_dir = roadblock_messages_dir,
+                      connection_watchdog = roadblock_connection_watchdog)
     if rc != 0:
         return rc
 
@@ -1372,7 +1404,8 @@ def process_bench_roadblocks(callbacks = None, roadblock_id = None, endpoint_lab
                               timeout = timeout,
                               messages = user_msgs_file,
                               redis_password = roadblock_password,
-                              msgs_dir = roadblock_messages_dir)
+                              msgs_dir = roadblock_messages_dir,
+                              connection_watchdog = roadblock_connection_watchdog)
             quit,abort = evaluate_roadblock(quit, abort, rb_name, rc, iteration_sample, engine_rx_msgs_dir, max_sample_failures)
 
             rb_name = "%s%s" % (rb_prefix, "infra-start-end")
@@ -1383,7 +1416,8 @@ def process_bench_roadblocks(callbacks = None, roadblock_id = None, endpoint_lab
                               timeout = timeout,
                               messages = user_msgs_file,
                               redis_password = roadblock_password,
-                              msgs_dir = roadblock_messages_dir)
+                              msgs_dir = roadblock_messages_dir,
+                              connection_watchdog = roadblock_connection_watchdog)
             quit,abort = evaluate_roadblock(quit, abort, rb_name, rc, iteration_sample, engine_rx_msgs_dir, max_sample_failures)
             ####################################################################
             rb_name = "%s%s" % (rb_prefix, "server-start-begin")
@@ -1394,7 +1428,8 @@ def process_bench_roadblocks(callbacks = None, roadblock_id = None, endpoint_lab
                               timeout = timeout,
                               messages = user_msgs_file,
                               redis_password = roadblock_password,
-                              msgs_dir = roadblock_messages_dir)
+                              msgs_dir = roadblock_messages_dir,
+                              connection_watchdog = roadblock_connection_watchdog)
             quit,abort = evaluate_roadblock(quit, abort, rb_name, rc, iteration_sample, engine_rx_msgs_dir, max_sample_failures)
 
             rb_name = "%s%s" % (rb_prefix, "server-start-end")
@@ -1405,7 +1440,8 @@ def process_bench_roadblocks(callbacks = None, roadblock_id = None, endpoint_lab
                               timeout = timeout,
                               messages = user_msgs_file,
                               redis_password = roadblock_password,
-                              msgs_dir = roadblock_messages_dir)
+                              msgs_dir = roadblock_messages_dir,
+                              connection_watchdog = roadblock_connection_watchdog)
             quit,abort = evaluate_roadblock(quit, abort, rb_name, rc, iteration_sample, engine_rx_msgs_dir, max_sample_failures)
             ####################################################################
             rb_name = "%s%s" % (rb_prefix, "endpoint-start-begin")
@@ -1416,7 +1452,8 @@ def process_bench_roadblocks(callbacks = None, roadblock_id = None, endpoint_lab
                               timeout = timeout,
                               messages = user_msgs_file,
                               redis_password = roadblock_password,
-                              msgs_dir = roadblock_messages_dir)
+                              msgs_dir = roadblock_messages_dir,
+                              connection_watchdog = roadblock_connection_watchdog)
             quit,abort = evaluate_roadblock(quit, abort, rb_name, rc, iteration_sample, engine_rx_msgs_dir, max_sample_failures)
 
             callback = "test-start"
@@ -1435,7 +1472,8 @@ def process_bench_roadblocks(callbacks = None, roadblock_id = None, endpoint_lab
                               timeout = timeout,
                               messages = user_msgs_file,
                               redis_password = roadblock_password,
-                              msgs_dir = roadblock_messages_dir)
+                              msgs_dir = roadblock_messages_dir,
+                              connection_watchdog = roadblock_connection_watchdog)
             quit,abort = evaluate_roadblock(quit, abort, rb_name, rc, iteration_sample, engine_rx_msgs_dir, max_sample_failures)
             ####################################################################
             rb_name = "%s%s" % (rb_prefix, "client-start-begin")
@@ -1446,7 +1484,8 @@ def process_bench_roadblocks(callbacks = None, roadblock_id = None, endpoint_lab
                               timeout = timeout,
                               messages = user_msgs_file,
                               redis_password = roadblock_password,
-                              msgs_dir = roadblock_messages_dir)
+                              msgs_dir = roadblock_messages_dir,
+                              connection_watchdog = roadblock_connection_watchdog)
             quit,abort = evaluate_roadblock(quit, abort, rb_name, rc, iteration_sample, engine_rx_msgs_dir, max_sample_failures)
 
             msgs_log_file = roadblock_messages_dir + "/" + rb_name + ".json"
@@ -1481,7 +1520,8 @@ def process_bench_roadblocks(callbacks = None, roadblock_id = None, endpoint_lab
                               timeout = timeout,
                               messages = user_msgs_file,
                               redis_password = roadblock_password,
-                              msgs_dir = roadblock_messages_dir)
+                              msgs_dir = roadblock_messages_dir,
+                              connection_watchdog = roadblock_connection_watchdog)
             quit,abort = evaluate_roadblock(quit, abort, rb_name, rc, iteration_sample, engine_rx_msgs_dir, max_sample_failures)
             ####################################################################
             if timeout != roadblock_timeouts["default"]:
@@ -1496,7 +1536,8 @@ def process_bench_roadblocks(callbacks = None, roadblock_id = None, endpoint_lab
                               timeout = timeout,
                               messages = user_msgs_file,
                               redis_password = roadblock_password,
-                              msgs_dir = roadblock_messages_dir)
+                              msgs_dir = roadblock_messages_dir,
+                              connection_watchdog = roadblock_connection_watchdog)
             quit,abort = evaluate_roadblock(quit, abort, rb_name, rc, iteration_sample, engine_rx_msgs_dir, max_sample_failures)
 
             rb_name = "%s%s" % (rb_prefix, "client-stop-end")
@@ -1507,7 +1548,8 @@ def process_bench_roadblocks(callbacks = None, roadblock_id = None, endpoint_lab
                               timeout = timeout,
                               messages = user_msgs_file,
                               redis_password = roadblock_password,
-                              msgs_dir = roadblock_messages_dir)
+                              msgs_dir = roadblock_messages_dir,
+                              connection_watchdog = roadblock_connection_watchdog)
             quit,abort = evaluate_roadblock(quit, abort, rb_name, rc, iteration_sample, engine_rx_msgs_dir, max_sample_failures)
             ####################################################################
             rb_name = "%s%s" % (rb_prefix, "endpoint-stop-begin")
@@ -1518,7 +1560,8 @@ def process_bench_roadblocks(callbacks = None, roadblock_id = None, endpoint_lab
                               timeout = timeout,
                               messages = user_msgs_file,
                               redis_password = roadblock_password,
-                              msgs_dir = roadblock_messages_dir)
+                              msgs_dir = roadblock_messages_dir,
+                              connection_watchdog = roadblock_connection_watchdog)
             quit,abort = evaluate_roadblock(quit, abort, rb_name, rc, iteration_sample, engine_rx_msgs_dir, max_sample_failures)
 
             rb_name = "%s%s" % (rb_prefix, "endpoint-stop-end")
@@ -1529,7 +1572,8 @@ def process_bench_roadblocks(callbacks = None, roadblock_id = None, endpoint_lab
                               timeout = timeout,
                               messages = user_msgs_file,
                               redis_password = roadblock_password,
-                              msgs_dir = roadblock_messages_dir)
+                              msgs_dir = roadblock_messages_dir,
+                              connection_watchdog = roadblock_connection_watchdog)
             quit,abort = evaluate_roadblock(quit, abort, rb_name, rc, iteration_sample, engine_rx_msgs_dir, max_sample_failures)
             ####################################################################
             rb_name = "%s%s" % (rb_prefix, "server-stop-begin")
@@ -1540,7 +1584,8 @@ def process_bench_roadblocks(callbacks = None, roadblock_id = None, endpoint_lab
                               timeout = timeout,
                               messages = user_msgs_file,
                               redis_password = roadblock_password,
-                              msgs_dir = roadblock_messages_dir)
+                              msgs_dir = roadblock_messages_dir,
+                              connection_watchdog = roadblock_connection_watchdog)
             quit,abort = evaluate_roadblock(quit, abort, rb_name, rc, iteration_sample, engine_rx_msgs_dir, max_sample_failures)
 
             callback = "test-stop"
@@ -1559,7 +1604,8 @@ def process_bench_roadblocks(callbacks = None, roadblock_id = None, endpoint_lab
                               timeout = timeout,
                               messages = user_msgs_file,
                               redis_password = roadblock_password,
-                              msgs_dir = roadblock_messages_dir)
+                              msgs_dir = roadblock_messages_dir,
+                              connection_watchdog = roadblock_connection_watchdog)
             quit,abort = evaluate_roadblock(quit, abort, rb_name, rc, iteration_sample, engine_rx_msgs_dir, max_sample_failures)
             ####################################################################
             rb_name = "%s%s" % (rb_prefix, "infra-stop-begin")
@@ -1570,7 +1616,8 @@ def process_bench_roadblocks(callbacks = None, roadblock_id = None, endpoint_lab
                               timeout = timeout,
                               messages = user_msgs_file,
                               redis_password = roadblock_password,
-                              msgs_dir = roadblock_messages_dir)
+                              msgs_dir = roadblock_messages_dir,
+                              connection_watchdog = roadblock_connection_watchdog)
             quit,abort = evaluate_roadblock(quit, abort, rb_name, rc, iteration_sample, engine_rx_msgs_dir, max_sample_failures)
 
             rb_name = "%s%s" % (rb_prefix, "infra-stop-end")
@@ -1581,7 +1628,8 @@ def process_bench_roadblocks(callbacks = None, roadblock_id = None, endpoint_lab
                               timeout = timeout,
                               messages = user_msgs_file,
                               redis_password = roadblock_password,
-                              msgs_dir = roadblock_messages_dir)
+                              msgs_dir = roadblock_messages_dir,
+                              connection_watchdog = roadblock_connection_watchdog)
             quit,abort = evaluate_roadblock(quit, abort, rb_name, rc, iteration_sample, engine_rx_msgs_dir, max_sample_failures)
             ####################################################################
 
@@ -1678,7 +1726,7 @@ def process_options():
                         help = "Allow the user to control the degree of verbosity of the output.",
                         required = False,
                         type = str,
-                        choices = [ "debug", "normal" ],
+                        choices = [ "debug", "normal", "verbose-debug" ],
                         default = "normal")
 
     parser.add_argument("--max-sample-failures",

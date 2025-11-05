@@ -66,6 +66,8 @@ my %run; # A multi-dimensional, nested hash, schema TBD
          # This hash documents what was run.
 my $rb_bin = "roadblocker.py";
 my $rb_module = "roadblock.py";
+my $rb_connection_watchdog;
+my $rb_log_level;
 my $messages_ref;
 my $default_rb_timeout;
 my $collect_sysinfo_timeout;
@@ -73,6 +75,7 @@ my $endpoint_deploy_timeout;
 my $engine_script_start_timeout;
 my $endpoint_move_data_rb_timeout;
 my $base_rb_leader_cmd;
+my $endpoint_log_level;
 my $config_dir;
 my $engine_config_dir;
 my $engine_bench_cmds_dir;
@@ -246,6 +249,8 @@ sub do_roadblock {
     log_print sprintf "Roadblock: %s role: %s uuid: %s\n", $date, $role, $uuid;
 
     my $cmd = $base_rb_leader_cmd .
+        " --log-level=" . $rb_log_level .
+        " --connection-watchdog=" . $rb_connection_watchdog .
         " --leader-id=controller" .
         " --uuid=" . $uuid .
         " --timeout=" . $timeout .
@@ -2060,6 +2065,35 @@ sub load_settings_info() {
         }
     }
 
+    ($rc, $endpoint_log_level) = get_json_setting("endpoints.log-level", $jsonsettings);
+    if ($rc != 0) {
+        log_print "load_setting_info(): failed to load endpoint log-level config\n";
+        exit 1;
+    } else {
+        log_print sprintf "load_settings_info(): loaded endpoint log-level config: %s\n", $endpoint_log_level;
+    }
+
+    ($rc, $rb_connection_watchdog) = get_json_setting("roadblock.connection-watchdog", $jsonsettings);
+    if ($rc != 0) {
+        log_print "load_setting_info(): failed to load roadblock connection-watchdog config\n";
+        exit 1;
+    } else {
+        log_print sprintf "load_settings_info(): loaded roadblock connection-watchdog config: %s\n", $rb_connection_watchdog;
+        if ($rb_connection_watchdog eq "true") {
+            $rb_connection_watchdog = "enabled";
+        } else {
+            $rb_connection_watchdog = "disabled";
+        }
+    }
+
+    ($rc, $rb_log_level) = get_json_setting("roadblock.log-level", $jsonsettings);
+    if ($rc != 0) {
+        log_print "load_setting_info(): failed to load roadblock log-level config\n";
+        exit 1;
+    } else {
+        log_print sprintf "load_settings_info(): loaded roadblock log-level config: %s\n", $rb_log_level;
+    }
+
     ($rc, $default_rb_timeout) = get_json_setting("roadblock.timeouts.default", $jsonsettings);
     if ($rc != 0) {
         log_print "load_settings_info(): failed to load default roadblock timeout\n";
@@ -2463,6 +2497,7 @@ sub validate_endpoints() {
             }
 
             $job{'command'} .= " --crucible-dir=" . $ENV{'CRUCIBLE_HOME'};
+            $job{'command'} .= " --log-level=" . $endpoint_log_level;
         } else {
             $job{'command'} .= " --endpoint-opts=" . $$endpoint{'opts'};
         }
@@ -3148,6 +3183,7 @@ sub deploy_endpoints() {
                 }
 
                 $cmd .= " --crucible-dir=" . $ENV{'CRUCIBLE_HOME'};
+                $cmd .= " --log-level=" . $endpoint_log_level;
             } else {
                 $cmd .= " --roadblock-dir=" . $run{'roadblock-dir'};
                 $cmd .= " --endpoint-opts=" . $opts .

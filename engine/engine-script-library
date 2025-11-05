@@ -86,6 +86,22 @@ function do_roadblock() {
     cmd="$cmd $roadblock_bin --role=${role} --redis-server=$rickshaw_host"
     cmd="$cmd --leader-id=$leader --timeout=$timeout --redis-password=$roadblock_passwd"
     cmd="$cmd --follower-id=$cs_label --message-log=$msgs_log_file"
+    echo "connection-watchdog=${roadblock_connection_watchdog}"
+    if [ -n "${roadblock_connection_watchdog}" ]; then
+        if [ "${roadblock_connection_watchdog}" == "True" ]; then
+            cmd="${cmd} --connection-watchdog=enabled"
+        else
+            cmd="${cmd} --connection-watchdog=disabled"
+        fi
+    else
+        cmd="${cmd} --connection-watchdog=enabled"
+    fi
+    echo "log-level=${roadblock_log_level}"
+    if [ -n "${roadblock_log_level}" ]; then
+        cmd="${cmd} --log-level=${roadblock_log_level}"
+    else
+        cmd="${cmd} --log-level=normal"
+    fi
     if [ -n "${message}" ]; then
         cmd="${cmd} --user-message ${message}"
     fi
