@@ -47,6 +47,7 @@ else:
         exit(2)
     sys.path.append(str(Path(ROADBLOCK_HOME)))
 from roadblock import roadblock
+from roadblock import VERBOSE_DEBUG_LEVEL
 
 roadblock_exits = {
     "success": 0,
@@ -976,6 +977,8 @@ def setup_logger(log_level):
     match log_level:
         case "debug":
             logging.basicConfig(level = logging.DEBUG, format = log_format, stream = sys.stdout)
+        case "verbose-debug":
+            logging.basicConfig(level = VERBOSE_DEBUG_LEVEL, format = log_format, stream = sys.stdout)
         case "normal" | _:
             logging.basicConfig(level = logging.INFO, format = log_format, stream = sys.stdout)
 
@@ -1723,7 +1726,7 @@ def process_options():
                         help = "Allow the user to control the degree of verbosity of the output.",
                         required = False,
                         type = str,
-                        choices = [ "debug", "normal" ],
+                        choices = [ "debug", "normal", "verbose-debug" ],
                         default = "normal")
 
     parser.add_argument("--max-sample-failures",
