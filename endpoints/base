@@ -852,8 +852,12 @@ function process_bench_roadblocks() {
             if [ -f ${msgs_log_file} ]; then
                 next_timeout=`jq -r '.received[] | .payload.message."user-object".timeout ' ${msgs_log_file} | grep -v null`
                 if [ ! -z "${next_timeout}" ]; then
-                    timeout=${next_timeout}
-                    printf "Found new client-start-end timeout value: %s\n" ${timeout}
+                    if [ "${next_timeout}" == "unbounded" ]; then
+                        echo "A client engine has indicated it will be running an unbounded workload"
+                    else
+                        timeout=${next_timeout}
+                        printf "Found new client-start-end timeout value: %s\n" ${timeout}
+                    fi
                 else
                     printf "Could not find new client-start-end timeout value!\n"
                 fi
