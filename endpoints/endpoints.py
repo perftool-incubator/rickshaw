@@ -56,7 +56,7 @@ roadblock_exits = {
     "input": 2
 }
 
-log = logging.getLogger(__file__)
+logger = logging.getLogger(__file__)
 
 def log_result(result, level = None):
     """
@@ -68,21 +68,21 @@ def log_result(result, level = None):
                     Choices: info | error | debug
 
     Globals:
-        log: a logger instance
+        logger: a logger instance
 
     Returns:
         the return value from the resulting log function call
     """
     msg = "command '%s' exited with rc=%d:\nstdout=[\n%s]\nstderr=[\n%s]" % (result.command, result.exited, result.stdout, result.stderr)
     if (level is None and result.exited == 0) or level == "info":
-        return log.info(msg, stacklevel = 2)
+        return logger.info(msg, stacklevel = 2)
     elif (level is None and result.exited != 0) or level == "error":
-        return log.error(msg, stacklevel = 2)
+        return logger.error(msg, stacklevel = 2)
     elif level == "debug":
-        return log.debug(msg, stacklevel = 2)
+        return logger.debug(msg, stacklevel = 2)
     else:
-        log.error("Unknown level '%s' specified" % (level))
-        return log.error(msg, stacklevel = 2)
+        logger.error("Unknown level '%s' specified" % (level))
+        return logger.error(msg, stacklevel = 2)
 
 def run_remote(connection, command, validate = False, debug = False, stdin = None, env = None):
     """
@@ -97,7 +97,7 @@ def run_remote(connection, command, validate = False, debug = False, stdin = Non
         env (dict): A dictionary of environment variables to supply to the remote command being executed
 
     Globals:
-        log: a logger instance
+        logger: a logger instance
 
     Returns:
         Fabric run result (obj)
@@ -107,7 +107,7 @@ def run_remote(connection, command, validate = False, debug = False, stdin = Non
         if debug:
             validate_debug(debug_msg)
     else:
-        log.debug(debug_msg, stacklevel = 2)
+        logger.debug(debug_msg, stacklevel = 2)
 
     input_stream = None
     if stdin is not None:
@@ -120,14 +120,14 @@ def run_remote(connection, command, validate = False, debug = False, stdin = Non
             if validate:
                 validate_debug(msg)
             else:
-                log.debug(msg)
+                logger.debug(msg)
         else:
             log_result(result)
             msg = "Failed to create remote temporary file"
             if validate:
                 validate_error(msg)
             else:
-                log.error(msg)
+                logger.error(msg)
             return None
 
         local_temp_filename = None
@@ -139,14 +139,14 @@ def run_remote(connection, command, validate = False, debug = False, stdin = Non
             if validate:
                 validate_error(msg)
             else:
-                log.error(msg)
+                logger.error(msg)
             return None
         else:
             msg = "Created local temoorary file: %s" % (local_temp_filename)
             if validate:
                 validate_debug(msg)
             else:
-                log.debug(msg)
+                logger.debug(msg)
 
         result = connection.put(local_temp_filename, remote_temp_filename)
 
@@ -156,7 +156,7 @@ def run_remote(connection, command, validate = False, debug = False, stdin = Non
         if validate:
             valiate_debug(msg)
         else:
-            log.debug(msg)
+            logger.debug(msg)
 
         real_result = connection.run(command, hide = True, warn = True, env = env)
 
@@ -164,7 +164,7 @@ def run_remote(connection, command, validate = False, debug = False, stdin = Non
         if validate:
             validate_debug(msg)
         else:
-            log.debug(msg)
+            logger.debug(msg)
         os.remove(local_temp_filename)
 
         # remove remote temp file
@@ -172,7 +172,7 @@ def run_remote(connection, command, validate = False, debug = False, stdin = Non
         if validate:
             validate_debug(msg)
         else:
-            log.debug(msg)
+            logger.debug(msg)
         result = connection.run("rm -v %s" % (remote_temp_filename), hide = True, env = env)
         if result.exited != 0:
             log_result(result)
@@ -180,7 +180,7 @@ def run_remote(connection, command, validate = False, debug = False, stdin = Non
             if validate:
                 validate_error(msg)
             else:
-                log.error(msg)
+                logger.error(msg)
 
         return real_result
     else:
@@ -197,7 +197,7 @@ def run_local(command, validate = False, debug = False, env = None):
         env (dict): A dictionary of environment variables to supply to the remote command being executed
 
     Globals:
-        log: a logger instance
+        logger: a logger instance
 
     Returns:
         an Invoke run result
@@ -207,7 +207,7 @@ def run_local(command, validate = False, debug = False, env = None):
         if debug:
             validate_debug(debug_msg)
     else:
-        log.debug(debug_msg, stacklevel = 2)
+        logger.debug(debug_msg, stacklevel = 2)
 
     return run(command, hide = True, warn = True, env = env)
 
@@ -239,7 +239,7 @@ def remote_connection(host, user, validate = False):
        validate (bool): Is the function being called from validation mode (which means that logging cannot be used)
 
     Globals:
-        log: a logger instance
+        logger: a logger instance
 
     Returns:
        an open Fabric Connection
@@ -256,21 +256,21 @@ def remote_connection(host, user, validate = False):
                 if validate:
                     validate_comment(msg)
                 else:
-                    log.info(msg)
+                    logger.info(msg)
             break
         except (ssh_exception.AuthenticationException, ssh_exception.NoValidConnectionsError) as e:
             msg = "Failed to connect to remote '%s' as user '%s' on attempt %d due to '%s'" % (host, user, attempt, str(e))
             if validate:
                 validate_comment(msg)
             else:
-                log.warning(msg)
+                logger.warning(msg)
 
             if attempt == attempts:
                 msg = "Failed to connect to remote '%s' as user '%s' and maximum number of attempts (%d) has been exceeded.  Reraising exception '%s'" % (host, user, attempts, str(e))
                 if validate:
                     validate_error(msg)
                 else:
-                    log.error(msg)
+                    logger.error(msg)
                 raise e
             else:
                 time.sleep(1)
@@ -344,19 +344,19 @@ def log_cli(args):
         args (namespace): the script's CLI parameters
 
     Globals:
-        log: a logger instance
+        logger: a logger instance
 
     Returns:
         0
     """
-    log.info("Logging CLI")
+    logger.info("Logging CLI")
 
-    log.info("CLI parameters:\n%s" % (cli_stream()))
+    logger.info("CLI parameters:\n%s" % (cli_stream()))
 
     the_args = dict()
     for arg in args.__dict__:
         the_args[str(arg)] = args.__dict__[arg]
-    log.info("argparse:\n %s" % (dump_json(the_args)))
+    logger.info("argparse:\n %s" % (dump_json(the_args)))
 
     return 0
 
@@ -368,12 +368,12 @@ def log_env():
         None
 
     Globals:
-        None
+        logger: a logger instance
 
     Returns:
         0
     """
-    log.info("Logging Environment Variables:\n%s" % (dump_json(dict(os.environ))))
+    logger.info("Logging Environment Variables:\n%s" % (dump_json(dict(os.environ))))
 
     return 0
 
@@ -498,12 +498,12 @@ def is_ip(ip_address):
         ip_address (str): A string to check if it is a valid IPv4 or IPv5 address (it could be a hostname)
 
     Globals:
-        None
+        logger: a logger instance
 
     Returns:
         True or False
     """
-    log.info("Checking to see if '%s' is an IP address" % (ip_address))
+    logger.info("Checking to see if '%s' is an IP address" % (ip_address))
     try:
         ipaddress.ip_address(ip_address)
         return True
@@ -605,7 +605,7 @@ def create_roadblock_msg(recipient_type, recipient_id, payload_type, payload):
         recipient_id (str): What is the specific name/ID of the intended message recipient
 
     Globals:
-        None
+        logger: a logger instance
 
     Returns:
         msg (dict): The generated message
@@ -621,7 +621,7 @@ def create_roadblock_msg(recipient_type, recipient_id, payload_type, payload):
     ]
 
     json_msg = dump_json(msg)
-    log.info("Creating new roadblock message for recipient type '%s' with recipient id '%s':\n%s" % (recipient_type, recipient_id, json_msg), stacklevel = 2)
+    logger.info("Creating new roadblock message for recipient type '%s' with recipient id '%s':\n%s" % (recipient_type, recipient_id, json_msg), stacklevel = 2)
 
     return msg
 
@@ -642,44 +642,44 @@ def do_roadblock(roadblock_id = None, label = None, timeout = None, messages = N
         connection_watchdog (bool): Should the connection watchdog be enabled
 
     Globals:
-        None
+        logger: a logger instance
 
     Returns:
         rc (int): The return code for the roadblock
     """
     if label is None:
-        log.error("No roadblock label specified", stacklevel = 2)
+        logger.error("No roadblock label specified", stacklevel = 2)
         raise ValueError("No roadblock label specified")
 
-    log.info("Processing roadblock '%s'" % (label), stacklevel = 2)
+    logger.info("Processing roadblock '%s'" % (label), stacklevel = 2)
     uuid = "%s:%s" % (roadblock_id, label)
-    log.info("[%s] Roadblock uuid is '%s'" % (label, uuid))
+    logger.info("[%s] Roadblock uuid is '%s'" % (label, uuid))
 
     if timeout is None:
         timeout = 300
-        log.info("[%s] No roadblock timeout specified, defaulting to %d" % (label, timeout))
+        logger.info("[%s] No roadblock timeout specified, defaulting to %d" % (label, timeout))
     else:
-        log.info("[%s] Roadblock timeout set to %d" % (label, timeout))
+        logger.info("[%s] Roadblock timeout set to %d" % (label, timeout))
 
     if messages is None:
-        log.info("[%s] No roadblock messages to send" % (label))
+        logger.info("[%s] No roadblock messages to send" % (label))
     else:
-        log.info("[%s] Sending roadblock messages %s" % (label, messages))
+        logger.info("[%s] Sending roadblock messages %s" % (label, messages))
 
     if wait_for is None:
-        log.info("[%s] No roadblock wait-for" % (label))
+        logger.info("[%s] No roadblock wait-for" % (label))
     else:
         wait_for_log = tempfile.mkstemp(suffix = "log")
         wait_for_log[0].close()
         wait_for_log = wait_for_log[1]
-        log.info("[%s] Going to run this wait-for command: %s" % (label, wait_For))
-        log.info("[%s] Going to log wait-for to this file: %s" % (label, wait_for_log))
+        logger.info("[%s] Going to run this wait-for command: %s" % (label, wait_For))
+        logger.info("[%s] Going to log wait-for to this file: %s" % (label, wait_for_log))
 
     if not abort is None and not abort is False:
-        log.info("[%s] Going to send an abort" % (label))
+        logger.info("[%s] Going to send an abort" % (label))
 
     msgs_log_file = msgs_dir + "/" + label + ".json"
-    log.info("[%s] Logging messages to: %s" % (label, msgs_log_file))
+    logger.info("[%s] Logging messages to: %s" % (label, msgs_log_file))
 
     redis_server = "localhost"
     leader = "controller"
@@ -687,11 +687,11 @@ def do_roadblock(roadblock_id = None, label = None, timeout = None, messages = N
     result = run_local("ping -w 10 -c 4 " + redis_server)
     ping_log_msg = "[%s] Pinged redis server '%s' with return code %d:\nstdout:\n%sstderr:\n%s" % (label, redis_server, result.exited, result.stdout, result.stderr)
     if result.exited != 0:
-        log.error(ping_log_mesg)
+        logger.error(ping_log_mesg)
     else:
-        log.info(ping_log_msg)
+        logger.info(ping_log_msg)
 
-    my_roadblock = roadblock(log, False)
+    my_roadblock = roadblock(None, None)
     my_roadblock.set_uuid(uuid)
     my_roadblock.set_role("follower")
     my_roadblock.set_follower_id(follower_id)
@@ -713,24 +713,24 @@ def do_roadblock(roadblock_id = None, label = None, timeout = None, messages = N
     rc = my_roadblock.run_it()
     result_log_msg = "[%s] Roadblock resulted in return code %d" % (label, rc)
     if rc != 0:
-        log.error(result_log_msg)
+        logger.error(result_log_msg)
     else:
-        log.info(result_log_msg)
+        logger.info(result_log_msg)
 
     stream = ""
     with open(msgs_log_file, "r", encoding = "ascii") as msgs_log_file_fp:
         for line in msgs_log_file_fp:
             stream += line
-    log.info("[%s] Logged messages from roadblock:\n%s" % (label, stream))
+    logger.info("[%s] Logged messages from roadblock:\n%s" % (label, stream))
 
     if not wait_for is None:
         stream = ""
         with open(wait_for_log, "r", encoding = "ascii") as wait_for_log_fp:
             for line in wait_for_log_fp:
               stream += line
-        log.info("[%s] Wait-for log from raodblock:\n%s" % (label, stream))
+        logger.info("[%s] Wait-for log from raodblock:\n%s" % (label, stream))
 
-    log.info("[%s] Returning %d" % (label, rc))
+    logger.info("[%s] Returning %d" % (label, rc))
     return rc
 
 def prepare_roadblock_user_msgs_file(iteration_sample_dir, engine_tx_msgs_dir, roadblock_name):
@@ -743,7 +743,7 @@ def prepare_roadblock_user_msgs_file(iteration_sample_dir, engine_tx_msgs_dir, r
         roadblock_name (str): The name of the roadblock that the messages should be sent for
 
     Globals:
-        None
+        logger: a logger instance
 
     Returns:
         user_msgs_file (str): The file containing the user messages if there are queued messages
@@ -756,7 +756,7 @@ def prepare_roadblock_user_msgs_file(iteration_sample_dir, engine_tx_msgs_dir, r
             queued_msg_files.append(entry.name)
 
     if len(queued_msg_files) > 0:
-        log.info("Found queued messages in %s, preparing them to send" % (engine_tx_msgs_dir))
+        logger.info("Found queued messages in %s, preparing them to send" % (engine_tx_msgs_dir))
 
         tx_sent_dir = engine_tx_msgs_dir + "-sent"
         my_make_dirs(tx_sent_dir)
@@ -764,16 +764,16 @@ def prepare_roadblock_user_msgs_file(iteration_sample_dir, engine_tx_msgs_dir, r
         user_msgs = []
         for msg_file in queued_msg_files:
             msg_file_full_path = engine_tx_msgs_dir + "/" + msg_file
-            log.info("Importing %s" % (msg_file_full_path))
+            logger.info("Importing %s" % (msg_file_full_path))
             msg_file_json,err = load_json_file(msg_file_full_path)
             if msg_file_json is None:
-                log.error("Failed to load user messages from %s with error '%s'" % (msg_file_full_path, err))
+                logger.error("Failed to load user messages from %s with error '%s'" % (msg_file_full_path, err))
             else:
-                log.info("Adding user messages from %s" % (msg_file_full_path))
+                logger.info("Adding user messages from %s" % (msg_file_full_path))
                 user_msgs.extend(msg_file_json)
 
                 new_msg_file_full_path = tx_sent_dir + "/" + msg_file
-                log.info("Moving user message file from %s to %s" % (msg_file_full_path, new_msg_file_full_path))
+                logger.info("Moving user message file from %s to %s" % (msg_file_full_path, new_msg_file_full_path))
                 os.replace(msg_file_full_path, new_msg_file_full_path)
         payload = {
             "sync": roadblock_name
@@ -781,15 +781,15 @@ def prepare_roadblock_user_msgs_file(iteration_sample_dir, engine_tx_msgs_dir, r
         user_msgs.extend(create_roadblock_msg("all", "all", "user-object", payload))
 
         user_msgs_file = "%s/rb-msgs-%s.json" % (iteration_sample_dir, roadblock_name)
-        log.info("Writing user messages to %s" % (user_msgs_file))
+        logger.info("Writing user messages to %s" % (user_msgs_file))
         user_msgs_file_json = dump_json(user_msgs)
         with open(user_msgs_file, "w", encoding = "ascii") as user_msgs_file_fp:
             user_msgs_file_fp.write(user_msgs_file_json)
-        log.info("Contents of %s:\n%s" % (user_msgs_file, user_msgs_file_json))
+        logger.info("Contents of %s:\n%s" % (user_msgs_file, user_msgs_file_json))
 
         return user_msgs_file
     else:
-        log.info("No queued messages found in %s" % (engine_tx_msgs_dir))
+        logger.info("No queued messages found in %s" % (engine_tx_msgs_dir))
         return None
 
 def evaluate_roadblock(quit, abort, roadblock_name, roadblock_rc, iteration_sample, engine_rx_msgs_dir, max_sample_failures):
@@ -805,6 +805,7 @@ def evaluate_roadblock(quit, abort, roadblock_name, roadblock_rc, iteration_samp
         max_sample_failures (int): The maximum number of sample failures that an iteration can have before it fails
 
     Globals:
+        logger: a logger instance
         roadblock_exits (dict): A mapping of specific roadblock "events" to their associated return code
 
     Returns:
@@ -813,25 +814,25 @@ def evaluate_roadblock(quit, abort, roadblock_name, roadblock_rc, iteration_samp
     """
     if roadblock_rc != 0:
         if roadblock_rc == roadblock_exits["timeout"]:
-            log.error("Roadblock '%s' timed out, attempting to exit and cleanly finish the run" % (roadblock_name))
+            logger.error("Roadblock '%s' timed out, attempting to exit and cleanly finish the run" % (roadblock_name))
             quit = True
         elif roadblock_rc == roadblock_exits["abort"]:
-            log.warning("Roadblock '%s' received an abort, stopping sample" % (roadblock_name))
+            logger.warning("Roadblock '%s' received an abort, stopping sample" % (roadblock_name))
 
             iteration_sample["attempt-fail"] = 1
             iteration_sample["failures"] += 1
-            log.info("iteration sample failures is now %d" % (iteration_sample["failures"]))
+            logger.info("iteration sample failures is now %d" % (iteration_sample["failures"]))
 
             if iteration_sample["failures"] >= max_sample_failures:
                 iteration_sample["complete"] = True
-                log.error("A maximum of %d failures for iteration %d has been reached" % (iteration_sample["failures"], iteration_sample["iteration-id"]))
+                logger.error("A maximum of %d failures for iteration %d has been reached" % (iteration_sample["failures"], iteration_sample["iteration-id"]))
 
             abort = True
 
     msgs_log_file = engine_rx_msgs_dir + "/" + roadblock_name + ".json"
     path = Path(msgs_log_file)
     if path.exists() and path.is_file():
-        log.info("Found received messages file: %s" % (msgs_log_file))
+        logger.info("Found received messages file: %s" % (msgs_log_file))
 
         split_roadblock_name = roadblock_name.split(":")
         roadblock_label = split_roadblock_name[1]
@@ -846,11 +847,11 @@ def evaluate_roadblock(quit, abort, roadblock_name, roadblock_rc, iteration_samp
                         msg = "%s:%d" % (roadblock_label, counter)
                         msg_outfile = engine_rx_msgs_dir + "/" + msg
                         msg_outfile_json = dump_json(msg["paylod"]["message"]["user-object"])
-                        log.info("Found user-object message and saved it to %s:\nmessage:\n%s" % (msg_outfile, msg_outfile_json))
+                        logger.info("Found user-object message and saved it to %s:\nmessage:\n%s" % (msg_outfile, msg_outfile_json))
                         with open(msg_outfile, "w", encoding = "ascii") as msg_outfile_fp:
                             msg_outfile_fp.write(msg_outfile_json)
         else:
-            log.error("Failed to load %s due to error '%s'" % (msgs_log_file, str(err)))
+            logger.error("Failed to load %s due to error '%s'" % (msgs_log_file, str(err)))
 
     return quit,abort
 
@@ -862,12 +863,12 @@ def my_make_dirs(mydir):
         mydir (str): The directory that needs to be created
 
     Globals:
-        log: a logger instance
+        logger: a logger instance
 
     Returns:
         None
     """
-    log.info("Creating directory %s (recursively if necessary)" % (mydir), stacklevel = 2)
+    logger.info("Creating directory %s (recursively if necessary)" % (mydir), stacklevel = 2)
     return os.makedirs(mydir, exist_ok = True)
 
 def build_benchmark_engine_mapping(benchmarks):
@@ -973,14 +974,22 @@ def setup_logger(log_level):
     Returns:
         a logging instance
     """
-    log_format = '[LOG %(asctime)s %(levelname)s %(module)s %(funcName)s:%(lineno)d][Thread %(threadName)s] %(message)s'
+    log_format = logging.Formatter('[LOG %(asctime)s %(levelname)s %(module)s %(funcName)s:%(lineno)d][Thread %(threadName)s] %(message)s')
+
+    logging_handler = logging.StreamHandler(sys.stdout)
+    logging_handler.setFormatter(log_format)
+
     match log_level:
         case "debug":
-            logging.basicConfig(level = logging.DEBUG, format = log_format, stream = sys.stdout)
+            logging_handler.setLevel(logging.DEBUG)
         case "verbose-debug":
-            logging.basicConfig(level = VERBOSE_DEBUG_LEVEL, format = log_format, stream = sys.stdout)
+            logging_handler.setLevel(VERBOSE_DEBUG_LEVEL)
         case "normal" | _:
-            logging.basicConfig(level = logging.INFO, format = log_format, stream = sys.stdout)
+            logging_handler.setLevel(logging.INFO)
+
+    root_logger = logging.getLogger()
+    root_logger.setLevel(VERBOSE_DEBUG_LEVEL)
+    root_logger.addHandler(logging_handler)
 
     # change the main thread's name so it fits with other usage in the endpoints
     main_thread = threading.main_thread()
@@ -1003,19 +1012,19 @@ def process_pre_deploy_roadblock(roadblock_id = None, endpoint_label = None, roa
         roadblock_connection_watchdog (bool): Should the connection watchdog be enabled
 
     Globals:
-        None
+        logger: a logger instance
 
     Returns:
         status (int): 0 for success, != 0 for failure
     """
-    log.info("Starting to process pre-deploy roadblock")
+    logger.info("Starting to process pre-deploy roadblock")
 
     deployment_followers_msg_file = None
     if deployment_followers is not None:
-        log.info("A deployment followers list was provided")
+        logger.info("A deployment followers list was provided")
         
         if len(deployment_followers) > 0:
-            log.info("Informing roadblock leader of these deployment followers: %s" % (deployment_followers))
+            logger.info("Informing roadblock leader of these deployment followers: %s" % (deployment_followers))
 
             deployment_followers_msg_payload = {
                 "deployment-followers": deployment_followers
@@ -1023,13 +1032,13 @@ def process_pre_deploy_roadblock(roadblock_id = None, endpoint_label = None, roa
             deployment_followers_msg = create_roadblock_msg("all", "all", "user-object", deployment_followers_msg_payload)
 
             deployment_followers_msg_file = roadblock_messages_dir + "/deployment-followers.json"
-            log.info("Writing deployment followers message to %s" % (deployment_followers_msg_file))
+            logger.info("Writing deployment followers message to %s" % (deployment_followers_msg_file))
             with open(deployment_followers_msg_file, "w", encoding = "ascii") as deployment_followers_msg_file_fp:
                 deployment_followers_msg_file_fp.write(dump_json(deployment_followers_msg))
         else:
-            log.info("No deplyment followers to inform the roadblock leader about")
+            logger.info("No deplyment followers to inform the roadblock leader about")
     else:
-        log.info("The deployment followers list was not provided")
+        logger.info("The deployment followers list was not provided")
 
     rc = do_roadblock(roadblock_id = roadblock_id,
                       follower_id = endpoint_label,
@@ -1080,16 +1089,16 @@ def process_roadblocks(callbacks = None, roadblock_id = None, endpoint_label = N
         roadblock_connection_watchdog (bool): Should the connection watchdog be enabled
 
     Globals:
-        None
+        logger: a logger instance
 
     Returns:
         0
     """
-    log.info("Starting to process roadblocks")
+    logger.info("Starting to process roadblocks")
 
     new_followers_msg_file = None
     if len(new_followers) > 0:
-        log.info("Informing roadblock leader of these new followers: %s" % (new_followers))
+        logger.info("Informing roadblock leader of these new followers: %s" % (new_followers))
 
         new_followers_msg_payload = {
             "new-followers": new_followers
@@ -1097,11 +1106,11 @@ def process_roadblocks(callbacks = None, roadblock_id = None, endpoint_label = N
         new_followers_msg = create_roadblock_msg("all", "all", "user-object", new_followers_msg_payload)
 
         new_followers_msg_file = roadblock_messages_dir + "/new-followers.json"
-        log.info("Writing new followers message to %s" % (new_followers_msg_file))
+        logger.info("Writing new followers message to %s" % (new_followers_msg_file))
         with open(new_followers_msg_file, "w", encoding = "ascii") as new_followers_msg_file_fp:
             new_followers_msg_file_fp.write(dump_json(new_followers_msg))
     else:
-        log.info("No new followers to inform the roadblock leader about")
+        logger.info("No new followers to inform the roadblock leader about")
 
     rc = do_roadblock(roadblock_id = roadblock_id,
                       follower_id = endpoint_label,
@@ -1136,10 +1145,10 @@ def process_roadblocks(callbacks = None, roadblock_id = None, endpoint_label = N
     callback = "engine-init"
     engine_init_msgs = None
     if callback in callbacks and callbacks[callback] is not None:
-        log.info("Calling endpoint specified callback for '%s'" % (callback))
+        logger.info("Calling endpoint specified callback for '%s'" % (callback))
         engine_init_msgs = callbacks[callback]()
     else:
-        log.info("Calling endpoint did not specify a callback for '%s'" % (callback))
+        logger.info("Calling endpoint did not specify a callback for '%s'" % (callback))
     rc = do_roadblock(roadblock_id = roadblock_id,
                       follower_id = endpoint_label,
                       label = "engine-init-end",
@@ -1182,10 +1191,10 @@ def process_roadblocks(callbacks = None, roadblock_id = None, endpoint_label = N
     callback = "collect-sysinfo"
     engine_init_msgs = None
     if callback in callbacks and callbacks[callback] is not None:
-        log.info("Calling endpoint specified callback for '%s'" % (callback))
+        logger.info("Calling endpoint specified callback for '%s'" % (callback))
         engine_init_msgs = callbacks[callback]()
     else:
-        log.info("Calling endpoint did not specify a callback for '%s'" % (callback))
+        logger.info("Calling endpoint did not specify a callback for '%s'" % (callback))
     rc = do_roadblock(roadblock_id = roadblock_id,
                       follower_id = endpoint_label,
                       label = "collect-sysinfo-end",
@@ -1268,10 +1277,10 @@ def process_roadblocks(callbacks = None, roadblock_id = None, endpoint_label = N
     callback = "remote-cleanup"
     engine_init_msgs = None
     if callback in callbacks and callbacks[callback] is not None:
-        log.info("Calling endpoint specified callback for '%s'" % (callback))
+        logger.info("Calling endpoint specified callback for '%s'" % (callback))
         engine_init_msgs = callbacks[callback]()
     else:
-        log.info("Calling endpoint did not specify a callback for '%s'" % (callback))
+        logger.info("Calling endpoint did not specify a callback for '%s'" % (callback))
     do_roadblock(roadblock_id = roadblock_id,
                  follower_id = endpoint_label,
                  label = "endpoint-cleanup-end",
@@ -1304,12 +1313,12 @@ def process_bench_roadblocks(callbacks = None, roadblock_id = None, endpoint_lab
         roadblock_connection_watchdog (bool): Should the connection watchdog be enabled
 
     Globals:
-        log: a logger instance
+        logger: a logger instance
 
     Returns:
         0
     """
-    log.info("Starting to process benchmark roadblocks")
+    logger.info("Starting to process benchmark roadblocks")
 
     rc = do_roadblock(roadblock_id = roadblock_id,
                       follower_id = endpoint_label,
@@ -1323,7 +1332,7 @@ def process_bench_roadblocks(callbacks = None, roadblock_id = None, endpoint_lab
 
     iteration_sample_data = []
 
-    log.info("Initializing data structures")
+    logger.info("Initializing data structures")
     with open(engine_commands_dir + "/client/1/start") as bench_cmds_fp:
         for line in bench_cmds_fp:
             split = line.split(" ")
@@ -1332,7 +1341,7 @@ def process_bench_roadblocks(callbacks = None, roadblock_id = None, endpoint_lab
             iteration_id = int(split[0])
             sample_id = int(split[1])
 
-            log.info("iteration_sample=%s iteration_id=%s sample_id=%s" % (iteration_sample, iteration_id, sample_id))
+            logger.info("iteration_sample=%s iteration_id=%s sample_id=%s" % (iteration_sample, iteration_id, sample_id))
 
             obj = {
                 "iteration-sample": iteration_sample,
@@ -1345,7 +1354,7 @@ def process_bench_roadblocks(callbacks = None, roadblock_id = None, endpoint_lab
             }
             iteration_sample_data.append(obj)
 
-    log.info("Total tests: %d" % (len(iteration_sample_data)))
+    logger.info("Total tests: %d" % (len(iteration_sample_data)))
 
     rc = do_roadblock(roadblock_id = roadblock_id,
                       follower_id = endpoint_label,
@@ -1372,7 +1381,7 @@ def process_bench_roadblocks(callbacks = None, roadblock_id = None, endpoint_lab
         engine_msgs_dir = "%s/msgs" % (iteration_sample_dir)
         engine_tx_msgs_dir = "%s/tx" % (engine_msgs_dir)
         engine_rx_msgs_dir = "%s/rx" % (engine_msgs_dir)
-        log.info("Creating iteration+sample directories")
+        logger.info("Creating iteration+sample directories")
         for current_dir in [ iteration_sample_dir, engine_msgs_dir, engine_tx_msgs_dir, engine_rx_msgs_dir ]:
             my_make_dirs(current_dir)
 
@@ -1381,7 +1390,7 @@ def process_bench_roadblocks(callbacks = None, roadblock_id = None, endpoint_lab
             iteration_sample["attempt-fail"] = 0
             iteration_sample["attempt-num"] += 1
 
-            log.info("Starting iteration %d sample %d (test %d of %d) attempt number %d of %d" %
+            logger.info("Starting iteration %d sample %d (test %d of %d) attempt number %d of %d" %
                      (
                          iteration_sample["iteration-id"],
                          iteration_sample["sample-id"],
@@ -1459,10 +1468,10 @@ def process_bench_roadblocks(callbacks = None, roadblock_id = None, endpoint_lab
             callback = "test-start"
             engine_init_msgs = None
             if callback in callbacks and callbacks[callback] is not None:
-                log.info("Calling endpoint specified callback for '%s'" % (callback))
+                logger.info("Calling endpoint specified callback for '%s'" % (callback))
                 engine_init_msgs = callbacks[callback](roadblock_messages_dir, test_id, engine_tx_msgs_dir)
             else:
-                log.info("Calling endpoint did not specify a callback for '%s'" % (callback))
+                logger.info("Calling endpoint did not specify a callback for '%s'" % (callback))
 
             rb_name = "%s%s" % (rb_prefix, "endpoint-start-end")
             user_msgs_file = prepare_roadblock_user_msgs_file(iteration_sample_dir, engine_tx_msgs_dir, rb_name)
@@ -1500,17 +1509,17 @@ def process_bench_roadblocks(callbacks = None, roadblock_id = None, endpoint_lab
                                 new_timeout = msg["payload"]["message"]["user-object"]["timeout"]
                                 break
                     if new_timeout is None:
-                        log.warning("Could not find new client-start-end timeout value")
+                        logger.warning("Could not find new client-start-end timeout value")
                     else:
                         if new_timeout == "unbounded":
-                            log.info("A client engine has indicated it will be running an unbounded workload")
+                            logger.info("A client engine has indicated it will be running an unbounded workload")
                         else:
                             timeout = int(new_timeout)
-                            log.info("Found new client-start-end timeout value: %d" % (timeout))
+                            logger.info("Found new client-start-end timeout value: %d" % (timeout))
                 else:
-                    log.error("Failed to load %s due to error '%s'" % (msgs_log_file, str(err)))
+                    logger.error("Failed to load %s due to error '%s'" % (msgs_log_file, str(err)))
             else:
-                log.warning("Could not find %s" % (msgs_log_file))
+                logger.warning("Could not find %s" % (msgs_log_file))
 
             rb_name = "%s%s" % (rb_prefix, "client-start-end")
             user_msgs_file = prepare_roadblock_user_msgs_file(iteration_sample_dir, engine_tx_msgs_dir, rb_name)
@@ -1526,7 +1535,7 @@ def process_bench_roadblocks(callbacks = None, roadblock_id = None, endpoint_lab
             ####################################################################
             if timeout != roadblock_timeouts["default"]:
                 timeout = roadblock_timeouts["default"]
-                log.info("Resetting timeout value: %s" % (timeout))
+                logger.info("Resetting timeout value: %s" % (timeout))
 
             rb_name = "%s%s" % (rb_prefix, "client-stop-begin")
             user_msgs_file = prepare_roadblock_user_msgs_file(iteration_sample_dir, engine_tx_msgs_dir, rb_name)
@@ -1591,10 +1600,10 @@ def process_bench_roadblocks(callbacks = None, roadblock_id = None, endpoint_lab
             callback = "test-stop"
             engine_init_msgs = None
             if callback in callbacks and callbacks[callback] is not None:
-                log.info("Calling endpoint specified callback for '%s'" % (callback))
+                logger.info("Calling endpoint specified callback for '%s'" % (callback))
                 engine_init_msgs = callbacks[callback](test_id)
             else:
-                log.info("Calling endpoint did not specify a callback for '%s'" % (callback))
+                logger.info("Calling endpoint did not specify a callback for '%s'" % (callback))
 
             rb_name = "%s%s" % (rb_prefix, "server-stop-end")
             user_msgs_file = prepare_roadblock_user_msgs_file(iteration_sample_dir, engine_tx_msgs_dir, rb_name)
@@ -1641,12 +1650,12 @@ def process_bench_roadblocks(callbacks = None, roadblock_id = None, endpoint_lab
                 sample_result = "unsuccessfully"
 
                 if abort:
-                    log.warning("An abort signal has been encountered for this sample")
+                    logger.warning("An abort signal has been encountered for this sample")
 
                 if quit:
-                    log.error("A quit signal has been encountered")
+                    logger.error("A quit signal has been encountered")
 
-            log.info("Completed iteration %d sample %d (test %d of %d) attempt number %d of %d %s" %
+            logger.info("Completed iteration %d sample %d (test %d of %d) attempt number %d of %d %s" %
                      (
                          iteration_sample["iteration-id"],
                          iteration_sample["sample-id"],
@@ -1657,7 +1666,7 @@ def process_bench_roadblocks(callbacks = None, roadblock_id = None, endpoint_lab
                          sample_result
                      ))
 
-    log.info("Final summary of iteration sample data:\n%s" % (dump_json(iteration_sample_data)))
+    logger.info("Final summary of iteration sample data:\n%s" % (dump_json(iteration_sample_data)))
 
     return 0
 
@@ -1791,12 +1800,12 @@ def init_settings(settings, args):
         args (namespace): the script's CLI parameters
 
     Globals:
-        log: a logger instance
+        logger: a logger instance
 
     Returns:
         settings (dict): the one data structure to rule then all
     """
-    log.info("Initializing settings based on CLI parameters")
+    logger.info("Initializing settings based on CLI parameters")
 
     settings["dirs"] = dict()
 
@@ -1827,7 +1836,7 @@ def init_settings(settings, args):
 
     log_settings(settings, mode = "dirs")
 
-    log.info("Initializing misc settings")
+    logger.info("Initializing misc settings")
 
     settings["misc"] = dict()
 
@@ -1837,7 +1846,7 @@ def init_settings(settings, args):
     if args.log_level == "debug":
         settings["misc"]["debug-output"] = True
 
-    log.info("Creating image map")
+    logger.info("Creating image map")
     settings["misc"]["image-map"] = dict()
     images = args.images.split(",")
     for image in images:
@@ -1846,9 +1855,9 @@ def init_settings(settings, args):
         userenv = image_split[1]
         image = image_split[2]
         if not role in settings["misc"]["image-map"]:
-            log.info("Adding role %s to image-map" % (role))
+            logger.info("Adding role %s to image-map" % (role))
             settings["misc"]["image-map"][role] = dict()
-        log.info("Adding %s to userenv %s for role %s to image-map" % (image, userenv, role))
+        logger.info("Adding %s to userenv %s for role %s to image-map" % (image, userenv, role))
         settings["misc"]["image-map"][role][userenv] = image
 
     log_settings(settings, mode = "misc")
@@ -1865,30 +1874,30 @@ def log_settings(settings, mode = "all", endpoint_index = None):
         endpoint_index (int): the index of the endpoint to log
 
     Globals:
-        log: a logger instance
+        logger: a logger instance
 
     Returns:
         None
     """
     match mode:
         case "benchmark-mapping":
-            return log.info("settings[benchmark-mapping]:\n%s" % (dump_json(settings["engines"]["benchmark-mapping"])), stacklevel = 2)
+            return logger.info("settings[benchmark-mapping]:\n%s" % (dump_json(settings["engines"]["benchmark-mapping"])), stacklevel = 2)
         case "crucible":
-            return log.info("settings[crucible]:\n%s" % (dump_json(settings["crucible"])), stacklevel = 2)
+            return logger.info("settings[crucible]:\n%s" % (dump_json(settings["crucible"])), stacklevel = 2)
         case "engines":
-            return log.info("settings[engines]:\n%s" % (dump_json(settings["engines"])), stacklevel = 2)
+            return logger.info("settings[engines]:\n%s" % (dump_json(settings["engines"])), stacklevel = 2)
         case "misc":
-            return log.info("settings[misc]:\n%s" % (dump_json(settings["misc"])), stacklevel = 2)
+            return logger.info("settings[misc]:\n%s" % (dump_json(settings["misc"])), stacklevel = 2)
         case "dirs":
-            return log.info("settings[dirs]:\n%s" % (dump_json(settings["dirs"])), stacklevel = 2)
+            return logger.info("settings[dirs]:\n%s" % (dump_json(settings["dirs"])), stacklevel = 2)
         case "endpoint":
-            return log.info("settings[endpoint]:\n%s" % (dump_json(settings["run-file"]["endpoints"][endpoint_index])), stacklevel = 2)
+            return logger.info("settings[endpoint]:\n%s" % (dump_json(settings["run-file"]["endpoints"][endpoint_index])), stacklevel = 2)
         case "rickshaw":
-            return log.info("settings[rickshaw]:\n%s" % (dump_json(settings["rickshaw"])), stacklevel = 2)
+            return logger.info("settings[rickshaw]:\n%s" % (dump_json(settings["rickshaw"])), stacklevel = 2)
         case "run-file":
-            return log.info("settings[run-file]:\n%s" % (dump_json(settings["run-file"])), stacklevel = 2)
+            return logger.info("settings[run-file]:\n%s" % (dump_json(settings["run-file"])), stacklevel = 2)
         case "all" | _:
-            return log.info("settings:\n%s" % (dump_json(settings)), stacklevel = 2)
+            return logger.info("settings:\n%s" % (dump_json(settings)), stacklevel = 2)
 
 def load_settings(settings, endpoint_name = None, run_file = None, rickshaw_dir = None, endpoint_index = None, endpoint_normalizer_callback = None, crucible_dir = None):
     """
@@ -1904,12 +1913,12 @@ def load_settings(settings, endpoint_name = None, run_file = None, rickshaw_dir 
         crucible_dir (str): the path to the crucible directory
 
     Globals:
-        log: a logger instance
+        logger: a logger instance
 
     Returns:
         settings (dict): the one data structure to rule them all
     """
-    log.info("Loading settings from config files")
+    logger.info("Loading settings from config files")
 
     settings["crucible"] = dict()
     if crucible_dir is not None:
@@ -1917,64 +1926,64 @@ def load_settings(settings, endpoint_name = None, run_file = None, rickshaw_dir 
         crucible_registries_schema_file = crucible_dir + "/schema/registries.json"
         settings["crucible"]["registries"],err = load_json_file(crucible_registries_file)
         if settings["crucible"]["registries"] is None:
-            log.error("Failed to load crucible registries information from %s with error '%s'" % (crucible_registries_file, err))
+            logger.error("Failed to load crucible registries information from %s with error '%s'" % (crucible_registries_file, err))
             return None
         else:
-            log.info("Loaded crucible registries information from %s" % (crucible_registries_file))
+            logger.info("Loaded crucible registries information from %s" % (crucible_registries_file))
 
         valid,err = validate_schema(settings["crucible"]["registries"], crucible_registries_schema_file)
         if not valid:
-            log.error("JSON validation failed for crucible registries information with error '%s'" % (err))
+            logger.error("JSON validation failed for crucible registries information with error '%s'" % (err))
             return None
         else:
-            log.info("JSON validation for crucible registries information passed")
+            logger.info("JSON validation for crucible registries information passed")
 
         log_settings(settings, mode = "crucible")
 
     rickshaw_settings_file = settings["dirs"]["local"]["conf"] + "/rickshaw-settings.json.xz"
     settings["rickshaw"],err = load_json_file(rickshaw_settings_file, uselzma = True)
     if settings["rickshaw"] is None:
-        log.error("Failed to load rickshaw-settings from %s with error '%s'" % (rickshaw_settings_file, err))
+        logger.error("Failed to load rickshaw-settings from %s with error '%s'" % (rickshaw_settings_file, err))
         return None
     else:
-        log.info("Loaded rickshaw-settings from %s" % (rickshaw_settings_file))
+        logger.info("Loaded rickshaw-settings from %s" % (rickshaw_settings_file))
 
     log_settings(settings, mode = "rickshaw")
 
     settings["run-file"],err = load_json_file(run_file)
     if settings["run-file"] is None:
-        log.error("Failed to load run-file from %s with error '%s'" % (run_file, err))
+        logger.error("Failed to load run-file from %s with error '%s'" % (run_file, err))
         return None
     else:
-        log.info("Loaded run-file from %s" % (run_file))
+        logger.info("Loaded run-file from %s" % (run_file))
 
     valid, err = validate_schema(settings["run-file"], rickshaw_dir + "/util/JSON/schema.json")
     if not valid:
-        log.error("JSON validation failed for run-file")
+        logger.error("JSON validation failed for run-file")
         return None
     else:
-        log.info("First level JSON validation for run-file passed")
+        logger.info("First level JSON validation for run-file passed")
 
     valid, err = validate_schema(settings["run-file"]["endpoints"][endpoint_index], rickshaw_dir + "/schema/" + endpoint_name + ".json")
     if not valid:
-        log.error("JSON validation failed for remotehosts endpoint at index %d in run-file" % (endpoint_index))
+        logger.error("JSON validation failed for remotehosts endpoint at index %d in run-file" % (endpoint_index))
         return None
     else:
-        log.info("Endpoint specific JSON validation for remotehosts endpoint at index %d in run-file passed" % (endpoint_index))
+        logger.info("Endpoint specific JSON validation for remotehosts endpoint at index %d in run-file passed" % (endpoint_index))
 
     log_settings(settings, mode = "run-file")
 
-    log.info("Normalizing endpoint settings")
+    logger.info("Normalizing endpoint settings")
     settings["run-file"]["endpoints"][endpoint_index] = endpoint_normalizer_callback(endpoint = settings["run-file"]["endpoints"][endpoint_index], rickshaw = settings["rickshaw"])
     log_settings(settings, mode = "endpoint", endpoint_index = endpoint_index)
 
-    log.info("Building benchmark engine mapping")
+    logger.info("Building benchmark engine mapping")
     if not "engines" in settings:
         settings["engines"] = dict()
     settings["engines"]["benchmark-mapping"] = build_benchmark_engine_mapping(settings["run-file"]["benchmarks"])
     log_settings(settings, mode = "benchmark-mapping")
 
-    log.info("Loading SSH private key into misc settings")
+    logger.info("Loading SSH private key into misc settings")
     settings["misc"]["ssh-private-key"] = ""
     try:
         with open(settings["dirs"]["local"]["conf"] + "/ssh/" + settings["misc"]["run-id"], "r", encoding = "ascii") as ssh_private_key:
@@ -1982,7 +1991,7 @@ def load_settings(settings, endpoint_name = None, run_file = None, rickshaw_dir 
                 line = re.sub(r"\n", r"\\n", line)
                 settings["misc"]["ssh-private-key"] += line
     except IOError as e:
-        log.error("Failed to load the SSH private key [%s]" % (e))
+        logger.error("Failed to load the SSH private key [%s]" % (e))
         return None
 
     log_settings(settings, mode = "misc")
@@ -1997,12 +2006,12 @@ def create_local_dirs(settings):
         settings (dict): the one data structure to rule them all
 
     Globals:
-        log: a logger instance
+        logger: a logger instance
 
     Returns:
         0
     """
-    log.info("Creating local directories")
+    logger.info("Creating local directories")
     my_make_dirs(settings["dirs"]["local"]["run"])
     my_make_dirs(settings["dirs"]["local"]["engine-logs"])
     my_make_dirs(settings["dirs"]["local"]["roadblock-msgs"])
@@ -2063,7 +2072,7 @@ def get_image(settings, image_role, userenv):
         userenv (str): The userenv whose container image is being asked for
 
     Globals:
-        log: a logger instance
+        logger: a logger instance
 
     Returns:
         str: The container image that is used to run the specified tool or benchmark
@@ -2074,9 +2083,9 @@ def get_image(settings, image_role, userenv):
         if userenv in settings["misc"]["image-map"][image_role]:
             return settings["misc"]["image-map"][image_role][userenv]
         else:
-            log.error("Could not find userenv %s in image-map[%s]" % (userenv, image_role));
+            logger.error("Could not find userenv %s in image-map[%s]" % (userenv, image_role));
     else:
-        log.error("Could not find image_role %s in image-map" % (image_role))
+        logger.error("Could not find image_role %s in image-map" % (image_role))
 
     return None
 
@@ -2118,7 +2127,7 @@ def get_profiler_userenv(settings, id):
         id (str): The profiler engine's ID
 
     Globals:
-        None
+        logger: a logger instance
 
     Returns:
         userenv (str): The userenv that the specified profiler engine ID should use
@@ -2131,7 +2140,7 @@ def get_profiler_userenv(settings, id):
             profiler_name = settings["engines"]["profiler-mapping"][profiler]["name"]
 
     if profiler_name is None:
-        log.error("Could not find profiler name for id %s" % (id))
+        logger.error("Could not find profiler name for id %s" % (id))
     else:
         if profiler_name in settings["misc"]["image-map"]:
             if len(settings["misc"]["image-map"][profiler_name]) == 1:
@@ -2139,10 +2148,10 @@ def get_profiler_userenv(settings, id):
                     return userenv
             else:
                 if len(settings["misc"]["image-map"][profiler_name]) == 0:
-                    log.error("Found no possible userenv for profiler %s" % (profiler_name))
+                    logger.error("Found no possible userenv for profiler %s" % (profiler_name))
                 else:
-                    log.error("Found more than one possible userenv for profiler %s" % (profiler_name))
-        log.error("Could not find profiler %s in image-map" % (profiler_name))
+                    logger.error("Found more than one possible userenv for profiler %s" % (profiler_name))
+        logger.error("Could not find profiler %s in image-map" % (profiler_name))
 
     return None
 

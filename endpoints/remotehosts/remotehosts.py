@@ -196,7 +196,7 @@ def normalize_endpoint_settings(endpoint, rickshaw):
 
     Globals:
         args (namespace): the script's CLI parameters
-        log: a logger instance
+        logger: a logger instance
         endpoint_defaults (dict): the endpoint defaults
 
     Returns:
@@ -242,7 +242,7 @@ def normalize_endpoint_settings(endpoint, rickshaw):
                     if args.validate:
                         endpoints.validate_error(msg)
                     else:
-                        log.error(msg)
+                        logger.error(msg)
                     return None
 
         for engine in remote["engines"]:
@@ -255,7 +255,7 @@ def normalize_endpoint_settings(endpoint, rickshaw):
                 if args.validate:
                     endpoints.validate_error(msg)
                 else:
-                    log.error(msg)
+                    logger.error(msg)
                 return None
 
     return endpoint
@@ -268,26 +268,26 @@ def check_base_requirements():
         None
 
     Globals:
-        log: a logger instance
+        logger: a logger instance
         settings (dict): the one data structure to rule then all
 
     Returns:
         0
     """
-    log.info("Checking base requirements")
+    logger.info("Checking base requirements")
 
     if settings["misc"]["run-id"] == "":
-        log.error("The run ID was not provided")
+        logger.error("The run ID was not provided")
         return 1
     else:
-        log.info("run-id: %s" % (settings["misc"]["run-id"]))
+        logger.info("run-id: %s" % (settings["misc"]["run-id"]))
 
     path = Path(settings["dirs"]["local"]["engine-cmds"] + "/client/1")
     if not path.is_dir():
-        log.error("client-1 bench command directory not found [%s]" % (path))
+        logger.error("client-1 bench command directory not found [%s]" % (path))
         return 1
     else:
-        log.info("client-1 bench command directory found [%s]" % (path))
+        logger.info("client-1 bench command directory found [%s]" % (path))
 
     return 0
 
@@ -300,13 +300,13 @@ def build_unique_remote_configs():
 
     Globals:
         args (namespace): the script's CLI parameters
-        log: a logger instance
+        logger: a logger instance
         settings (dict): the one data structure to rule then all
 
     Returns:
         0
     """
-    log.info("Building unique remote configs")
+    logger.info("Building unique remote configs")
 
     if not "engines" in settings:
         settings["engines"] = dict()
@@ -374,7 +374,7 @@ def build_unique_remote_configs():
                     split_line = line.split(":")
                     tools.append(split_line[0])
         except IOError as e:
-            log.error("Failed to load the start tools command file from %s" % (tool_cmd_dir))
+            logger.error("Failed to load the start tools command file from %s" % (tool_cmd_dir))
             return 1
 
         profiler_count += 1
@@ -405,7 +405,7 @@ def build_unique_remote_configs():
 
     endpoints.log_settings(settings, mode = "engines")
 
-    log.info("Adding new profiler engines to endpoint settings")
+    logger.info("Adding new profiler engines to endpoint settings")
     for remote in settings["engines"]["remotes"].keys():
         if not "profiler" in settings["engines"]["remotes"][remote]["roles"]:
             continue
@@ -523,7 +523,7 @@ def thread_logger(msg, log_level = "info", remote_name = None, engine_name = Non
         log_prefix (str): An optional prefix to apply to the message
 
     Globals:
-        log: a logger instance
+        logger: a logger instance
 
     Returns:
         None
@@ -541,13 +541,13 @@ def thread_logger(msg, log_level = "info", remote_name = None, engine_name = Non
 
     match log_level:
         case "debug":
-            return log.debug(msg, stacklevel = 2)
+            return logger.debug(msg, stacklevel = 2)
         case "error":
-            return log.error(msg, stacklevel = 2)
+            return logger.error(msg, stacklevel = 2)
         case "info":
-            return log.info(msg, stacklevel = 2)
+            return logger.info(msg, stacklevel = 2)
         case "warning":
-            return log.warning(msg, stacklevel = 2)
+            return logger.warning(msg, stacklevel = 2)
         case _:
             raise ValueError("Uknown log_level '%s' in thread_logger" % (log_level))
 
@@ -626,13 +626,13 @@ def remotes_pull_images():
         None
 
     Globals:
-        log: a logger instance
+        logger: a logger instance
         settings (dict): the one data structure to rule then all
 
     Returns:
         rc (int): defines if the image pull was successfull (0) or not (!=0)
     """
-    log.info("Determining which images to pull to which remotes")
+    logger.info("Determining which images to pull to which remotes")
     for remote in settings["engines"]["remotes"].keys():
         if not "raw-images" in settings["engines"]["remotes"][remote]:
             settings["engines"]["remotes"][remote]["raw-images"] = []
@@ -654,13 +654,13 @@ def remotes_pull_images():
                             break
 
                 if userenv is None:
-                    log.error("Cound not find userenv for remote %s with role %s and id %s" % (remote, role, str(id)))
+                    logger.error("Cound not find userenv for remote %s with role %s and id %s" % (remote, role, str(id)))
                     print("could not find userenv for " + endpoint)
                 else:
                     image = endpoints.get_engine_id_image(settings, role, id, userenv)
 
                 if image is None:
-                    log.error("Could not find image for remote %s with role %s and id %s" % (remote, role, str(id)))
+                    logger.error("Could not find image for remote %s with role %s and id %s" % (remote, role, str(id)))
                 else:
                     settings["engines"]["remotes"][remote]["raw-images"].append(image)
 
@@ -671,7 +671,7 @@ def remotes_pull_images():
             image_split = image.split("::")
             image_info["image"] = image_split[0]
             if len(image_split) > 1:
-                log.info("Found image %s with pull token %s" % (image_split[0], image_split[1]))
+                logger.info("Found image %s with pull token %s" % (image_split[0], image_split[1]))
                 image_info["pull-token"] = image_split[1]
             settings["engines"]["remotes"][remote]["images"].append(image_info)
 
@@ -768,13 +768,13 @@ def set_total_cpu_partitions():
         None
 
     Globals:
-        log: a logger instance
+        logger: a logger instance
         settings (dict): the one data structure to rule then all
 
     Returns:
         0
     """
-    log.info("Setting the total cpu-partitions per unique remote")
+    logger.info("Setting the total cpu-partitions per unique remote")
     for remote in settings["engines"]["remotes"].keys():
         settings["engines"]["remotes"][remote]["total-cpu-partitions"] = 0
         settings["engines"]["remotes"][remote]["cpu-partitions-idx"] = 0
@@ -1316,13 +1316,13 @@ def launch_engines():
         None
 
     Globals:
-        log: a logger instance
+        logger: a logger instance
         settings (dict): the one data structure to rule then all
 
     Returns:
         0
     """
-    log.info("Creating threadpool to handle engine launching")
+    logger.info("Creating threadpool to handle engine launching")
 
     launch_engines_work = queue.Queue()
     for remote_idx,remote in enumerate(settings["run-file"]["endpoints"][args.endpoint_index]["remotes"]):
@@ -1341,7 +1341,7 @@ def engine_init():
         None
 
     Globals:
-        log: a logger instance
+        logger: a logger instance
         settings (dict): the one data structure to rule then all
 
     Returns:
@@ -1365,11 +1365,11 @@ def engine_init():
                 env_vars_msgs.extend(endpoints.create_roadblock_msg("follower", engine_name, "user-object", env_vars_payload))
 
     env_vars_msg_file = settings["dirs"]["local"]["roadblock-msgs"] + "/env-vars.json"
-    log.info("Writing follower env-vars messages to %s" % (env_vars_msg_file))
+    logger.info("Writing follower env-vars messages to %s" % (env_vars_msg_file))
     env_vars_msgs_json = endpoints.dump_json(env_vars_msgs)
     with open(env_vars_msg_file, "w", encoding = "ascii") as env_vars_msg_file_fp:
         env_vars_msg_file_fp.write(env_vars_msgs_json)
-    log.info("Contents of %s:\n%s" % (env_vars_msg_file, env_vars_msgs_json))
+    logger.info("Contents of %s:\n%s" % (env_vars_msg_file, env_vars_msgs_json))
 
     return env_vars_msg_file
 
@@ -1383,19 +1383,19 @@ def test_start(msgs_dir, test_id, tx_msgs_dir):
         tx_msgs_dir (str): The directory where to write queued messages for transmit
 
     Globals:
-        log: a logger instance
+        logger: a logger instance
         settings (dict): the one data structure to rule then all
 
     Returns:
         None
     """
-    log.info("Running test_start() for '%s' (<iteration>-<sample>-<attempt>)" % (test_id))
+    logger.info("Running test_start() for '%s' (<iteration>-<sample>-<attempt>)" % (test_id))
 
     this_msg_file = msgs_dir + "/" + test_id + ":server-start-end.json"
     path = Path(this_msg_file)
 
     if path.exists() and path.is_file():
-        log.info("Found '%s'" % (this_msg_file))
+        logger.info("Found '%s'" % (this_msg_file))
 
         msgs_json,err = load_json_file(this_msg_file)
         if not msgs_json is None:
@@ -1406,7 +1406,7 @@ def test_start(msgs_dir, test_id, tx_msgs_dir):
                             server_engine = msg["payload"]["sender"]["id"]
                             client_engine = re.sub(r"server", r"client", server_engine)
 
-                            log.info("Found a service message from server engine %s to client engine %s" % (server_engine, client_engine))
+                            logger.info("Found a service message from server engine %s to client engine %s" % (server_engine, client_engine))
 
                             server_remote = None
                             client_remote = None
@@ -1418,50 +1418,50 @@ def test_start(msgs_dir, test_id, tx_msgs_dir):
                                 if server_remote is None and server_engine in settings["engines"]["remotes"][remote]["engines"]:
                                     server_remote = remote
                                     server_mine = True
-                                    log.info("The server engine '%s' is running from this endpoint on remote '%s'" % (server_engine, server_remote))
+                                    logger.info("The server engine '%s' is running from this endpoint on remote '%s'" % (server_engine, server_remote))
 
                                 if client_remote is None and client_engine in settings["engines"]["remotes"][remote]["engines"]:
                                     client_remote = remote
                                     client_mine = True
-                                    log.info("The client engine '%s' is running from this endpoint on remote '%s'" % (client_engine, client_remote))
+                                    logger.info("The client engine '%s' is running from this endpoint on remote '%s'" % (client_engine, client_remote))
 
                                 if not server_remote is None and not client_remote is None:
                                     break
 
                             if not server_mine and not client_mine:
-                                log.info("Neither the server engine '%s' or the client engine '%s' is running from this endpoint, ignoring" % (server_engine, client_engine))
+                                logger.info("Neither the server engine '%s' or the client engine '%s' is running from this endpoint, ignoring" % (server_engine, client_engine))
                             elif not server_mine and client_mine:
-                                log.info("Only the client engine '%s' is mine, ignoring" % (client_engine))
+                                logger.info("Only the client engine '%s' is mine, ignoring" % (client_engine))
                             elif server_mine and not client_mine:
-                                log.info("Only the server engine '%s' is mine, processing" % (server_engine))
+                                logger.info("Only the server engine '%s' is mine, processing" % (server_engine))
                                 process_msg = True
                             elif server_mine and client_mine:
-                                log.info("Both the server engine '%s' and the client engine '%s' are mine" % (server_engine, client_engine))
+                                logger.info("Both the server engine '%s' and the client engine '%s' are mine" % (server_engine, client_engine))
 
                                 if server_remote == client_remote:
-                                    log.info("My server engine '%s' and my client engine '%s' are on the same remote '%s', nothing to do" % (server_engine, client_engine, server_remote))
+                                    logger.info("My server engine '%s' and my client engine '%s' are on the same remote '%s', nothing to do" % (server_engine, client_engine, server_remote))
                                 else:
-                                    log.info("My server engine '%s' is on remote '%s' and my client engine '%s' is on remote '%s', processing" % (server_engine, server_remote, client_engine, client_remote))
+                                    logger.info("My server engine '%s' is on remote '%s' and my client engine '%s' is on remote '%s', processing" % (server_engine, server_remote, client_engine, client_remote))
                                     process_msg = True
 
                             if process_msg:
-                                log.info("Processing received message:\n%s" % (endpoints.dump_json(msg["payload"])))
+                                logger.info("Processing received message:\n%s" % (endpoints.dump_json(msg["payload"])))
 
                                 # punching a hole through the fireall would go here
 
-                                log.info("Creating a message to send to the client engine '%s' with IP and port info" % (client_engine))
+                                logger.info("Creating a message to send to the client engine '%s' with IP and port info" % (client_engine))
                                 msg = endpoints.create_roadblock_msg("follower", client_engine, "user-object", msg["payload"]["message"]["user-object"])
 
                                 msg_file = tx_msgs_dir + "/server-ip-" + server_engine + ".json"
-                                log.info("Writing follower service-ip message to '%s'" % (msg_file))
+                                logger.info("Writing follower service-ip message to '%s'" % (msg_file))
                                 with open(msg_file, "w", encoding = "ascii") as msg_file_fp:
                                     msg_file_fp.write(endpoints.dump_json(msg))
         else:
-            log.error("Failed to load '%s' due to error '%s'" % (this_msg_file, str(err)))
+            logger.error("Failed to load '%s' due to error '%s'" % (this_msg_file, str(err)))
     else:
-        log.info("Could not find '%s'" % (this_msg_file))
+        logger.info("Could not find '%s'" % (this_msg_file))
 
-    log.info("Returning from test_start() for '%s' (<iteration>-<sample>-<attempt>)" % (test_id))
+    logger.info("Returning from test_start() for '%s' (<iteration>-<sample>-<attempt>)" % (test_id))
     return
 
 def test_stop(test_id):
@@ -1472,14 +1472,14 @@ def test_stop(test_id):
         test_id (str): A string of the form "<iteration>:<sample>:<attempt>" used to identify the current test
 
     Globals:
-        log: a logger instance
+        logger: a logger instance
 
     Returns:
         None
     """
-    log.info("Running test_stop() for '%s' (<iteration>-<sample>-<attempt>)" % (test_id))
-    log.info("...nothing to do here, run along...")
-    log.info("Returning from test_stop() for '%s' (<iteration>-<sample>-<attempt>)" % (test_id))
+    logger.info("Running test_stop() for '%s' (<iteration>-<sample>-<attempt>)" % (test_id))
+    logger.info("...nothing to do here, run along...")
+    logger.info("Returning from test_stop() for '%s' (<iteration>-<sample>-<attempt>)" % (test_id))
     return
 
 def collect_podman_log(thread_name, remote_name, engine_name, container_name, connection):
@@ -2124,7 +2124,7 @@ def shutdown_engines():
     Handle the shutdown of engines after the test is complete
 
     Args:
-        None
+        logger: a logger instance
 
     Globals:
         args (namespace): the script's CLI parameters
@@ -2133,7 +2133,7 @@ def shutdown_engines():
     Returns:
         0
     """
-    log.info("Creating threadpool to handle engine shutdown")
+    logger.info("Creating threadpool to handle engine shutdown")
 
     shutdown_engines_work = queue.Queue()
     for remote_idx,remote in enumerate(settings["run-file"]["endpoints"][args.endpoint_index]["remotes"]):
@@ -2203,12 +2203,13 @@ def image_mgmt():
         None
 
     Globals:
+        logger: a logger instance
         settings (dict): the one data structure to rule then all
 
     Returns:
         0
     """
-    log.info("Creating threadpool to handle image management")
+    logger.info("Creating threadpool to handle image management")
 
     image_mgmt_work = queue.Queue()
     for remote in settings["engines"]["remotes"].keys():
@@ -2329,7 +2330,7 @@ def collect_sysinfo():
     Returns:
         0
     """
-    log.info("Creating threadpool to collect sysinfo")
+    logger.info("Creating threadpool to collect sysinfo")
 
     sysinfo_work = queue.Queue()
     for remote in settings["engines"]["remotes"].keys():
@@ -2348,7 +2349,7 @@ def thread_exception_hook(args):
         args (namespace): information about the exception being handled
 
     Globals:
-        log: a logger instance
+        logger: a logger instance
 
     Returns:
         None
@@ -2358,7 +2359,7 @@ def thread_exception_hook(args):
         thread_name = args.thread.name
 
     msg = "[Thread %s] Thread failed with exception:\ntype: %s\nvalue: %s\ntraceback:\n%s" % (thread_name, args.exc_type, args.exc_value, "".join(traceback.format_list(traceback.extract_tb(args.exc_traceback))))
-    log.error(msg, stacklevel = 3)
+    logger.error(msg, stacklevel = 3)
 
     return
 
@@ -2371,12 +2372,14 @@ def main():
 
     Globals:
         args (namespace): the script's CLI parameters
+        logger: a logger instance
+        settings (dict): the one data structure to rule then all
 
     Returns:
         rc (int): The return code for the script
     """
     global args
-    global log
+    global logger
     global settings
     early_abort = False
 
@@ -2385,7 +2388,7 @@ def main():
     if args.validate:
         return(validate())
 
-    log = endpoints.setup_logger(args.log_level)
+    logger = endpoints.setup_logger(args.log_level)
 
     endpoints.log_env()
     endpoints.log_cli(args)
@@ -2421,7 +2424,7 @@ def main():
         set_total_cpu_partitions()
         launch_engines()
     else:
-        log.error("Skipping engine launch and signaling for job exit/abort due to fatal error during image pull");
+        logger.error("Skipping engine launch and signaling for job exit/abort due to fatal error during image pull");
         early_abort = True
 
     remotehosts_callbacks = {
@@ -2444,13 +2447,13 @@ def main():
                                       endpoint_dir = settings["dirs"]["local"]["endpoint"],
                                       early_abort = early_abort)
 
-    log.info("Logging 'final' settings data structure")
+    logger.info("Logging 'final' settings data structure")
     endpoints.log_settings(settings, mode = "settings")
-    log.info("remotehosts endpoint exiting")
+    logger.info("remotehosts endpoint exiting")
     return rc
 
 if __name__ == "__main__":
     args = endpoints.process_options()
-    log = None
+    logger = None
     settings = dict()
     exit(main())
