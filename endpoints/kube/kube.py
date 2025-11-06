@@ -70,7 +70,7 @@ def normalize_endpoint_settings(endpoint, rickshaw):
 
     Globals:
         args (namespace): the script's CLI parameters
-        log: a logger instance
+        logger: a logger instance
         endpoint_default_settings (dict): the endpoint default settings
 
     Returns:
@@ -120,7 +120,7 @@ def normalize_endpoint_settings(endpoint, rickshaw):
                     if args.validate:
                         endpoints.validate_error(msg)
                     else:
-                        log.error(msg)
+                        logger.error(msg)
                     return None
                 found_defaults = True
                 default_cfg_block_idx = cfg_block_idx
@@ -143,7 +143,7 @@ def normalize_endpoint_settings(endpoint, rickshaw):
                 if args.validate:
                     endpoints.validate_error(msg)
                 else:
-                    log.error(msg)
+                    logger.error(msg)
                 return None
 
     for engine_role in [ "client", "server" ]:
@@ -155,7 +155,7 @@ def normalize_endpoint_settings(endpoint, rickshaw):
                 if args.validate:
                     endpoints.validate_error(msg)
                 else:
-                    log.error(msg)
+                    logger.error(msg)
                 return None
 
     if "config" in endpoint:
@@ -168,7 +168,7 @@ def normalize_endpoint_settings(endpoint, rickshaw):
                     if args.validate:
                         endpoints.validate_error(msg)
                     else:
-                        log.error(msg)
+                        logger.error(msg)
                     return None
 
     endpoint["engines"]["settings"] = dict()
@@ -181,7 +181,7 @@ def normalize_endpoint_settings(endpoint, rickshaw):
                     if args.validate:
                         endpoints.validate_error(msg)
                     else:
-                        log.error(msg)
+                        logger.error(msg)
                     return None
 
                 if not target["role"] in endpoint["engines"]["settings"]:
@@ -196,7 +196,7 @@ def normalize_endpoint_settings(endpoint, rickshaw):
                         if args.validate:
                             endpoints.validate_error(msg)
                         else:
-                            log.error(msg)
+                            logger.error(msg)
                         return None
 
                     if engine_id not in endpoint["engines"]["settings"][target["role"]]:
@@ -211,7 +211,7 @@ def normalize_endpoint_settings(endpoint, rickshaw):
                             if args.validate:
                                 endpoints.validate_warning(msg)
                             else:
-                                log.warning(msg)
+                                logger.warning(msg)
                         endpoint["engines"]["settings"][target["role"]][engine_id][key] = cfg_block["settings"][key]
 
                     if "verifications" in cfg_block:
@@ -221,7 +221,7 @@ def normalize_endpoint_settings(endpoint, rickshaw):
                                 if args.validate:
                                     endpoints.validate_warning(msg)
                                 else:
-                                    log.warning(msg)
+                                    logger.warning(msg)
                             endpoint["engines"]["verifications"][target["role"]][engine_id][key] = cfg_block["verifications"][key]
 
                     for key in endpoint["engines"]["defaults"]["settings"].keys():
@@ -419,30 +419,30 @@ def check_base_requirements():
 
     Globals:
         args (namespace): the script's CLI parameters
-        log: a logger instance
+        logger: a logger instance
         settings (dict): the one data structure to rule then all
 
     Returns:
         0
     """
-    log.info("Checking base requirements")
+    logger.info("Checking base requirements")
 
     if settings["misc"]["run-id"] == "":
-        log.error("The run ID was not provided")
+        logger.error("The run ID was not provided")
         return 1
     else:
-        log.info("run-id: %s" % (settings["misc"]["run-id"]))
+        logger.info("run-id: %s" % (settings["misc"]["run-id"]))
 
     path = Path(settings["dirs"]["local"]["engine-cmds"] + "/client/1")
     if not path.is_dir():
-        log.error("client-1 bench command directory not found [%s]" % (path))
+        logger.error("client-1 bench command directory not found [%s]" % (path))
         return 1
     else:
-        log.info("client-1 bench command directory found [%s]" % (path))
+        logger.info("client-1 bench command directory found [%s]" % (path))
 
     settings["misc"]["remote-env"] = {}
     if "kubeconfig" in settings["run-file"]["endpoints"][args.endpoint_index]:
-        log.info("found kubeconfig user override with value '%s'" % (settings["run-file"]["endpoints"][args.endpoint_index]["kubeconfig"]))
+        logger.info("found kubeconfig user override with value '%s'" % (settings["run-file"]["endpoints"][args.endpoint_index]["kubeconfig"]))
         settings["misc"]["remote-env"]["KUBECONFIG"] = settings["run-file"]["endpoints"][args.endpoint_index]["kubeconfig"]
 
     with endpoints.remote_connection(settings["run-file"]["endpoints"][args.endpoint_index]["host"],
@@ -451,7 +451,7 @@ def check_base_requirements():
         if settings["misc"]["k8s-bin"] is None:
             return 1
         else:
-            log.info("determined k8s control binary is '%s'" % (settings["misc"]["k8s-bin"]))
+            logger.info("determined k8s control binary is '%s'" % (settings["misc"]["k8s-bin"]))
 
     return 0
 
@@ -463,7 +463,7 @@ def clean_k8s_namespace(connection):
         connection (Fabric): The Fabric connection to use to run commands
 
     Globals:
-        log: a logger instance
+        logger: a logger instance
         settings (dict): the one data structure to rule them all
 
     Returns:
@@ -472,11 +472,11 @@ def clean_k8s_namespace(connection):
     """
     endpoint = settings["run-file"]["endpoints"][args.endpoint_index]
 
-    log.info("Cleaning namespace '%s'" % (endpoint["namespace"]["name"]))
+    logger.info("Cleaning namespace '%s'" % (endpoint["namespace"]["name"]))
 
     component_errors = False
     for component in [ "pods", "services", "secrets" ]:
-        log.info("Cleaning component: %s" % (component))
+        logger.info("Cleaning component: %s" % (component))
         cmd = "%s delete --namespace %s %s --all" % (settings["misc"]["k8s-bin"], endpoint["namespace"]["name"], component)
         result = endpoints.run_remote(connection, cmd, debug = settings["misc"]["debug-output"], env = settings["misc"]["remote-env"])
         endpoints.log_result(result)
@@ -498,14 +498,14 @@ def init_k8s_namespace():
 
     Globals:
         args (namespace): the script's CLI parameters
-        log: a logger instance
+        logger: a logger instance
         settings (dict): the one data structure to rule them all
 
     Returns:
         0: success
         1: failure
     """
-    log.info("Initializing K8S Namespace")
+    logger.info("Initializing K8S Namespace")
 
     endpoint = settings["run-file"]["endpoints"][args.endpoint_index]
 
@@ -519,11 +519,11 @@ def init_k8s_namespace():
             namespace_exists = True
 
         if namespace_exists:
-            log.info("Found existing namespace '%s', going to clean it" % (endpoint["namespace"]["name"]))
+            logger.info("Found existing namespace '%s', going to clean it" % (endpoint["namespace"]["name"]))
             if clean_k8s_namespace(con):
                 return 1
         else:
-            log.info("No namespace '%s' found, creating it" % (endpoint["namespace"]["name"]))
+            logger.info("No namespace '%s' found, creating it" % (endpoint["namespace"]["name"]))
             cmd = "%s create namespace %s" % (settings["misc"]["k8s-bin"], endpoint["namespace"]["name"])
             result = endpoints.run_remote(con, cmd, debug = settings["misc"]["debug-output"], env = settings["misc"]["remote-env"])
             endpoints.log_result(result)
@@ -541,14 +541,14 @@ def get_k8s_config():
 
     Globals:
         args (namespace): the script's CLI parameters
-        log: a logger instance
+        logger: a logger instance
         settings (dict): the one data structure to rule them all
 
     Returns:
         0: success
         1: failure
     """
-    log.info("Getting K8S config")
+    logger.info("Getting K8S config")
 
     settings["misc"]["k8s"] = dict()
     settings["misc"]["k8s"]["nodes"] = dict()
@@ -572,9 +572,9 @@ def get_k8s_config():
 
         nr_nodes = len(settings["misc"]["k8s"]["nodes"]["cluster"]["items"])
         if nr_nodes > 0:
-            log.info("Discovered %d nodes" % (nr_nodes))
+            logger.info("Discovered %d nodes" % (nr_nodes))
         else:
-            log.error("Did not find any nodes")
+            logger.error("Did not find any nodes")
             return 1
 
         settings["misc"]["k8s"]["nodes"]["endpoint"]["masters"] = []
@@ -594,13 +594,13 @@ def get_k8s_config():
                 settings["misc"]["k8s"]["nodes"]["endpoint"]["workers"].append(name)
 
         node_count_fault = False
-        log.info("Found %d masters: %s" % (len(settings["misc"]["k8s"]["nodes"]["endpoint"]["masters"]), settings["misc"]["k8s"]["nodes"]["endpoint"]["masters"]))
+        logger.info("Found %d masters: %s" % (len(settings["misc"]["k8s"]["nodes"]["endpoint"]["masters"]), settings["misc"]["k8s"]["nodes"]["endpoint"]["masters"]))
         if len(settings["misc"]["k8s"]["nodes"]["endpoint"]["masters"]) == 0:
-            log.error("No masters found")
+            logger.error("No masters found")
             node_count_fault = True
-        log.info("Found %d workers: %s" % (len(settings["misc"]["k8s"]["nodes"]["endpoint"]["workers"]), settings["misc"]["k8s"]["nodes"]["endpoint"]["workers"]))
+        logger.info("Found %d workers: %s" % (len(settings["misc"]["k8s"]["nodes"]["endpoint"]["workers"]), settings["misc"]["k8s"]["nodes"]["endpoint"]["workers"]))
         if len(settings["misc"]["k8s"]["nodes"]["endpoint"]["workers"]) == 0:
-            log.error("No workers found")
+            logger.error("No workers found")
             node_count_fault = True
         if node_count_fault:
             return 1
@@ -616,13 +616,13 @@ def compile_object_configs():
 
     Globals:
         args (namespace): the script's CLI parameters
-        log: a logger instance
+        logger: a logger instance
         settings (dict): the one data structure to rule them all
 
     Returns:
         0
     """
-    log.info("Compiling object configs")
+    logger.info("Compiling object configs")
 
     if not "engines" in settings:
         settings["engines"] = dict()
@@ -642,8 +642,8 @@ def compile_object_configs():
             for csid in endpoint["engines"][role]:
                 settings["engines"]["endpoint"]["roles"][role].append(csid)
 
-    log.info("This endpoint will run these clients: %s" % (list(map(lambda x: "client-" + str(x), settings["engines"]["endpoint"]["roles"]["client"]))))
-    log.info("This endpoint will run these servers: %s" % (list(map(lambda x: "server-" + str(x), settings["engines"]["endpoint"]["roles"]["server"]))))
+    logger.info("This endpoint will run these clients: %s" % (list(map(lambda x: "client-" + str(x), settings["engines"]["endpoint"]["roles"]["client"]))))
+    logger.info("This endpoint will run these servers: %s" % (list(map(lambda x: "server-" + str(x), settings["engines"]["endpoint"]["roles"]["server"]))))
 
     settings["engines"]["endpoint"]["classes"] = dict()
 
@@ -681,7 +681,7 @@ def create_pod_crd(role = None, id = None, node = None):
 
     Globals:
         args (namespace): the script's CLI parameters
-        log: a logger instance
+        logger: a logger instance
         settings (dict): the one data structure to rule them all
         image_pull_secret_crds (dict): a data structure to hold image pull secret CRDs so that they are not logged
 
@@ -689,15 +689,15 @@ def create_pod_crd(role = None, id = None, node = None):
         crd, 0: success
         crd, 1: failure
     """
-    log.info("Creating CRD for engine %s-%d" % (role, id))
+    logger.info("Creating CRD for engine %s-%d" % (role, id))
 
     if role is None or id is None:
-        log.error("You must define role and id when calling this function")
+        logger.error("You must define role and id when calling this function")
         return None, 1
 
     if role == "master" or role == "worker":
         if node is None:
-            log.error("You must define node when role is either 'master' or 'worker'")
+            logger.error("You must define node when role is either 'master' or 'worker'")
             return None, 1
 
     name = "%s-%d" % (role, id)
@@ -709,7 +709,7 @@ def create_pod_crd(role = None, id = None, node = None):
     elif role == "worker" or role == "master":
         pod_settings = endpoint["engines"]["defaults"]["settings"]
     if pod_settings is None:
-        log.error("Could not find mapping for pod settings")
+        logger.error("Could not find mapping for pod settings")
         return None,1
 
     crd = {
@@ -839,23 +839,23 @@ def create_pod_crd(role = None, id = None, node = None):
 
     crd["spec"]["containers"] = []
     for container_name in container_names:
-        log.info("Adding container '%s' to pod" % (container_name))
+        logger.info("Adding container '%s' to pod" % (container_name))
         image = None
         if role == "client" or role == "server":
             image = endpoints.get_engine_id_image(settings, role, id, pod_settings["userenv"])
         elif role == "worker" or role == "master":
             userenv = endpoints.get_profiler_userenv(settings, container_name)
             if userenv is None:
-                log.error("Could not find userenv for engine '%s'" % (container_name))
+                logger.error("Could not find userenv for engine '%s'" % (container_name))
                 return crd, 1
             else:
-                log.info("Found userenv '%s' for engine '%s'" % (userenv, container_name))
+                logger.info("Found userenv '%s' for engine '%s'" % (userenv, container_name))
             image = endpoints.get_engine_id_image(settings, role, container_name, userenv)
         if image is None:
-            log.error("Could not find image for container %s" % (container_name))
+            logger.error("Could not find image for container %s" % (container_name))
             return crd, 1
         else:
-            log.info("Found image '%s' for container '%s'" % (image, container_name))
+            logger.info("Found image '%s' for container '%s'" % (image, container_name))
 
         if "::" in image:
             # this image has a pull token that must be handled
@@ -864,7 +864,7 @@ def create_pod_crd(role = None, id = None, node = None):
             image = fields[0]
             token_file = fields[1]
 
-            log.info("Processing image pull secret '%s' for image '%s'" % (token_file, image))
+            logger.info("Processing image pull secret '%s' for image '%s'" % (token_file, image))
 
             if not "imagePullSecrets" in crd["spec"]:
                 crd["spec"]["imagePullSecrets"] = []
@@ -873,10 +873,10 @@ def create_pod_crd(role = None, id = None, node = None):
                 settings["misc"]["pull-secrets"] = {}
 
             secret_name = endpoints.sha256_hash(token_file)
-            log.info("Image pull secret is named '%s'" % (secret_name))
+            logger.info("Image pull secret is named '%s'" % (secret_name))
 
             if not secret_name in settings["misc"]["pull-secrets"]:
-                log.info("Creating CRD for image pull secret named '%s'" % (secret_name))
+                logger.info("Creating CRD for image pull secret named '%s'" % (secret_name))
 
                 settings["misc"]["pull-secrets"][secret_name] = {
                     "validated": False,
@@ -889,7 +889,7 @@ def create_pod_crd(role = None, id = None, node = None):
                 # itself from being logged
                 image_pull_secret_crds[secret_name] = create_pull_secret_crd(secret_name, token_file)
             else:
-                log.info("CRD for image pull secret named '%s' already exists" % (secret_name))
+                logger.info("CRD for image pull secret named '%s' already exists" % (secret_name))
 
             add_secret = True
             for secret in crd["spec"]["imagePullSecrets"]:
@@ -897,10 +897,10 @@ def create_pod_crd(role = None, id = None, node = None):
                     add_secret = False
 
             if add_secret:
-                log.info("Adding image pull secret '%s' to pod spec" % (secret_name))
+                logger.info("Adding image pull secret '%s' to pod spec" % (secret_name))
                 crd["spec"]["imagePullSecrets"].append({ "name": secret_name })
             else:
-                log.info("Image pull secret '%s' already added to pod spec" % (secret_name))
+                logger.info("Image pull secret '%s' already added to pod spec" % (secret_name))
 
         container = {
             "name": container_name,
@@ -1077,8 +1077,8 @@ def verify_pods_running(connection, pods, pod_details, abort_event):
        engines_info (dict): 
        None: error
     """
-    log.info("Verifying that these pods are running: %s" % (pods))
-    log.info("Received these additional pod details:\n%s" % (endpoints.dump_json(pod_details)))
+    logger.info("Verifying that these pods are running: %s" % (pods))
+    logger.info("Received these additional pod details:\n%s" % (endpoints.dump_json(pod_details)))
     pods_info = dict()
     verified_pods = []
     unverified_pods = []
@@ -1090,16 +1090,16 @@ def verify_pods_running(connection, pods, pod_details, abort_event):
     count = 1
     while len(unverified_pods) > 0:
         if abort_event.is_set():
-            log.info("Aborting pod verification due to an abort event")
+            logger.info("Aborting pod verification due to an abort event")
             break
 
-        log.info("Loop pass %d" % (count))
-        log.info("Unverified pods: %s" % (unverified_pods))
-        log.info("Verified pods:   %s" % (verified_pods))
-        log.info("Invalid pods:    %s" % (invalid_pods))
+        logger.info("Loop pass %d" % (count))
+        logger.info("Unverified pods: %s" % (unverified_pods))
+        logger.info("Verified pods:   %s" % (verified_pods))
+        logger.info("Invalid pods:    %s" % (invalid_pods))
         count += 1
 
-        log.info("Collecting pod status for namespace '%s'" % (endpoint["namespace"]["name"]))
+        logger.info("Collecting pod status for namespace '%s'" % (endpoint["namespace"]["name"]))
         cmd = "%s get pods --namespace %s --output json" % (settings["misc"]["k8s-bin"], endpoint["namespace"]["name"])
         result = endpoints.run_remote(connection, cmd, debug = settings["misc"]["debug-output"], env = settings["misc"]["remote-env"])
         endpoints.log_result(result)
@@ -1108,31 +1108,31 @@ def verify_pods_running(connection, pods, pod_details, abort_event):
 
         pod_status = json.loads(result.stdout)
 
-        log.info("Collected pod status for %d pods in namespace '%s'" % (len(pod_status["items"]), endpoint["namespace"]["name"]))
+        logger.info("Collected pod status for %d pods in namespace '%s'" % (len(pod_status["items"]), endpoint["namespace"]["name"]))
 
-        log.info("Analyzing pod status for namespace '%s'" % (endpoint["namespace"]["name"]))
+        logger.info("Analyzing pod status for namespace '%s'" % (endpoint["namespace"]["name"]))
         for pod in pod_status["items"]:
             pod_name = pod["metadata"]["name"]
             # strip off the prefix
             pod_name = re.sub(r"%s-" % (endpoint_default_settings["prefix"]["pod"]), r"", pod_name)
-            log.debug("Processing engine '%s'" % (pod_name))
+            logger.debug("Processing engine '%s'" % (pod_name))
 
             if pod_name not in pods:
-                log.info("Encountered pod '%s' that is not in my current verification list, skipping" % (pod_name))
+                logger.info("Encountered pod '%s' that is not in my current verification list, skipping" % (pod_name))
                 continue
 
             if pod_name in unverified_pods:
                 if not "containerStatuses" in pod["status"]:
-                    log.info("containerStatuses is not yet available for pod '%s'" % (pod_name))
+                    logger.info("containerStatuses is not yet available for pod '%s'" % (pod_name))
                     break
 
-                log.info("Checking status of pod '%s'" % (pod_name))
+                logger.info("Checking status of pod '%s'" % (pod_name))
                 running_containers = []
                 valid_configuration = True
                 for container in pod["status"]["containerStatuses"]:
-                    log.info("Checking status of container '%s:\n%s" % (container["name"], endpoints.dump_json(container["state"])))
+                    logger.info("Checking status of container '%s:\n%s" % (container["name"], endpoints.dump_json(container["state"])))
                     if "running" in container["state"]:
-                        log.info("Container '%s' is running" % (container["name"]))
+                        logger.info("Container '%s' is running" % (container["name"]))
                         running_containers.append(container["name"])
 
                         pod_verifications = None
@@ -1142,24 +1142,24 @@ def verify_pods_running(connection, pods, pod_details, abort_event):
                             pod_verifications = endpoint["engines"]["defaults"]["verifications"]
 
                         if pod_verifications is None:
-                            log.error("Could not find mapping for pod verifications")
+                            logger.error("Could not find mapping for pod verifications")
                             valid_configuration = False
                         else:
                             if "qosClass" in pod_verifications:
-                                log.info("Pod has a qosClass verification defined")
+                                logger.info("Pod has a qosClass verification defined")
                                 if pod_verifications["qosClass"] != pod["status"]["qosClass"]:
-                                    log.error("Pod '%s' desired qosClass of '%s' but is running with qosClass of '%s'" % (pod_name, pod_verifications["qosClass"], pod["status"]["qosClass"]))
+                                    logger.error("Pod '%s' desired qosClass of '%s' but is running with qosClass of '%s'" % (pod_name, pod_verifications["qosClass"], pod["status"]["qosClass"]))
                                     valid_configuration = False
                                 else:
-                                    log.info("Verified pod '%s' has desired qosClass of '%s'" % (pod_name, pod["status"]["qosClass"]))
+                                    logger.info("Verified pod '%s' has desired qosClass of '%s'" % (pod_name, pod["status"]["qosClass"]))
                             else:
-                                log.info("Pod does not have a qosClass verification defined")
+                                logger.info("Pod does not have a qosClass verification defined")
                     else:
-                        log.info("Container '%s' is not running" % (container["name"]))
+                        logger.info("Container '%s' is not running" % (container["name"]))
 
                 if len(running_containers) == len(pod["status"]["containerStatuses"]):
                     if valid_configuration:
-                        log.info("All containers in pod '%s' are running -> it is verified" % (pod_name))
+                        logger.info("All containers in pod '%s' are running -> it is verified" % (pod_name))
                         unverified_pods.remove(pod_name)
                         verified_pods.append(pod_name)
                         pods_info[pod_name] = {
@@ -1170,36 +1170,36 @@ def verify_pods_running(connection, pods, pod_details, abort_event):
                             "node-ip": pod["status"]["hostIP"]
                         }
                     else:
-                        log.info("All containers in pod '%s' are running, but the pod or one of it's containers has an invalid configuration" % (pod_name))
+                        logger.info("All containers in pod '%s' are running, but the pod or one of it's containers has an invalid configuration" % (pod_name))
                         unverified_pods.remove(pod_name)
                         invalid_pods.append(pod_name)
                 else:
-                    log.info("There are %d containers in pod '%s' that are not yet running -> it is not verified" % ((len(pod["status"]["containerStatuses"]) - len(running_containers)), pod_name))
+                    logger.info("There are %d containers in pod '%s' that are not yet running -> it is not verified" % ((len(pod["status"]["containerStatuses"]) - len(running_containers)), pod_name))
                     if not valid_configuration:
-                        log.error("The pod '%s' or one of it's containers has an invalid configuration" % (pod_name))
+                        logger.error("The pod '%s' or one of it's containers has an invalid configuration" % (pod_name))
 
             elif pod_name in verified_pods:
-                log.info("Skipping pod '%s' because it is already verified" % (pod_name))
+                logger.info("Skipping pod '%s' because it is already verified" % (pod_name))
             elif pod_name in invalid_pods:
-                log.warning("Skipping pod '%s' because is is invalid" % (pod_name))
+                logger.warning("Skipping pod '%s' because is is invalid" % (pod_name))
             else:
-                log.warning("Pod '%s' is untracked" % (pod_name))
+                logger.warning("Pod '%s' is untracked" % (pod_name))
 
         if len(unverified_pods) > 0:
             sleep_time = 10
-            log.info("There are %d unverified pods, sleeping for %d seconds before checking again" % (len(unverified_pods), sleep_time))
+            logger.info("There are %d unverified pods, sleeping for %d seconds before checking again" % (len(unverified_pods), sleep_time))
             time.sleep(sleep_time)
 
     if len(verified_pods) != len(pods):
-        log.error("Unable to verify all pods")
-        log.error("all        - %d: %s" % (len(pods), pods))
-        log.error("unverified - %d: %s" % (len(unverified_pods), unverified_pods))
-        log.error("verified   - %d: %s" % (len(verified_pods), verified_pods))
-        log.error("invalid    - %d: %s" % (len(invalid_pods), invalid_pods))
+        logger.error("Unable to verify all pods")
+        logger.error("all        - %d: %s" % (len(pods), pods))
+        logger.error("unverified - %d: %s" % (len(unverified_pods), unverified_pods))
+        logger.error("verified   - %d: %s" % (len(verified_pods), verified_pods))
+        logger.error("invalid    - %d: %s" % (len(invalid_pods), invalid_pods))
     else:
-        log.info("Verified all %d pods: %s" % (len(pods), pods))
+        logger.info("Verified all %d pods: %s" % (len(pods), pods))
 
-    log.info("Returning pod info:\n%s" % (endpoints.dump_json(pods_info)))
+    logger.info("Returning pod info:\n%s" % (endpoints.dump_json(pods_info)))
 
     return pods_info
 
@@ -1213,7 +1213,7 @@ def create_cs_pods(cpu_partitioning = None, abort_event = None):
 
     Globals:
         args (namespace): the script's CLI parameters
-        log: a logger instance
+        logger: a logger instance
         settings (dict): the one data structure to rule them all
         image_pull_secret_crds (dict): a data structure to hold image pull secret CRDs so that they are not logged
 
@@ -1222,13 +1222,13 @@ def create_cs_pods(cpu_partitioning = None, abort_event = None):
         1
         2
     """
-    log.info("Creating Client/Server Pods: cpu_partitioning=%s" % (cpu_partitioning))
+    logger.info("Creating Client/Server Pods: cpu_partitioning=%s" % (cpu_partitioning))
 
     endpoint = settings["run-file"]["endpoints"][args.endpoint_index]
 
     engines = None
     if cpu_partitioning is None:
-        log.error("You must define cpu_partitioning when calling this function")
+        logger.error("You must define cpu_partitioning when calling this function")
         return 1
     elif cpu_partitioning:
         engines = settings["engines"]["endpoint"]["classes"]["cpu-partitioning"]["with"]
@@ -1236,23 +1236,23 @@ def create_cs_pods(cpu_partitioning = None, abort_event = None):
         engines = settings["engines"]["endpoint"]["classes"]["cpu-partitioning"]["without"]
 
     if len(engines) > 0:
-        log.info("Going to create %d engines" % (len(engines)))
+        logger.info("Going to create %d engines" % (len(engines)))
     else:
-        log.info("No engines to create")
+        logger.info("No engines to create")
         return 0
 
     for engine in engines:
-        log.info("Creating engine %s-%d" % (engine["role"], engine["id"]))
+        logger.info("Creating engine %s-%d" % (engine["role"], engine["id"]))
 
         engine["crd"], rc = create_pod_crd(engine["role"], engine["id"])
         if rc == 1:
-            log.error("Failed to create CRD for %s-%d" % (engine["role"], engine["id"]))
+            logger.error("Failed to create CRD for %s-%d" % (engine["role"], engine["id"]))
             if crd is None:
-                log.error("No CRD available for %s-%d" % (engine["role"], engine["id"]))
+                logger.error("No CRD available for %s-%d" % (engine["role"], engine["id"]))
             else:
-                log.error("CRD generated for %s-%d is:\n%s" % (engine["role"], engine["id"], endpoints.dump_json(engine["crd"])))
+                logger.error("CRD generated for %s-%d is:\n%s" % (engine["role"], engine["id"], endpoints.dump_json(engine["crd"])))
         else:
-            log.info("Created CRD for %s-%d:\n%s" % (engine["role"], engine["id"], endpoints.dump_json(engine["crd"])))
+            logger.info("Created CRD for %s-%d:\n%s" % (engine["role"], engine["id"], endpoints.dump_json(engine["crd"])))
 
     if not "validation" in settings["engines"]["endpoint"]:
         settings["engines"]["endpoint"]["validation"] = {
@@ -1278,77 +1278,77 @@ def create_cs_pods(cpu_partitioning = None, abort_event = None):
     with endpoints.remote_connection(settings["run-file"]["endpoints"][args.endpoint_index]["host"],
                                      settings["run-file"]["endpoints"][args.endpoint_index]["user"], validate = False) as con:
         if "pull-secrets" in settings["misc"] and len(settings["misc"]["pull-secrets"]):
-            log.info("Validating image pull secret CRDs")
+            logger.info("Validating image pull secret CRDs")
             for secret in settings["misc"]["pull-secrets"].keys():
                 if settings["misc"]["pull-secrets"][secret]["failed"] or settings["misc"]["pull-secrets"][secret]["validated"]:
                     continue
 
-                log.info("Validating image pull secret CRD for '%s'" % (secret))
+                logger.info("Validating image pull secret CRD for '%s'" % (secret))
                 cmd = "%s create --filename - --dry-run=server --validate=strict" % (settings["misc"]["k8s-bin"])
                 result = endpoints.run_remote(con, cmd, debug = settings["misc"]["debug-output"], stdin = endpoints.dump_json(image_pull_secret_crds[secret]), env = settings["misc"]["remote-env"])
                 endpoints.log_result(result)
                 if result.exited != 0:
-                    log.error("Did not validate image pull secret CRD for '%s'" % (secret))
+                    logger.error("Did not validate image pull secret CRD for '%s'" % (secret))
                     settings["misc"]["pull-secrets"][secret]["failed"] = True
                 else:
-                    log.info("Validated image pull secret CRD for '%s'" % (secret))
+                    logger.info("Validated image pull secret CRD for '%s'" % (secret))
                     settings["misc"]["pull-secrets"][secret]["validated"] = True
 
-        log.info("Validating CRDs")
+        logger.info("Validating CRDs")
         invalid_crds = []
         valid_crds = []
         for engine in engines:
             engine_name = "%s-%d" % (engine["role"], engine["id"])
-            log.info("Validating CRD for '%s'" % (engine_name))
+            logger.info("Validating CRD for '%s'" % (engine_name))
             cmd = "%s create --filename - --dry-run=server --validate=strict" % (settings["misc"]["k8s-bin"])
             result = endpoints.run_remote(con, cmd, debug = settings["misc"]["debug-output"], stdin = endpoints.dump_json(engine["crd"]), env = settings["misc"]["remote-env"])
             endpoints.log_result(result)
             if result.exited != 0:
-                log.error("Did not validate CRD for '%s'" % (engine_name))
+                logger.error("Did not validate CRD for '%s'" % (engine_name))
                 invalid_crds.append(engine_name)
             else:
-                log.info("Validated CRD for '%s'" % (engine_name))
+                logger.info("Validated CRD for '%s'" % (engine_name))
                 valid_crds.append(engine_name)
         settings["engines"]["endpoint"]["validation"]["valid"].extend(valid_crds)
         settings["engines"]["endpoint"]["validation"]["invalid"].extend(invalid_crds)
         if len(valid_crds) > 0:
-            log.info("Validated the CRDs for these %d engines: %s" % (len(valid_crds), valid_crds))
+            logger.info("Validated the CRDs for these %d engines: %s" % (len(valid_crds), valid_crds))
         if len(invalid_crds) > 0:
-            log.error("Failed to validate the CRDs for these %d engines: %s" % (len(invalid_crds), invalid_crds))
+            logger.error("Failed to validate the CRDs for these %d engines: %s" % (len(invalid_crds), invalid_crds))
             return 1
 
         if "pull-secrets" in settings["misc"] and len(settings["misc"]["pull-secrets"]):
-            log.info("Creating image pull secret CRDs")
+            logger.info("Creating image pull secret CRDs")
             for secret in settings["misc"]["pull-secrets"].keys():
                 if settings["misc"]["pull-secrets"][secret]["failed"] or settings["misc"]["pull-secrets"][secret]["created"]:
                     continue
 
-                log.info("Creating image pull secret CRD for '%s'" % (secret))
+                logger.info("Creating image pull secret CRD for '%s'" % (secret))
                 cmd = "%s create --filename -" % (settings["misc"]["k8s-bin"])
                 result = endpoints.run_remote(con, cmd, debug = settings["misc"]["debug-output"], stdin = endpoints.dump_json(image_pull_secret_crds[secret]), env = settings["misc"]["remote-env"])
                 endpoints.log_result(result)
                 if result.exited != 0:
-                    log.error("Did not create image pull secret CRD for '%s'" % (secret))
+                    logger.error("Did not create image pull secret CRD for '%s'" % (secret))
                     settings["misc"]["pull-secrets"][secret]["failed"] = True
                 else:
-                    log.info("Created image pull secret CRD for '%s'" % (secret))
+                    logger.info("Created image pull secret CRD for '%s'" % (secret))
                     settings["misc"]["pull-secrets"][secret]["created"] = True
 
-        log.info("Creating CRDs")
+        logger.info("Creating CRDs")
         failed_crds = []
         created_crds = []
         engine_details = dict()
         for engine in engines:
             engine_name = "%s-%d" % (engine["role"], engine["id"])
-            log.info("Creating CRD for '%s'" % (engine_name))
+            logger.info("Creating CRD for '%s'" % (engine_name))
             cmd = "%s create --filename -" % (settings["misc"]["k8s-bin"])
             result = endpoints.run_remote(con, cmd, debug = settings["misc"]["debug-output"], stdin = endpoints.dump_json(engine["crd"]), env = settings["misc"]["remote-env"])
             endpoints.log_result(result)
             if result.exited != 0:
-                log.error("Did not create CRD for '%s'" % (engine_name))
+                logger.error("Did not create CRD for '%s'" % (engine_name))
                 failed_crds.append(engine_name)
             else:
-                log.info("Created CRD for '%s'" % (engine_name))
+                logger.info("Created CRD for '%s'" % (engine_name))
                 created_crds.append(engine_name)
                 engine_details[engine_name] = {
                     "role": engine["role"],
@@ -1357,9 +1357,9 @@ def create_cs_pods(cpu_partitioning = None, abort_event = None):
         settings["engines"]["endpoint"]["created"]["succeeded"].extend(created_crds)
         settings["engines"]["endpoint"]["created"]["failed"].extend(failed_crds)
         if len(created_crds) > 0:
-            log.info("Created the CRDs for these %d engines: %s" % (len(created_crds), created_crds))
+            logger.info("Created the CRDs for these %d engines: %s" % (len(created_crds), created_crds))
         if len(failed_crds) > 0:
-            log.error("Failed to create the CRDs for these %d engines: %s" % (len(failed_crds), failed_crds))
+            logger.error("Failed to create the CRDs for these %d engines: %s" % (len(failed_crds), failed_crds))
             return 2
 
         if not "pods" in settings["engines"]["endpoint"]:
@@ -1367,14 +1367,14 @@ def create_cs_pods(cpu_partitioning = None, abort_event = None):
 
         pod_status = verify_pods_running(con, created_crds, engine_details, abort_event)
         if pod_status is None:
-            log.error("Encountered fatal error while verifying pods")
+            logger.error("Encountered fatal error while verifying pods")
             return 2
-        log.info("Reviewing pods")
+        logger.info("Reviewing pods")
         for pod in pod_status.keys():
-            log.info("Pod '%s' is running on node '%s'" % (engine, pod_status[pod]["node"]))
+            logger.info("Pod '%s' is running on node '%s'" % (engine, pod_status[pod]["node"]))
 
             if pod_status[pod]["node"] not in settings["engines"]["endpoint"]["hosting-nodes"]:
-                log.info("Adding node '%s' to the list of hosting nodes" % (pod_status[pod]["node"]))
+                logger.info("Adding node '%s' to the list of hosting nodes" % (pod_status[pod]["node"]))
                 settings["engines"]["endpoint"]["hosting-nodes"].append(pod_status[pod]["node"])
 
             settings["engines"]["endpoint"]["verification"]["verified"].append(pod_status[pod]["name"])
@@ -1384,13 +1384,13 @@ def create_cs_pods(cpu_partitioning = None, abort_event = None):
         for pod in created_crds:
             if pod not in settings["engines"]["endpoint"]["verification"]["verified"]:
                 settings["engines"]["endpoint"]["verification"]["unverified"].append(pod)
-                log.error("Pod '%s' has not been verified" % (pod))
+                logger.error("Pod '%s' has not been verified" % (pod))
                 unverified += 1
         if unverified > 0:
-            log.error("Could not verify that all pods were running")
+            logger.error("Could not verify that all pods were running")
             return 2
 
-        log.info("There are %d hosting nodes: %s" % (len(settings["engines"]["endpoint"]["hosting-nodes"]), settings["engines"]["endpoint"]["hosting-nodes"]))
+        logger.info("There are %d hosting nodes: %s" % (len(settings["engines"]["endpoint"]["hosting-nodes"]), settings["engines"]["endpoint"]["hosting-nodes"]))
     
     return 0
 
@@ -1403,61 +1403,61 @@ def create_tools_pods(abort_event):
 
     Globals:
         args (namespace): the script's CLI parameters
-        log: a logger instance
+        logger: a logger instance
         settings (dict): the one data structure to rule them all
         image_pull_secret_crds (dict): a data structure to hold image pull secret CRDs so that they are not logged
 
     Returns:
         0
     """
-    log.info("Creating Tools Pods")
+    logger.info("Creating Tools Pods")
 
     endpoint = settings["run-file"]["endpoints"][args.endpoint_index]
 
     if endpoint["disable-tools"]["all"]:
-        log.info("Tools on all node types are disabled")
+        logger.info("Tools on all node types are disabled")
         return 0
 
     profiled_nodes = []
 
     if not endpoint["disable-tools"]["masters"]:
-        log.info("Profiling all master nodes: %s" % (settings["misc"]["k8s"]["nodes"]["endpoint"]["masters"]))
+        logger.info("Profiling all master nodes: %s" % (settings["misc"]["k8s"]["nodes"]["endpoint"]["masters"]))
         for node in settings["misc"]["k8s"]["nodes"]["endpoint"]["masters"]:
-            log.info("Adding master node '%s' to the list of profiled nodes" % (node))
+            logger.info("Adding master node '%s' to the list of profiled nodes" % (node))
             profiled_nodes.append(node)
     else:
-        log.info("Profiling of master nodes is disabled")
+        logger.info("Profiling of master nodes is disabled")
 
     if not endpoint["disable-tools"]["workers"]:
-        log.info("Profiling active worker nodes")
-        log.info("Worker nodes: %s" % (settings["misc"]["k8s"]["nodes"]["endpoint"]["workers"]))
-        log.info("Active worker nodes: %s" % (settings["engines"]["endpoint"]["hosting-nodes"]))
+        logger.info("Profiling active worker nodes")
+        logger.info("Worker nodes: %s" % (settings["misc"]["k8s"]["nodes"]["endpoint"]["workers"]))
+        logger.info("Active worker nodes: %s" % (settings["engines"]["endpoint"]["hosting-nodes"]))
 
         for node in settings["engines"]["endpoint"]["hosting-nodes"]:
-            log.info("Analyzing active worker node '%s'" % (node))
+            logger.info("Analyzing active worker node '%s'" % (node))
             if node in profiled_nodes:
                 if not endpoint["disable-tools"]["masters"] and node in settings["misc"]["k8s"]["nodes"]["endpoint"]["masters"]:
-                    log.info("Already profiling worker node '%s' -- it is also a master node so that is probably why" % (node))
+                    logger.info("Already profiling worker node '%s' -- it is also a master node so that is probably why" % (node))
                 else:
-                    log.info("Already profiling worker node '%s' and I'm not really sure why..." % (node))
+                    logger.info("Already profiling worker node '%s' and I'm not really sure why..." % (node))
             else:
-                log.info("Adding worker node '%s' to the list of profiled nodes because is hosting engine pods" % (node))
+                logger.info("Adding worker node '%s' to the list of profiled nodes because is hosting engine pods" % (node))
                 settings["engines"]["endpoint"]["classes"]["profiled-nodes"].append(node)
                 profiled_nodes.append(node)
 
         for node in settings["misc"]["k8s"]["nodes"]["endpoint"]["workers"]:
             if not node in profiled_nodes:
-                log.info("Not adding worker node '%s' to the list of profiled nodes because it is not hosting engine pods" % (node))
+                logger.info("Not adding worker node '%s' to the list of profiled nodes because it is not hosting engine pods" % (node))
     else:
-        log.info("Profiling of worker nodes is disabled")
+        logger.info("Profiling of worker nodes is disabled")
 
-    log.info("Going to launch profiler pods on these nodes: %s" % (profiled_nodes))
+    logger.info("Going to launch profiler pods on these nodes: %s" % (profiled_nodes))
 
     if len(profiled_nodes) == 0:
-        log.info("No nodes to profile found")
+        logger.info("No nodes to profile found")
         return 0
 
-    log.info("Loading tools information and creating profiler mapping")
+    logger.info("Loading tools information and creating profiler mapping")
     tools = []
     try:
         tool_cmd_dir = "%s/%s" % (settings["engines"]["endpoint"]["first-engine"]["role"], settings["engines"]["endpoint"]["first-engine"]["id"])
@@ -1466,9 +1466,9 @@ def create_tools_pods(abort_event):
                 split_line = line.split(":")
                 tool = split_line[0]
                 tools.append(tool)
-                log.info("Adding tool '%s' to the list of tools" % (tool))
+                logger.info("Adding tool '%s' to the list of tools" % (tool))
     except IOError as e:
-        log.error("Failed to load the start tools command file from %s" % (tool_cmd_dir))
+        logger.error("Failed to load the start tools command file from %s" % (tool_cmd_dir))
         return 1
     for tool in tools:
         if not tool in settings["engines"]["profiler-mapping"]:
@@ -1477,11 +1477,11 @@ def create_tools_pods(abort_event):
                 "label": "%s-%s" % (args.endpoint_label, tool),
                 "ids": []
             }
-            log.info("Created profiler mapping for tool '%s':\n%s" % (tool, endpoints.dump_json(settings["engines"]["profiler-mapping"][tool])))
+            logger.info("Created profiler mapping for tool '%s':\n%s" % (tool, endpoints.dump_json(settings["engines"]["profiler-mapping"][tool])))
         else:
-            log.info("Profiler mapping for tool '%s' already exists" % (tool))
+            logger.info("Profiler mapping for tool '%s' already exists" % (tool))
 
-    log.info("Creating node profiling pods")
+    logger.info("Creating node profiling pods")
 
     settings["engines"]["endpoint"]["classes"]["profiled-nodes"] = []
     tools_pod_id = 1
@@ -1499,97 +1499,97 @@ def create_tools_pods(abort_event):
         elif pod["node"] in settings["misc"]["k8s"]["nodes"]["endpoint"]["workers"]:
             pod["role"] = "worker"
         else:
-            log.error("Unknown role for tools pod to be run on node '%s'" % (pod["node"]))
+            logger.error("Unknown role for tools pod to be run on node '%s'" % (pod["node"]))
             return 1
 
-        log.info("Creating pod '%s-%d' to run on node '%s'" % (pod["role"], pod["id"], pod["node"]))
+        logger.info("Creating pod '%s-%d' to run on node '%s'" % (pod["role"], pod["id"], pod["node"]))
 
         pod["crd"], rc = create_pod_crd(pod["role"], pod["id"], node = pod["node"])
         if rc == 1:
-            log.error("Failed to create CRD for '%s-%d'" % (pod["role"], pod["id"]))
+            logger.error("Failed to create CRD for '%s-%d'" % (pod["role"], pod["id"]))
             if pod["crd"] is None:
-                log.error("No CRD available for '%s-%d'" % (pod["role"], pod["id"]))
+                logger.error("No CRD available for '%s-%d'" % (pod["role"], pod["id"]))
             else:
-                log.error("CRD generated for '%s-%d':\n%s" % (pod["role"], pod["id"], endpoints.dump_json(pod["crd"])))
+                logger.error("CRD generated for '%s-%d':\n%s" % (pod["role"], pod["id"], endpoints.dump_json(pod["crd"])))
         else:
-            log.info("Created CRD for '%s-%d':\n%s" % (pod["role"], pod["id"], endpoints.dump_json(pod["crd"])))
+            logger.info("Created CRD for '%s-%d':\n%s" % (pod["role"], pod["id"], endpoints.dump_json(pod["crd"])))
         
         settings["engines"]["endpoint"]["classes"]["profiled-nodes"].append(pod)
 
     with endpoints.remote_connection(settings["run-file"]["endpoints"][args.endpoint_index]["host"],
                                      settings["run-file"]["endpoints"][args.endpoint_index]["user"], validate = False) as con:
         if "pull-secrets" in settings["misc"] and len(settings["misc"]["pull-secrets"]):
-            log.info("Validating image pull secret CRDs")
+            logger.info("Validating image pull secret CRDs")
             for secret in settings["misc"]["pull-secrets"].keys():
                 if settings["misc"]["pull-secrets"][secret]["failed"] or settings["misc"]["pull-secrets"][secret]["validated"]:
                     continue
 
-                log.info("Validating image pull secret CRD for '%s'" % (secret))
+                logger.info("Validating image pull secret CRD for '%s'" % (secret))
                 cmd = "%s create --filename - --dry-run=server --validate=strict" % (settings["misc"]["k8s-bin"])
                 result = endpoints.run_remote(con, cmd, debug = settings["misc"]["debug-output"], stdin = endpoints.dump_json(image_pull_secret_crds[secret]), env = settings["misc"]["remote-env"])
                 endpoints.log_result(result)
                 if result.exited != 0:
-                    log.error("Did not validate image pull secret CRD for '%s'" % (secret))
+                    logger.error("Did not validate image pull secret CRD for '%s'" % (secret))
                     settings["misc"]["pull-secrets"][secret]["failed"] = True
                 else:
-                    log.info("Validated image pull secret CRD for '%s'" % (secret))
+                    logger.info("Validated image pull secret CRD for '%s'" % (secret))
                     settings["misc"]["pull-secrets"][secret]["validated"] = True
 
-        log.info("Validating CRDs")
+        logger.info("Validating CRDs")
         invalid_crds = []
         valid_crds = []
         for pod in settings["engines"]["endpoint"]["classes"]["profiled-nodes"]:
             pod_name = "%s-%d" % (pod["role"], pod["id"])
-            log.info("Validating CRD for pod '%s'" % (pod_name))
+            logger.info("Validating CRD for pod '%s'" % (pod_name))
             cmd = "%s create --filename - --dry-run=server --validate=strict" % (settings["misc"]["k8s-bin"])
             result = endpoints.run_remote(con, cmd, debug = settings["misc"]["debug-output"], stdin = endpoints.dump_json(pod["crd"]), env = settings["misc"]["remote-env"])
             endpoints.log_result(result)
             if result.exited != 0:
-                log.error("Did not validate CRD for pod '%s'" % (pod_name))
+                logger.error("Did not validate CRD for pod '%s'" % (pod_name))
                 invalid_crds.append(pod_name)
             else:
-                log.info("Validated CRD for pod '%s'" % (pod_name))
+                logger.info("Validated CRD for pod '%s'" % (pod_name))
                 valid_crds.append(pod_name)
         settings["engines"]["endpoint"]["validation"]["valid"].extend(valid_crds)
         settings["engines"]["endpoint"]["validation"]["invalid"].extend(invalid_crds)
         if len(valid_crds) > 0:
-            log.info("Validated the CRDs for these %d pods: %s" % (len(valid_crds), valid_crds))
+            logger.info("Validated the CRDs for these %d pods: %s" % (len(valid_crds), valid_crds))
         if len(invalid_crds) > 0:
-            log.error("Failed to validate the CRDs for these %d pods: %s" % (len(invalid_crds), invalid_crds))
+            logger.error("Failed to validate the CRDs for these %d pods: %s" % (len(invalid_crds), invalid_crds))
             return 1
 
         if "pull-secrets" in settings["misc"] and len(settings["misc"]["pull-secrets"]):
-            log.info("Creating image pull secret CRDs")
+            logger.info("Creating image pull secret CRDs")
             for secret in settings["misc"]["pull-secrets"].keys():
                 if settings["misc"]["pull-secrets"][secret]["failed"] or settings["misc"]["pull-secrets"][secret]["created"]:
                     continue
 
-                log.info("Creating image pull secret CRD for '%s'" % (secret))
+                logger.info("Creating image pull secret CRD for '%s'" % (secret))
                 cmd = "%s create --filename -" % (settings["misc"]["k8s-bin"])
                 result = endpoints.run_remote(con, cmd, debug = settings["misc"]["debug-output"], stdin = endpoints.dump_json(image_pull_secret_crds[secret]), env = settings["misc"]["remote-env"])
                 endpoints.log_result(result)
                 if result.exited != 0:
-                    log.error("Did not create image pull secret CRD for '%s'" % (secret))
+                    logger.error("Did not create image pull secret CRD for '%s'" % (secret))
                     settings["misc"]["pull-secrets"][secret]["failed"] = True
                 else:
-                    log.info("Created image pull secret CRD for '%s'" % (secret))
+                    logger.info("Created image pull secret CRD for '%s'" % (secret))
                     settings["misc"]["pull-secrets"][secret]["created"] = True
 
-        log.info("Creating CRDs")
+        logger.info("Creating CRDs")
         failed_crds = []
         created_crds = []
         pod_details = dict()
         for pod in settings["engines"]["endpoint"]["classes"]["profiled-nodes"]:
             pod_name = "%s-%d" % (pod["role"], pod["id"])
-            log.info("Creating CRD for pod '%s'" % (pod_name))
+            logger.info("Creating CRD for pod '%s'" % (pod_name))
             cmd = "%s create --filename -" % (settings["misc"]["k8s-bin"])
             result = endpoints.run_remote(con, cmd, debug = settings["misc"]["debug-output"], stdin = endpoints.dump_json(pod["crd"]), env = settings["misc"]["remote-env"])
             endpoints.log_result(result)
             if result.exited != 0:
-                log.error("Did not create CRD for pod '%s'" % (pod_name))
+                logger.error("Did not create CRD for pod '%s'" % (pod_name))
                 failed_crds.append(engine_name)
             else:
-                log.info("Created CRD for pod '%s'" % (pod_name))
+                logger.info("Created CRD for pod '%s'" % (pod_name))
                 created_crds.append(pod_name)
                 pod_details[pod_name] = {
                     "role": pod["role"],
@@ -1598,9 +1598,9 @@ def create_tools_pods(abort_event):
         settings["engines"]["endpoint"]["created"]["succeeded"].extend(created_crds)
         settings["engines"]["endpoint"]["created"]["failed"].extend(failed_crds)
         if len(created_crds) > 0:
-            log.info("Created the CRDs for these %d pods: %s" % (len(created_crds), created_crds))
+            logger.info("Created the CRDs for these %d pods: %s" % (len(created_crds), created_crds))
         if len(failed_crds) > 0:
-            log.error("Failed to create the CRDs for these %d pods: %s" % (len(failed_crds), failed_crds))
+            logger.error("Failed to create the CRDs for these %d pods: %s" % (len(failed_crds), failed_crds))
             return 2
 
         if not "pods" in settings["engines"]["endpoint"]:
@@ -1608,13 +1608,13 @@ def create_tools_pods(abort_event):
 
         pod_status = verify_pods_running(con, created_crds, pod_details, abort_event)
         if pod_status is None:
-            log.error("Enclountered fatal error while verifying pods")
+            logger.error("Enclountered fatal error while verifying pods")
             return 2
-        log.info("Reviewing pods")
+        logger.info("Reviewing pods")
         for pod in pod_status.keys():
-            log.info("Pod '%s' is running on node '%s'" % (pod, pod_status[pod]["node"]))
+            logger.info("Pod '%s' is running on node '%s'" % (pod, pod_status[pod]["node"]))
 
-            log.info("Adding the containers in pod '%s' to the new followers list: %s" % (pod_status[pod]["name"], pod_status[pod]["containers"]))
+            logger.info("Adding the containers in pod '%s' to the new followers list: %s" % (pod_status[pod]["name"], pod_status[pod]["containers"]))
             settings["engines"]["new-followers"].extend(pod_status[pod]["containers"])
 
             settings["engines"]["endpoint"]["verification"]["verified"].append(pod_status[pod]["name"])
@@ -1624,10 +1624,10 @@ def create_tools_pods(abort_event):
         for pod in created_crds:
             if pod not in settings["engines"]["endpoint"]["verification"]["verified"]:
                 settings["engines"]["endpoint"]["verification"]["unverified"].append(pod)
-                log.error("Pod '%s' has not been verified" % (pod))
+                logger.error("Pod '%s' has not been verified" % (pod))
                 unverified += 1
         if unverified > 0:
-            log.error("Could not verify that all pods were running")
+            logger.error("Could not verify that all pods were running")
             return 2
             
     return 0
@@ -1641,13 +1641,13 @@ def kube_cleanup():
 
     Globals:
         args (namespace): the script's CLI parameters
-        log: a logger instance
+        logger: a logger instance
         settings (dict): the one data structure to rule then all
 
     Returns:
         0
     """
-    log.info("Running cleanup")
+    logger.info("Running cleanup")
 
     endpoint = settings["run-file"]["endpoints"][args.endpoint_index]
 
@@ -1657,23 +1657,23 @@ def kube_cleanup():
                                      settings["run-file"]["endpoints"][args.endpoint_index]["user"]) as con:
         errors = False
 
-        log.info("Current K8S namespace '%s' status" % (endpoint["namespace"]["name"]))
+        logger.info("Current K8S namespace '%s' status" % (endpoint["namespace"]["name"]))
         cmd = "%s get all --namespace %s --output wide" % (settings["misc"]["k8s-bin"], endpoint["namespace"]["name"])
         result = endpoints.run_remote(con, cmd, debug = settings["misc"]["debug-output"], env = settings["misc"]["remote-env"])
         endpoints.log_result(result)
         if result.exited != 0:
-            log.error(cleanup_error)
+            logger.error(cleanup_error)
             errors = True
 
-        log.info("Collecting engine logs")
+        logger.info("Collecting engine logs")
         pods = list(settings["engines"]["endpoint"]["pods"].keys())
         pods.sort()
         for pod in pods:
             pod_name = settings["engines"]["endpoint"]["pods"][pod]["name"]
             node_name = settings["engines"]["endpoint"]["pods"][pod]["node"]
-            log.info("Processing pod '%s' on node '%s'" % (pod_name, node_name))
+            logger.info("Processing pod '%s' on node '%s'" % (pod_name, node_name))
             for engine in settings["engines"]["endpoint"]["pods"][pod]["containers"]:
-                log.info("Collecting log for engine '%s'" % (engine))
+                logger.info("Collecting log for engine '%s'" % (engine))
                 cmd = "%s logs %s-%s --namespace %s --container %s" % (settings["misc"]["k8s-bin"],
                                                                        endpoint_default_settings["prefix"]["pod"],
                                                                        pod,
@@ -1684,29 +1684,29 @@ def kube_cleanup():
                     log_file = "%s/%s.txt.xz" % (settings["dirs"]["local"]["engine-logs"], engine)
                     with lzma.open(log_file, "wt", encoding="ascii") as lfh:
                         lfh.write(result.stdout)
-                    log.info("Wrote log for engine '%s' in pod '%s' to '%s'" % (engine, pod, log_file))
+                    logger.info("Wrote log for engine '%s' in pod '%s' to '%s'" % (engine, pod, log_file))
                 else:
-                    log.error("Failed to collect log for engine '%s' in pod '%s'" % (engine, pod))
+                    logger.error("Failed to collect log for engine '%s' in pod '%s'" % (engine, pod))
                     endpoints.log_result(result)
                     if not errors:
-                        log.error(cleanup_error)
+                        logger.error(cleanup_error)
                         errors = True
 
         if not errors:
             if clean_k8s_namespace(con):
-                log.error(cleanup_error)
+                logger.error(cleanup_error)
                 errors = True
             else:
-                log.info("Deleting namepsace: %s" % (endpoint["namespace"]["name"]))
+                logger.info("Deleting namepsace: %s" % (endpoint["namespace"]["name"]))
                 cmd = "%s delete namespace %s" % (settings["misc"]["k8s-bin"], endpoint["namespace"]["name"])
                 result = endpoints.run_remote(con, cmd, debug = settings["misc"]["debug-output"], env = settings["misc"]["remote-env"])
                 endpoints.log_result(result)
                 if result.exited != 0:
-                    log.error("Failed to delete namespace: %s" % (endpoint["namespace"]["name"]))
-                    log.error(cleanup_error)
+                    logger.error("Failed to delete namespace: %s" % (endpoint["namespace"]["name"]))
+                    logger.error(cleanup_error)
                     errors = True
         else:
-            log.warning("Skipping namespace cleanup due to prior errors")
+            logger.warning("Skipping namespace cleanup due to prior errors")
 
     return 0
 
@@ -1719,22 +1719,22 @@ def engine_init():
 
     Globals:
         args (namespace): the script's CLI parameters
-        log: a logger instance
+        logger: a logger instance
         settings (dict): the one data structure to rule then all
 
     Returns:
         env_vars_msg_file (str): A file containing all the messages to send to the engines
     """
-    log.info("Building messages to send engine-specific metadata to the engines")
+    logger.info("Building messages to send engine-specific metadata to the engines")
     env_vars_msgs = []
     pods = list(settings["engines"]["endpoint"]["pods"].keys())
     pods.sort()
     for pod in pods:
         pod_name = settings["engines"]["endpoint"]["pods"][pod]["name"]
         node_name = settings["engines"]["endpoint"]["pods"][pod]["node"]
-        log.info("Processing pod '%s' on node '%s'" % (pod_name, node_name))
+        logger.info("Processing pod '%s' on node '%s'" % (pod_name, node_name))
         for engine in settings["engines"]["endpoint"]["pods"][pod]["containers"]:
-            log.info("Processing engine '%s'" % (engine))
+            logger.info("Processing engine '%s'" % (engine))
 
             userenv = None
             osruntime = None
@@ -1767,11 +1767,11 @@ def engine_init():
             env_vars_msgs.extend(endpoints.create_roadblock_msg("follower", engine, "user-object", env_vars_payload))
     
     env_vars_msg_file = settings["dirs"]["local"]["roadblock-msgs"] + "/env-vars.json"
-    log.info("Writing follower env-vars messages to %s" % (env_vars_msg_file))
+    logger.info("Writing follower env-vars messages to %s" % (env_vars_msg_file))
     env_vars_msgs_json = endpoints.dump_json(env_vars_msgs)
     with open(env_vars_msg_file, "w", encoding = "ascii") as env_vars_msg_file_fp:
         env_vars_msg_file_fp.write(env_vars_msgs_json)
-    log.info("Contents of %s:\n%s" % (env_vars_msg_file, env_vars_msgs_json))
+    logger.info("Contents of %s:\n%s" % (env_vars_msg_file, env_vars_msgs_json))
 
     return env_vars_msg_file
 
@@ -1783,31 +1783,31 @@ def collect_sysinfo():
         None
 
     Globals:
-        log: a logger instance
+        logger: a logger instance
         settings (dict): the one data structure to rule them all
 
     Returns:
         0
     """
-    log.info("Collecting sysinfo")
+    logger.info("Collecting sysinfo")
 
     with endpoints.remote_connection(settings["run-file"]["endpoints"][args.endpoint_index]["host"],
                                      settings["run-file"]["endpoints"][args.endpoint_index]["user"], validate = False) as con:
         cmd = "%s cluster-info" % (settings["misc"]["k8s-bin"])
         result = endpoints.run_remote(con, cmd, debug = settings["misc"]["debug-output"], env = settings["misc"]["remote-env"])
         if result.exited != 0:
-            log.error("Failed to collect basic cluster-info")
+            logger.error("Failed to collect basic cluster-info")
             endpoints.log_result(result)
         else:
             out_file = settings["dirs"]["local"]["sysinfo"] + "/cluster-info.txt.xz"
             with lzma.open(out_file, "wt", encoding="ascii") as ofh:
                 ofh.write(result.stdout)
-            log.info("Wrote basic cluster-info to '%s'" % (out_file))
+            logger.info("Wrote basic cluster-info to '%s'" % (out_file))
 
         cmd = "%s cluster-info dump" % (settings["misc"]["k8s-bin"])
         result = endpoints.run_remote(con, cmd, debug = settings["misc"]["debug-output"], env = settings["misc"]["remote-env"])
         if result.exited != 0:
-            log.error("Failed to collect cluster-info dump")
+            logger.error("Failed to collect cluster-info dump")
             endpoints.log_result(result)
         else:
             out_file = settings["dirs"]["local"]["sysinfo"] + "/cluster-info.dump.json.xz"
@@ -1816,7 +1816,7 @@ def collect_sysinfo():
                 ofh.write(result.stdout)
                 ofh.write("STDERR:\n")
                 ofh.write(result.stderr)
-            log.info("Wrote cluster-info dump to '%s'" % (out_file))
+            logger.info("Wrote cluster-info dump to '%s'" % (out_file))
 
         collect_must_gather = False
         if "sysinfo" in settings["run-file"]["endpoints"][args.endpoint_index]:
@@ -1824,91 +1824,91 @@ def collect_sysinfo():
                 if settings["run-file"]["endpoints"][args.endpoint_index]["sysinfo"]["collect-must-gather"]:
                     collect_must_gather = True
         if collect_must_gather:
-            log.info("Going to collect OpenShift must-gather as requested")
+            logger.info("Going to collect OpenShift must-gather as requested")
 
             result = endpoints.run_remote(con, "mktemp --directory", debug = settings["misc"]["debug-output"], env = settings["misc"]["remote-env"])
             if result.exited == 0:
                 remote_temp_directory = result.stdout.strip()
-                log.info("Created remote temporary directory '%s'" % (remote_temp_directory))
+                logger.info("Created remote temporary directory '%s'" % (remote_temp_directory))
 
-                log.info("Running OpenShift must-gather and logging to remote directory '%s'" % (remote_temp_directory))
+                logger.info("Running OpenShift must-gather and logging to remote directory '%s'" % (remote_temp_directory))
                 cmd = "%s adm must-gather --dest-dir=%s" % (settings["misc"]["k8s-bin"], remote_temp_directory)
                 result = endpoints.run_remote(con, cmd, debug = settings["misc"]["debug-output"], env = settings["misc"]["remote-env"])
                 out_file = settings["dirs"]["local"]["sysinfo"] + "/must-gather.txt.xz"
-                log.info("Logging OpenShift must-gather output to '%s'" % (out_file))
+                logger.info("Logging OpenShift must-gather output to '%s'" % (out_file))
                 with lzma.open(out_file, "wt", encoding="ascii") as ofh:
                     ofh.write("STDOUT:\n")
                     ofh.write(result.stdout)
                     ofh.write("STDERR:\n")
                     ofh.write(result.stderr)
                 if result.exited != 0:
-                    log.error("OpenShift must-gather completed with errors")
+                    logger.error("OpenShift must-gather completed with errors")
                 else:
-                    log.info("OpenShift must-gather completed without errors")
+                    logger.info("OpenShift must-gather completed without errors")
 
                 result = endpoints.run_remote(con, "mktemp", debug = settings["misc"]["debug-output"], env = settings["misc"]["remote-env"])
                 if result.exited == 0:
                     remote_temp_file = result.stdout.strip()
 
-                    log.info("Creating remote archive '%s' of OpenShift must-gather data" % (remote_temp_file))
+                    logger.info("Creating remote archive '%s' of OpenShift must-gather data" % (remote_temp_file))
                     # choosing to use gzip compression here for what
                     # is perceived to be maximum compatibility with
                     # what is available on the remote side
                     cmd = "tar --create --gzip --directory %s --file %s ." % (remote_temp_directory, remote_temp_file)
                     result = endpoints.run_remote(con, cmd, debug = settings["misc"]["debug-output"], env = settings["misc"]["remote-env"])
                     if result.exited != 0:
-                        log.error("Failed to create remote archive")
+                        logger.error("Failed to create remote archive")
                         endpoints.log_result(result)
                     else:
-                        log.info("Created remote archive")
+                        logger.info("Created remote archive")
 
                         fd, local_temp_filename = tempfile.mkstemp(prefix = "kube_", suffix=".tar.gz")
-                        log.info("Transferring remote temp file '%s' to local temp file '%s'" % (remote_temp_file, local_temp_filename))
+                        logger.info("Transferring remote temp file '%s' to local temp file '%s'" % (remote_temp_file, local_temp_filename))
                         con.get(remote_temp_file, local_temp_filename)
-                        log.info("Transfer complete")
+                        logger.info("Transfer complete")
 
-                        log.info("Extracting must-gather data from temporary file '%s' to '%s'" % (local_temp_filename, settings["dirs"]["local"]["sysinfo"]))
+                        logger.info("Extracting must-gather data from temporary file '%s' to '%s'" % (local_temp_filename, settings["dirs"]["local"]["sysinfo"]))
                         cmd = "tar --extract --gzip --directory %s --file %s" % (settings["dirs"]["local"]["sysinfo"], local_temp_filename)
                         result = endpoints.run_local(cmd, debug = settings["misc"]["debug-output"])
                         if result.exited == 0:
-                            log.info("Extracted must-gather data from temporary file")
+                            logger.info("Extracted must-gather data from temporary file")
                         else:
-                            log.error("Failed to extract must-gather data from temporary file")
+                            logger.error("Failed to extract must-gather data from temporary file")
                             endpoints.log_result(result)
 
-                        log.info("Removing must-gather temporary file '%s'" % (local_temp_filename))
+                        logger.info("Removing must-gather temporary file '%s'" % (local_temp_filename))
                         os.remove(local_temp_filename)
 
-                    log.info("Deleting remote temporary file '%s'" % (remote_temp_file))
+                    logger.info("Deleting remote temporary file '%s'" % (remote_temp_file))
                     cmd = "rm %s" % (remote_temp_file)
                     result = endpoints.run_remote(con, cmd, debug = settings["misc"]["debug-output"], env = settings["misc"]["remote-env"])
                     if result.exited != 0:
-                        log.error("Failed to delete remote temporary file '%s'" % (remote_temp_file))
+                        logger.error("Failed to delete remote temporary file '%s'" % (remote_temp_file))
                         endpoints.log_result(result)
                     else:
-                        log.info("Deletion of remote temporary file '%s' succeeded" % (remote_temp_file))
+                        logger.info("Deletion of remote temporary file '%s' succeeded" % (remote_temp_file))
                 else:
-                    log.error("Failed to create a remote temporary file")
+                    logger.error("Failed to create a remote temporary file")
                     endpoints.log_result(result)
 
-                log.info("Delete remote temporary directory '%s'" % (remote_temp_directory))
+                logger.info("Delete remote temporary directory '%s'" % (remote_temp_directory))
                 cmd = "rm --recursive %s" % (remote_temp_directory)
                 result = endpoints.run_remote(con, cmd, debug = settings["misc"]["debug-output"], env = settings["misc"]["remote-env"])
                 if result.exited != 0:
-                    log.error("Failed to delete remote temporary directory '%s'" % (remote_temp_directory))
+                    logger.error("Failed to delete remote temporary directory '%s'" % (remote_temp_directory))
                     endpoints.log_result(result)
                 else:
-                    log.info("Delete of remote temporary directory '%s' succeeded" % (remote_temp_directory))
+                    logger.info("Delete of remote temporary directory '%s' succeeded" % (remote_temp_directory))
             else:
-                log.error("Failed to create temporary directory to store must-gather output")
+                logger.error("Failed to create temporary directory to store must-gather output")
                 endpoints.log_result(result)
         else:
-            log.info("OpenShift must-gather collection not requested")
+            logger.info("OpenShift must-gather collection not requested")
 
     return 0
 
 def deployment_roadblock_function(roadblock_id, follower_name, endpoint_deploy_timeout, roadblock_password, roadblock_messages_dir, abort_deployment_event):
-    log.info("This is the deployment roadblock thread.  My name is '%s'" % (follower_name))
+    logger.info("This is the deployment roadblock thread.  My name is '%s'" % (follower_name))
 
     rc = endpoints.do_roadblock(roadblock_id = roadblock_id,
                                 follower_id = follower_name,
@@ -1918,14 +1918,14 @@ def deployment_roadblock_function(roadblock_id, follower_name, endpoint_deploy_t
                                 msgs_dir = roadblock_messages_dir,
                                 connection_watchdog = settings["rickshaw"]["roadblock"]["connection-watchdog"])
     if rc == 0:
-        log.info("endpoint-deploy-begin roadblock succeeded")
+        logger.info("endpoint-deploy-begin roadblock succeeded")
     else:
-        log.error("endpoint-deploy-begin roadblock failed")
+        logger.error("endpoint-deploy-begin roadblock failed")
 
-        log.critical("Setting abort deployment event")
+        logger.critical("Setting abort deployment event")
         abort_deployment_event.set()
 
-    log.info("Ending the deployment roadblock thread")
+    logger.info("Ending the deployment roadblock thread")
 
     return 0
 
@@ -2184,7 +2184,7 @@ def test_start(msgs_dir, test_id, tx_msgs_dir):
         tx_msgs_dir (str): The directory where to write queued messages for transmit
 
     Globals:
-        log: a logger instance
+        logger: a logger instance
         settings (dict): the one data structure to rule then all
 
     Returns:
@@ -2212,7 +2212,7 @@ def test_start(msgs_dir, test_id, tx_msgs_dir):
     For baremetal, the MetalLB LoadBalancer setup is outside crucible. We just need the PoolName 
     in the k8s endpoint option lbSvc="PoolName".
     """
-    log.info("Running test_start() for '%s' (<iteration>-<sample>-<attempt>)" % (test_id))
+    logger.info("Running test_start() for '%s' (<iteration>-<sample>-<attempt>)" % (test_id))
 
     endpoint = settings["run-file"]["endpoints"][args.endpoint_index]
 
@@ -2231,25 +2231,25 @@ def test_start(msgs_dir, test_id, tx_msgs_dir):
     path = Path(this_msg_file)
 
     if path.exists() and path.is_file():
-        log.info("Found '%s'" % (this_msg_file))
+        logger.info("Found '%s'" % (this_msg_file))
 
         msgs_json,err = load_json_file(this_msg_file)
         if not msgs_json is None:
             if "received" in msgs_json:
-                log.info("Checking received messages for service requests")
+                logger.info("Checking received messages for service requests")
                 for msg in msgs_json["received"]:
                     if msg["payload"]["message"]["command"] == "user-object":
                         if "svc" in msg["payload"]["message"]["user-object"] and "ports" in msg["payload"]["message"]["user-object"]["svc"]:
                             server_engine = msg["payload"]["sender"]["id"]
                             client_engine = re.sub(r"server", r"client", server_engine)
 
-                            log.info("Found a service message from server engine %s to client engine %s:\n%s" % (server_engine, client_engine, endpoints.dump_json(msg["payload"])))
+                            logger.info("Found a service message from server engine %s to client engine %s:\n%s" % (server_engine, client_engine, endpoints.dump_json(msg["payload"])))
 
                             if not server_engine in settings["engines"]["endpoint"]["pods"]:
-                                log.info("This server engine (%s) is not owned by this endpoint so it is being ignored" % (server_engine))
+                                logger.info("This server engine (%s) is not owned by this endpoint so it is being ignored" % (server_engine))
                                 continue
                             else:
-                                log.info("This server engine (%s) is owned by this endpoint so it will be handled" % (server_engine))
+                                logger.info("This server engine (%s) is owned by this endpoint so it will be handled" % (server_engine))
 
                             obj = {
                                 "server-engine": server_engine,
@@ -2265,239 +2265,239 @@ def test_start(msgs_dir, test_id, tx_msgs_dir):
                             }
 
                             if obj["test-ip"] != obj["pod-ip"]:
-                                log.info("The test IP address (%s) and the pod IP address (%s) are not the same for server engine %s" % (obj["test-ip"], obj["pod-ip"], obj["server-engine"]))
+                                logger.info("The test IP address (%s) and the pod IP address (%s) are not the same for server engine %s" % (obj["test-ip"], obj["pod-ip"], obj["server-engine"]))
 
-                                log.info("Since the two IP addresses do not match there is nothing for me to do -- assuming something like SRIOV+multus is being used")
+                                logger.info("Since the two IP addresses do not match there is nothing for me to do -- assuming something like SRIOV+multus is being used")
 
                                 settings["networking"][test_id]["other"].append(obj)
                             else:
-                                log.info("The test IP address (%s) and the pod IP address (%s) are the same for server engine %s" % (obj["test-ip"], obj["pod-ip"], obj["server-engine"]))
+                                logger.info("The test IP address (%s) and the pod IP address (%s) are the same for server engine %s" % (obj["test-ip"], obj["pod-ip"], obj["server-engine"]))
 
                                 if client_engine in settings["engines"]["endpoint"]["pods"]:
-                                    log.info("Client %s is inside the cluster" % (obj["client-engine"]))
+                                    logger.info("Client %s is inside the cluster" % (obj["client-engine"]))
 
                                     # if the client is hosted in the cluster then a clusterIP service will
                                     # be created for the server and an endpoint will be created to ensure
                                     # the service forwards connections to the correct pod
 
-                                    log.info("Building service")
+                                    logger.info("Building service")
 
                                     crd = build_network_crd_obj("service",
                                                                 build_service_crd(obj["server-engine"],
                                                                                   obj["ports"]))
 
-                                    log.info("Created service CRD:\n%s" % (endpoints.dump_json(crd)))
+                                    logger.info("Created service CRD:\n%s" % (endpoints.dump_json(crd)))
                                     obj["crds"].append(crd)
 
                                     # Instead of relying on k8s to make an association between the service and
                                     # the pod, we explicitly connect the two by creating an endpoint, linking
                                     # the service to the IP of the server pod
 
-                                    log.info("Building endpoints")
+                                    logger.info("Building endpoints")
 
                                     crd = build_network_crd_obj("endpoints",
                                                                 build_service_endpoints_crd(obj["server-engine"],
                                                                                             obj["pod-ip"],
                                                                                             obj["ports"]))
 
-                                    log.info("Created endpoints CRD:\n%s" % (endpoints.dump_json(crd)))
+                                    logger.info("Created endpoints CRD:\n%s" % (endpoints.dump_json(crd)))
                                     obj["crds"].append(crd)
 
                                     settings["networking"][test_id]["service"].append(obj)
                                 else:
-                                    log.info("Client %s is outside the cluster" % (client_engine))
+                                    logger.info("Client %s is outside the cluster" % (client_engine))
 
                                     if "metallb-pool" in endpoint:
-                                        log.info("User has requested an ingress LoadBalancer service")
+                                        logger.info("User has requested an ingress LoadBalancer service")
 
-                                        log.info("Building ingress-lb using MetalLB pool '%s'" % (endpoint["metallb-pool"]))
+                                        logger.info("Building ingress-lb using MetalLB pool '%s'" % (endpoint["metallb-pool"]))
 
                                         crd = build_network_crd_obj("ingress-lb",
                                                                     build_metallb_crd(obj["server-engine"]),
                                                                                       obj["ports"],
                                                                                       endpoint["metallb-pool"])
 
-                                        log.info("Created ingress-lb CRD:\n%s" % (endpoints.dump_json(crd)))
+                                        logger.info("Created ingress-lb CRD:\n%s" % (endpoints.dump_json(crd)))
                                         obj["crds"].append(crd)
 
                                         settings["networking"][test_id]["ingress-lb"].append(obj)
                                     else:
-                                        log.info("Creating an ingress NodePort service")
+                                        logger.info("Creating an ingress NodePort service")
 
-                                        log.info("Building nodeport")
+                                        logger.info("Building nodeport")
 
                                         crd = build_network_crd_obj("nodeport",
                                                                     build_nodeport_crd(obj["server-engine"],
                                                                                        obj["ports"]))
 
-                                        log.info("Created nodeport CRD:\n%s" % (endpoints.dump_json(crd)))
+                                        logger.info("Created nodeport CRD:\n%s" % (endpoints.dump_json(crd)))
                                         obj["crds"].append(crd)
 
-                                        log.info("Building endpoints")
+                                        logger.info("Building endpoints")
 
                                         crd = build_network_crd_obj("endpoints",
                                                                     build_nodeport_endpoints_crd(obj["server-engine"],
                                                                                                  obj["pod-ip"],
                                                                                                  obj["ports"]))
 
-                                        log.info("Created endpoints CRD:\n%s" % (endpoints.dump_json(crd)))
+                                        logger.info("Created endpoints CRD:\n%s" % (endpoints.dump_json(crd)))
                                         obj["crds"].append(crd)
 
                                         settings["networking"][test_id]["nodeport"].append(obj)
 
     with endpoints.remote_connection(settings["run-file"]["endpoints"][args.endpoint_index]["host"],
                                      settings["run-file"]["endpoints"][args.endpoint_index]["user"], validate = False) as con:
-        log.info("Validating networking model CRDs")
+        logger.info("Validating networking model CRDs")
         for key in settings["networking"][test_id].keys():
-            log.info("Processing networking model: %s" % (key))
+            logger.info("Processing networking model: %s" % (key))
 
-            log.info("There are %d server engines to process for this networking mode (%s)" % (len(settings["networking"][test_id][key]), key))
+            logger.info("There are %d server engines to process for this networking mode (%s)" % (len(settings["networking"][test_id][key]), key))
             for obj in settings["networking"][test_id][key]:
-                log.info("Processing server engine %s" % (obj["server-engine"]))
+                logger.info("Processing server engine %s" % (obj["server-engine"]))
 
                 if len(obj["crds"]) == 0:
-                    log.info("There are no CRDs to process")
+                    logger.info("There are no CRDs to process")
                     continue
 
                 for crd in obj["crds"]:
-                    log.info("Processing %s CRD" % (crd["type"]))
+                    logger.info("Processing %s CRD" % (crd["type"]))
 
                     cmd = "%s create --filename - --dry-run=server --validate=strict" % (settings["misc"]["k8s-bin"])
                     result = endpoints.run_remote(con, cmd, debug = settings["misc"]["debug-output"], stdin = endpoints.dump_json(crd["crd"]), env = settings["misc"]["remote-env"])
                     endpoints.log_result(result)
                     if result.exited != 0:
-                        log.error("Failed to validate %s CRD" % (crd["type"]))
+                        logger.error("Failed to validate %s CRD" % (crd["type"]))
                     else:
-                        log.info("Validated %s CRD" % (crd["type"]))
+                        logger.info("Validated %s CRD" % (crd["type"]))
                         crd["validated"] = True
 
-        log.info("Creating validated networking model CRDs")
+        logger.info("Creating validated networking model CRDs")
         for key in settings["networking"][test_id].keys():
-            log.info("Processing networking model: %s" % (key))
+            logger.info("Processing networking model: %s" % (key))
 
-            log.info("There are %d server engines to process for this networking mode (%s)" % (len(settings["networking"][test_id][key]), key))
+            logger.info("There are %d server engines to process for this networking mode (%s)" % (len(settings["networking"][test_id][key]), key))
             for obj in settings["networking"][test_id][key]:
-                log.info("Processing server engine %s" % (obj["server-engine"]))
+                logger.info("Processing server engine %s" % (obj["server-engine"]))
 
                 if len(obj["crds"]) == 0:
-                    log.info("There are no CRDs to process")
+                    logger.info("There are no CRDs to process")
                     continue
 
                 obj["validated"] = True
                 for crd in obj["crds"]:
                     if not crd["validated"]:
-                        log.error("CRD %s previously failed validation" % (crd["type"]))
+                        logger.error("CRD %s previously failed validation" % (crd["type"]))
                         obj["validated"] = False
 
                 if not obj["validated"]:
-                    log.error("Skipping CRD creation for this server engine (%s) since one or more CRDs failed validation" % (obj["server-engine"]))
+                    logger.error("Skipping CRD creation for this server engine (%s) since one or more CRDs failed validation" % (obj["server-engine"]))
                 else:
                     for crd in obj["crds"]:
-                        log.info("Processing %s CRD" % (crd["type"]))
+                        logger.info("Processing %s CRD" % (crd["type"]))
 
                         cmd = "%s create --filename -" % (settings["misc"]["k8s-bin"])
                         result = endpoints.run_remote(con, cmd, debug = settings["misc"]["debug-output"], stdin = endpoints.dump_json(crd["crd"]), env = settings["misc"]["remote-env"])
                         endpoints.log_result(result)
                         if result.exited != 0:
-                            log.error("Failed to create %s CRD" % (crd["type"]))
+                            logger.error("Failed to create %s CRD" % (crd["type"]))
                         else:
-                            log.info("Created %s CRD" % (crd["type"]))
+                            logger.info("Created %s CRD" % (crd["type"]))
                             crd["created"] = True
 
                     obj["created"] = True
                     for crd in obj["crds"]:
                         if not crd["created"]:
-                            log.error("CRD %s previously failed creation" % (crd["type"]))
+                            logger.error("CRD %s previously failed creation" % (crd["type"]))
                             obj["created"] = False
 
                 if not obj["created"]:
-                    log.error("CRD creation for this server engine (%s) failed since one or more CRDs were not created" % (obj["server-engine"]))
+                    logger.error("CRD creation for this server engine (%s) failed since one or more CRDs were not created" % (obj["server-engine"]))
 
-        log.info("Collecting service IP address for networking models")
+        logger.info("Collecting service IP address for networking models")
         for key in settings["networking"][test_id].keys():
-            log.info("Processing networking model: %s" % (key))
+            logger.info("Processing networking model: %s" % (key))
 
-            log.info("There are %d server engines to process for this networking mode (%s)" % (len(settings["networking"][test_id][key]), key))
+            logger.info("There are %d server engines to process for this networking mode (%s)" % (len(settings["networking"][test_id][key]), key))
             for obj in settings["networking"][test_id][key]:
-                log.info("Processing server engine %s" % (obj["server-engine"]))
+                logger.info("Processing server engine %s" % (obj["server-engine"]))
 
                 if key == "other":
-                    log.info("For the 'other' networking model an assumption is made that the service IP address is the test IP address (%s)" % (obj["test-ip"]))
+                    logger.info("For the 'other' networking model an assumption is made that the service IP address is the test IP address (%s)" % (obj["test-ip"]))
 
                     obj["service-ip"] = obj["test-ip"]
 
-                    log.info("IP address is %s" % (obj["service-ip"]))
+                    logger.info("IP address is %s" % (obj["service-ip"]))
 
                     send_messages = True
                 elif obj["created"]:
                     if key == "service":
-                        log.info("Getting IP address for a service")
+                        logger.info("Getting IP address for a service")
 
                         cmd = "%s get svc/%s --namespace %s --output json" % (settings["misc"]["k8s-bin"], obj["crds"][0]["crd"]["metadata"]["name"], endpoint["namespace"]["name"])
                         result = endpoints.run_remote(con, cmd, debug = settings["misc"]["debug-output"], env = settings["misc"]["remote-env"])
                         endpoints.log_result(result)
                         if result.exited != 0:
-                            log.error("Failed to retrieve service information")
+                            logger.error("Failed to retrieve service information")
                         else:
-                            log.info("Retrieved service information")
+                            logger.info("Retrieved service information")
 
                             service_obj = json.loads(result.stdout)
 
                             if "spec" in service_obj and "clusterIP" in service_obj["spec"]:
                                 obj["service-ip"] = service_obj["spec"]["clusterIP"]
 
-                                log.info("IP address is %s" % (obj["service-ip"]))
+                                logger.info("IP address is %s" % (obj["service-ip"]))
 
                                 send_messages = True
                             else:
-                                log.error("Failed to decode service information or service information is incomplete")
+                                logger.error("Failed to decode service information or service information is incomplete")
                     elif key == "ingress-lb":
-                        log.info("Getting IP address for a ingress-lb")
+                        logger.info("Getting IP address for a ingress-lb")
 
                         cmd = "%s get svc/%s --namespace %s --output json" % (settings["misc"]["k8s-bin"], obj["crds"][0]["crd"]["metadata"]["name"], endpoint["namespace"]["name"])
                         result = endpoints.run_remote(con, cmd, debug = settings["misc"]["debug-output"], env = settings["misc"]["remote-env"])
                         endpoints.log_result(result)
                         if result.exited != 0:
-                            log.error("Failed to retrieve service information")
+                            logger.error("Failed to retrieve service information")
                         else:
-                            log.info("Retrieved service information")
+                            logger.info("Retrieved service information")
 
                             service_obj = json.loads(result.stdout)
 
                             if "status" in service_obj and "loadBalancer" in service_obj["status"] and "ingress" in service_obj["status"]["loadBalancer"] and "ip" in service_obj["status"]["loadBalancer"]["ingress"][0]:
                                 obj["service-ip"] = service_obj["status"]["loadBalancer"]["ingress"][0]["ip"]
 
-                                log.info("IP address is %s" % (obj["service-ip"]))
+                                logger.info("IP address is %s" % (obj["service-ip"]))
 
                                 send_messages = True
                             else:
-                                log.error("Failed to decode service information or service information is incomplete")
+                                logger.error("Failed to decode service information or service information is incomplete")
                     elif key == "nodeport":
-                        log.info("Getting IP address for a nodeport")
+                        logger.info("Getting IP address for a nodeport")
 
                         # a NodePort is available on -any- woker node in the cluster, however, we choose to "intelligently"
                         # provide the worker node's IP address which is currently hosting the pod
 
                         obj["service-ip"] = settings["engines"]["endpoint"]["pods"][obj["server-engine"]]["node-ip"]
 
-                        log.info("IP address is %s" % (obj["service-ip"]))
+                        logger.info("IP address is %s" % (obj["service-ip"]))
 
                         send_messages = True
 
         service_status(con)
 
     if send_messages:
-        log.info("Sending IP address messages to client engines via roadblock")
+        logger.info("Sending IP address messages to client engines via roadblock")
 
         for key in settings["networking"][test_id].keys():
-            log.info("Processing networking model: %s" % (key))
+            logger.info("Processing networking model: %s" % (key))
 
-            log.info("There are %d client engines to process for this networking mode (%s)" % (len(settings["networking"][test_id][key]), key))
+            logger.info("There are %d client engines to process for this networking mode (%s)" % (len(settings["networking"][test_id][key]), key))
             for obj in settings["networking"][test_id][key]:
-                log.info("Processing client engine %s" % (obj["client-engine"]))
+                logger.info("Processing client engine %s" % (obj["client-engine"]))
 
                 if obj["service-ip"] is not None:
-                    log.info("Creating a message to send to the client engine (%s) with the service IP address information" % (obj["client-engine"]))
+                    logger.info("Creating a message to send to the client engine (%s) with the service IP address information" % (obj["client-engine"]))
 
                     user_object = {
                         "svc": {
@@ -2509,15 +2509,15 @@ def test_start(msgs_dir, test_id, tx_msgs_dir):
                     msg = endpoints.create_roadblock_msg("follower", obj["client-engine"], "user-object", user_object)
 
                     msg_file = tx_msgs_dir + "/service-ip-" + obj["server-engine"] + ".json"
-                    log.info("Writing follower service-ip message to '%s'" % (msg_file))
+                    logger.info("Writing follower service-ip message to '%s'" % (msg_file))
                     with open(msg_file, "w", encoding = "ascii") as msg_file_fp:
                         msg_file_fp.write(endpoints.dump_json(msg))
                 else:
-                    log.warning("A service IP address is not available for this client engine (%s) which likely indicates a prior error during process a message from it's matching server engine (%s)" % (obj["client-engine"], obj["server-engine"]))
+                    logger.warning("A service IP address is not available for this client engine (%s) which likely indicates a prior error during process a message from it's matching server engine (%s)" % (obj["client-engine"], obj["server-engine"]))
     else:
-        log.info("No IP address messages to send to clients")
+        logger.info("No IP address messages to send to clients")
 
-    log.info("Returning from test_start() for '%s' (<iteration>-<sample>-<attempt>)" % (test_id))
+    logger.info("Returning from test_start() for '%s' (<iteration>-<sample>-<attempt>)" % (test_id))
     return
 
 def test_stop(test_id):
@@ -2528,49 +2528,49 @@ def test_stop(test_id):
         test_id (str): A string of the form "<iteration>:<sample>:<attempt>" used to identify the current test
 
     Globals:
-        log: a logger instance
+        logger: a logger instance
         settings (dict): the one data structure to rule then all
 
     Returns:
         None
     """
-    log.info("Running test_stop() for '%s' (<iteration>-<sample>-<attempt>)" % (test_id))
+    logger.info("Running test_stop() for '%s' (<iteration>-<sample>-<attempt>)" % (test_id))
 
     endpoint = settings["run-file"]["endpoints"][args.endpoint_index]
 
     with endpoints.remote_connection(settings["run-file"]["endpoints"][args.endpoint_index]["host"],
                                      settings["run-file"]["endpoints"][args.endpoint_index]["user"], validate = False) as con:
-        log.info("Deleting services for networking models")
+        logger.info("Deleting services for networking models")
         for key in settings["networking"][test_id].keys():
-            log.info("Processing networking model: %s" % (key))
+            logger.info("Processing networking model: %s" % (key))
 
-            log.info("There are %d server engines to process for this networking mode (%s)" % (len(settings["networking"][test_id][key]), key))
+            logger.info("There are %d server engines to process for this networking mode (%s)" % (len(settings["networking"][test_id][key]), key))
             for obj in settings["networking"][test_id][key]:
-                log.info("Processing server engine %s" % (obj["server-engine"]))
+                logger.info("Processing server engine %s" % (obj["server-engine"]))
 
                 if len(obj["crds"]) == 0:
-                    log.info("There are no CRDs to process")
+                    logger.info("There are no CRDs to process")
                     continue
 
                 for crd in obj["crds"]:
-                    log.info("Processing %s CRD" % (crd["type"]))
+                    logger.info("Processing %s CRD" % (crd["type"]))
 
                     if not crd["created"]:
-                        log.info("This CRD was not created so it does not need to be deleted")
+                        logger.info("This CRD was not created so it does not need to be deleted")
                         continue
 
                     cmd = "%s delete --filename -" % (settings["misc"]["k8s-bin"])
                     result = endpoints.run_remote(con, cmd, debug = settings["misc"]["debug-output"], stdin = endpoints.dump_json(crd["crd"]), env = settings["misc"]["remote-env"])
                     endpoints.log_result(result)
                     if result.exited != 0:
-                        log.error("Failed to delete %s CRD" % (crd["type"]))
+                        logger.error("Failed to delete %s CRD" % (crd["type"]))
                     else:
-                        log.info("Deleted %s CRD" % (crd["type"]))
+                        logger.info("Deleted %s CRD" % (crd["type"]))
                         crd["deleted"] = True
 
         service_status(con)
 
-    log.info("Returning from test_stop() for '%s' (<iteration>-<sample>-<attempt>)" % (test_id))
+    logger.info("Returning from test_stop() for '%s' (<iteration>-<sample>-<attempt>)" % (test_id))
     return
 
 def service_status(connection):
@@ -2581,7 +2581,7 @@ def service_status(connection):
          connection (Fabric Connection): The connection to use to run the commands remotely
 
     Globals:
-        log: a logger instance
+        logger: a logger instance
         settings (dict): the one data structure to rule then all
 
     Returns:
@@ -2589,7 +2589,7 @@ def service_status(connection):
     """
     endpoint = settings["run-file"]["endpoints"][args.endpoint_index]
 
-    log.info("Cluster/Namespace status:")
+    logger.info("Cluster/Namespace status:")
     for subcmd in [ "get svc", "get endpoints" ]:
         cmd = "%s %s --namespace %s --output wide" % (settings["misc"]["k8s-bin"], subcmd, endpoint["namespace"]["name"])
         result = endpoints.run_remote(connection, cmd, debug = settings["misc"]["debug-output"], env = settings["misc"]["remote-env"])
@@ -2610,11 +2610,12 @@ def create_pull_secret_crd(name, token_file):
         token_file (str): the path to the token file to use for the secret
 
     Globals:
+        logger: a logger instance
 
     Returns:
         crd (dict): the final CRD that was built
     """
-    log.info("Building a image pull secret CRD called '%s' for '%s'" % (name, token_file))
+    logger.info("Building a image pull secret CRD called '%s' for '%s'" % (name, token_file))
 
     crd = {
         "apiVersion": "v1",
@@ -2631,7 +2632,7 @@ def create_pull_secret_crd(name, token_file):
 
     # the CRD is intentionally printed prior to adding the token so
     # that it does not end up in the logs for security reasons
-    log.info("Created image pull secret CRD:\n%s" % (endpoints.dump_json(crd)))
+    logger.info("Created image pull secret CRD:\n%s" % (endpoints.dump_json(crd)))
 
     token = ""
     with open(token_file, "r", encoding = "ascii") as fh:
@@ -2651,19 +2652,21 @@ def main():
 
     Globals:
         args (namespace): the script's CLI parameters
+        logger: a logger instance
+        settings (dict): the one data structure to rule then all
 
     Returns:
         rc (int): The return code for the script
     """
     global args
-    global log
+    global logger
     global settings
     early_abort = False
 
     if args.validate:
         return(validate())
 
-    log = endpoints.setup_logger(args.log_level)
+    logger = endpoints.setup_logger(args.log_level)
 
     endpoints.log_cli(args)
     settings = endpoints.init_settings(settings, args)
@@ -2675,27 +2678,27 @@ def main():
                                        endpoint_index = args.endpoint_index,
                                        endpoint_normalizer_callback = normalize_endpoint_settings)
     if settings is None:
-        log.error("Enabling early abort due to error in endpoints.load_settings")
+        logger.error("Enabling early abort due to error in endpoints.load_settings")
         early_abort = True
 
     if not early_abort:
         if check_base_requirements() != 0:
-            log.error("Enabling early abort due to error in check_base_requirements")
+            logger.error("Enabling early abort due to error in check_base_requirements")
             early_abort = True
     else:
-        log.warning("Skipping call to check_base_requirements due to early abort")
+        logger.warning("Skipping call to check_base_requirements due to early abort")
 
     if not early_abort:
         endpoints.create_local_dirs(settings)
     else:
-        log.warning("Skipping call to endpoints.create_local_dirs due to early abort")
+        logger.warning("Skipping call to endpoints.create_local_dirs due to early abort")
 
     if not early_abort:
         if get_k8s_config() != 0:
-            log.error("Enabling early abort due to error in get_k8s_config")
+            logger.error("Enabling early abort due to error in get_k8s_config")
             early_abort = True
     else:
-        log.warning("Skipping call to get_k8s_config due to early abort")
+        logger.warning("Skipping call to get_k8s_config due to early abort")
 
     deployment_label = args.endpoint_label + "-deploy"
     rc = endpoints.process_pre_deploy_roadblock(roadblock_id = args.roadblock_id,
@@ -2707,12 +2710,12 @@ def main():
                                                 early_abort = early_abort,
                                                 roadblock_connection_watchdog = settings["rickshaw"]["roadblock"]["connection-watchdog"])
     if rc != 0:
-        log.error("Processing of the pre-deploy roadblocks resulted in an error")
+        logger.error("Processing of the pre-deploy roadblocks resulted in an error")
     else:
         abort_deployment_event = threading.Event()
 
         try:
-            log.info("Create roadblock deployment thread with name '%s'" % (deployment_label))
+            logger.info("Create roadblock deployment thread with name '%s'" % (deployment_label))
             deployment_roadblock_thread = threading.Thread(target = deployment_roadblock_function,
                                                            args = (
                                                                    args.roadblock_id,
@@ -2725,43 +2728,43 @@ def main():
                                                            name = deployment_label)
             deployment_roadblock_thread.start()
         except RuntimeError as e:
-            log.error("Failed to create and start the deployment roadblock thread due to exception '%s'" % (str(e)))
+            logger.error("Failed to create and start the deployment roadblock thread due to exception '%s'" % (str(e)))
             early_abort = True
 
         if not early_abort and not abort_deployment_event.is_set():
             if init_k8s_namespace() != 0:
-                log.error("Enabling early abort due to error in init_k8s_namespace")
+                logger.error("Enabling early abort due to error in init_k8s_namespace")
                 early_abort = True
         else:
-            log.warning("Skipping call to init_k8s_namespace due to early abort")
+            logger.warning("Skipping call to init_k8s_namespace due to early abort")
 
         if not early_abort and not abort_deployment_event.is_set():
             if compile_object_configs() != 0:
-                log.error("Enabling early abort due to error in compile_object_configs")
+                logger.error("Enabling early abort due to error in compile_object_configs")
                 early_abort = True
         else:
-            log.warning("Skipping call to compile_object_configs due to early abort")
+            logger.warning("Skipping call to compile_object_configs due to early abort")
 
         if not early_abort and not abort_deployment_event.is_set():
             if create_cs_pods(cpu_partitioning = True, abort_event = abort_deployment_event) != 0:
-                log.error("Enabling early abort due to error in create_cs_pods(cpu_partitioning = True)")
+                logger.error("Enabling early abort due to error in create_cs_pods(cpu_partitioning = True)")
                 early_abort = True
         else:
-            log.warning("Skipping call to create_cs_pods(cpu_partitioning = True) due to early abort")
+            logger.warning("Skipping call to create_cs_pods(cpu_partitioning = True) due to early abort")
 
         if not early_abort and not abort_deployment_event.is_set():
             if create_cs_pods(cpu_partitioning = False, abort_event = abort_deployment_event) != 0:
-                log.error("Enabling early abort due to error in create_cs_pods(cpu_partitioning = False)")
+                logger.error("Enabling early abort due to error in create_cs_pods(cpu_partitioning = False)")
                 early_abort = True
         else:
-            log.warning("Skipping call to create_cs_pods(cpu_partitioning = False) due to early abort")
+            logger.warning("Skipping call to create_cs_pods(cpu_partitioning = False) due to early abort")
 
         if not early_abort and not abort_deployment_event.is_set():
             if create_tools_pods(abort_deployment_event) != 0:
-                log.error("Enabling early abort due to error in create_tools_pods")
+                logger.error("Enabling early abort due to error in create_tools_pods")
                 early_abort = True
         else:
-            log.warning("Skipping call to create_tools_pods due to early abort")
+            logger.warning("Skipping call to create_tools_pods due to early abort")
 
         if not abort_deployment_event.is_set():
             # KMR implement callbacks
@@ -2790,19 +2793,19 @@ def main():
                                               early_abort = early_abort,
                                               roadblock_connection_watchdog = settings["rickshaw"]["roadblock"]["connection-watchdog"])
         else:
-            log.warning("Skipping call to process_raodblocks due to abort deployment")
+            logger.warning("Skipping call to process_raodblocks due to abort deployment")
 
-        log.info("Joining deployment roadblock thread")
+        logger.info("Joining deployment roadblock thread")
         deployment_roadblock_thread.join()
-        log.info("Joined deployment roadblock thread")
+        logger.info("Joined deployment roadblock thread")
 
-    log.info("Logging 'final' settings data structure")
+    logger.info("Logging 'final' settings data structure")
     endpoints.log_settings(settings, mode = "settings")
-    log.info("kube endpoint exiting")
+    logger.info("kube endpoint exiting")
     return rc
 
 if __name__ == "__main__":
     args = endpoints.process_options()
-    log = None
+    logger = None
     settings = dict()
     exit(main())
