@@ -22,6 +22,6 @@
 	"log-level": "normal"
     },
     "workshop": {
-        "force-builds": "false"
+        "force-builds": false
     }
 }
