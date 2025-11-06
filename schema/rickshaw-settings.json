@@ -1,0 +1,156 @@
+{
+    "title": "Rickshaw Settings Schema",
+    "description": "This schema defines the rickshaw-settings configuration file",
+    "type": "object",
+    "properties": {
+        "endpoints": {
+            "description": "The endpoints object contains configuration settings used by the endpoints and to control how they are invoked",
+            "type": "object",
+            "properties": {
+                "default": {
+                    "description": "This object contains default values for various settings that are used by the endpoints",
+                    "type": "object",
+                    "properties": {
+                        "user": {
+                            "description": "This parameter controls the default username that is used to connect to an endpoint",
+                            "type": "string",
+                            "minLemgth": 1,
+                            "default": "root"
+                        }
+                    },
+                    "additionalProperies": false,
+                    "required": [
+                        "user"
+                    ]
+                },
+                "log-level": {
+                    "description": "This parameter controls what logging level the endpoints are invoked with.  This only applies to the Python endpoints",
+                    "type": "string",
+                    "enum": [
+                        "debug",
+                        "normal",
+                        "verbose-debug"
+                    ],
+                    "default": "normal"
+                }
+            },
+            "additionalProperties": false,
+            "required": [
+                "default",
+                "log-level"
+            ]
+        },
+        "roadblock": {
+            "description": "The roadblock object contains configuration settings specific to how roadblocker.py is invoked",
+            "type": "object",
+            "properties": {
+                "connection-watchdog": {
+                    "description": "This parameter controls whether roadblock should have the connection watchdog enabled",
+                    "type": "boolean"
+                },
+                "log-level": {
+                    "description": "This parameter controls what logging level roadblocker.py should be invoked with",
+                    "type": "string",
+                    "enum": [
+                        "debug",
+                        "normal",
+                        "verbose-debug"
+                    ],
+                    "default": "normal"
+                },
+                "timeouts": {
+                    "description": "This object contains default timeout values for various types of roadblocks that Rickshaw uses",
+                    "type": "object",
+                    "properties": {
+                        "collect-sysinfo": {
+                            "description": "This parameter defines the default timeout for the sysinfo collection roadblock",
+                            "type": "integer",
+                            "minimum": 1
+                        },
+                        "default": {
+                            "description": "This parameter defines the default timeout that applies to all roadblocks that do not have a specific default timeout defined",
+                            "type": "integer",
+                            "minimum": 1
+                        },
+                        "endpoint-deploy": {
+                            "description": "This parameter defines the default timeout that is used for the endpoint deployment phase where the endpoints launch the engines",
+                            "type": "integer",
+                            "minimum": 1
+                        },
+                        "engine-start": {
+                            "description": "This parameter defines the default timeout that is used to wait for the engines to come online after they are deployed.",
+                            "type": "integer",
+                            "minimum": 1
+                        }
+                    },
+                    "additionalProperties": false,
+                    "required": [
+                        "collect-sysinfo",
+                        "default",
+                        "endpoint-deploy",
+                        "engine-start"
+                    ]
+                }
+            },
+            "additionalProperties": false,
+            "required": [
+                "connection-watchdog",
+                "log-level",
+                "timeouts"
+            ]
+        },
+        "userenvs": {
+            "description": "The userenv object contains configuration settings about the userenvs",
+            "type": "object",
+            "properties": {
+                "default": {
+                    "decsription": "This object contains the default userenv definition for different engine types",
+                    "type": "object",
+                    "properties": {
+                        "benchmarks": {
+                            "descrition": "This parameter defines the default userenv for the client/server engines",
+                            "type": "string",
+                            "minLength": 1
+                        },
+                        "tools": {
+                            "description": "This parameter defines the default userenv for the profiler engines",
+                            "type": "string",
+                            "minLength": 1
+                        }
+                    },
+                    "additionalProperties": false,
+                    "required": [
+                        "benchmarks",
+                        "tools"
+                    ]
+                }
+            },
+            "additionalProperties": false,
+            "required": [
+                "default"
+            ]
+        },
+        "workshop": {
+            "description": "The workshop object contains configuration settings that control how rickshaw-run uses workshop",
+            "type": "object",
+            "properties": {
+                "force-builds": {
+                    "description": "This paramter controls whether or not rickshaw-run is forced to build container images even if they already exist during a run",
+                    "type": "boolean",
+                    "default": false
+                }
+            },
+            "additionalProperties": false,
+            "required": [
+                "force-builds"
+            ]
+        }
+    },
+    "additionalProperties": false,
+    "required": [
+        "endpoints",
+        "roadblock",
+        "userenvs",
+        "workshop"
+    ]
+}

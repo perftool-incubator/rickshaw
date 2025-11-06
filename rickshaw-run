@@ -112,6 +112,7 @@ my $run_schema_file = $rickshaw_project_dir . "/schema/run.json";
 my $utility_schema_file = $rickshaw_project_dir . "/schema/utility.json";
 my $bench_params_schema_file = $rickshaw_project_dir . "/schema/bench-params.json";
 my $tool_params_schema_file = $rickshaw_project_dir . "/schema/tool-params.json";
+my $rickshaw_settings_schema_file = $rickshaw_project_dir . "/schema/rickshaw-settings.json";
 my $roadblock_exit_success = 0;
 my $roadblock_exit_timeout = 3;
 my $roadblock_exit_abort = 4;
@@ -2042,9 +2043,9 @@ sub make_run_dirs() {
 
 sub load_settings_info() {
     my $rickshaw_settings_filename = $rickshaw_project_dir . "/rickshaw-settings.json";
-    (my $rc, $jsonsettings) = load_json_settings($rickshaw_settings_filename);
-    if ($rc != 0) {
-        log_print sprintf "load_settings_info(): load_json_settings() failed for %s\n", $rickshaw_settings_filename;
+    (my $rc, $jsonsettings) = get_json_file($rickshaw_settings_filename, $rickshaw_settings_schema_file);
+    if (($rc > 0) or (! defined $jsonsettings)) {
+        log_print sprintf "load_settings_info(): get_json_file() failed for %s\n", $rickshaw_settings_filename;
         exit 1;
     }
 
