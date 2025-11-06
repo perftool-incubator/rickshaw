@@ -4,8 +4,7 @@
             "default": 240,
             "endpoint-deploy": 1440,
             "collect-sysinfo": 1200,
-            "engine-start": 1440,
-            "move-data": 300
+            "engine-start": 1440
         },
 	"connection-watchdog": false,
 	"log-level": "normal"

@@ -73,7 +73,6 @@ my $default_rb_timeout;
 my $collect_sysinfo_timeout;
 my $endpoint_deploy_timeout;
 my $engine_script_start_timeout;
-my $endpoint_move_data_rb_timeout;
 my $base_rb_leader_cmd;
 my $endpoint_log_level;
 my $config_dir;
@@ -2124,14 +2123,6 @@ sub load_settings_info() {
         exit 1;
     } else {
         log_print sprintf "load_settings_info(): loaded engine script-start roadblock timeout: %d\n", $engine_script_start_timeout;
-    }
-
-    ($rc, $endpoint_move_data_rb_timeout) = get_json_setting("roadblock.timeouts.move-data", $jsonsettings);
-    if ($rc != 0 ) {
-        log_print "load_settings_info(): failed to load move-data roadblock timeout\n";
-        exit 1;
-    } else {
-        log_print sprintf "load_settings_info(): loaded endpoint move-data roadblock timeout: %d\n", $endpoint_move_data_rb_timeout;
     }
 
     ($rc, $workshop_force_builds) = get_json_setting("workshop.force-builds", $jsonsettings);
