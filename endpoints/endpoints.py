@@ -1941,12 +1941,20 @@ def load_settings(settings, endpoint_name = None, run_file = None, rickshaw_dir 
         log_settings(settings, mode = "crucible")
 
     rickshaw_settings_file = settings["dirs"]["local"]["conf"] + "/rickshaw-settings.json.xz"
+    rickshaw_settings_schema_file = rickshaw_dir + "/schema/rickshaw-settings.json"
     settings["rickshaw"],err = load_json_file(rickshaw_settings_file, uselzma = True)
     if settings["rickshaw"] is None:
         logger.error("Failed to load rickshaw-settings from %s with error '%s'" % (rickshaw_settings_file, err))
         return None
     else:
         logger.info("Loaded rickshaw-settings from %s" % (rickshaw_settings_file))
+
+    valid,err = validate_schema(settings["rickshaw"], rickshaw_settings_schema_file)
+    if not valid:
+        logger.error("JSON validation failed for rickshaw-settings with error '%s'" % (err))
+        return None
+    else:
+        logger.info("JSON validation for rickshaw-settings passed")
 
     log_settings(settings, mode = "rickshaw")
 

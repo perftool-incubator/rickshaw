@@ -1151,7 +1151,6 @@ function load_settings() {
     load_json_setting "roadblock.timeouts.default" default_timeout
     load_json_setting "roadblock.timeouts.collect-sysinfo" collect_sysinfo_timeout
     load_json_setting "roadblock.timeouts.endpoint-deploy" endpoint_deploy_timeout
-    load_json_setting "roadblock.timeouts.move-data" endpoint_move_data_timeout
 
     if [ -z "${engine_script_start_timeout}" ]; then
         load_json_setting "roadblock.timeouts.engine-start" engine_script_start_timeout

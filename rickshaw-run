@@ -73,7 +73,6 @@ my $default_rb_timeout;
 my $collect_sysinfo_timeout;
 my $endpoint_deploy_timeout;
 my $engine_script_start_timeout;
-my $endpoint_move_data_rb_timeout;
 my $base_rb_leader_cmd;
 my $endpoint_log_level;
 my $config_dir;
@@ -113,6 +112,7 @@ my $run_schema_file = $rickshaw_project_dir . "/schema/run.json";
 my $utility_schema_file = $rickshaw_project_dir . "/schema/utility.json";
 my $bench_params_schema_file = $rickshaw_project_dir . "/schema/bench-params.json";
 my $tool_params_schema_file = $rickshaw_project_dir . "/schema/tool-params.json";
+my $rickshaw_settings_schema_file = $rickshaw_project_dir . "/schema/rickshaw-settings.json";
 my $roadblock_exit_success = 0;
 my $roadblock_exit_timeout = 3;
 my $roadblock_exit_abort = 4;
@@ -2043,9 +2043,9 @@ sub make_run_dirs() {
 
 sub load_settings_info() {
     my $rickshaw_settings_filename = $rickshaw_project_dir . "/rickshaw-settings.json";
-    (my $rc, $jsonsettings) = load_json_settings($rickshaw_settings_filename);
-    if ($rc != 0) {
-        log_print sprintf "load_settings_info(): load_json_settings() failed for %s\n", $rickshaw_settings_filename;
+    (my $rc, $jsonsettings) = get_json_file($rickshaw_settings_filename, $rickshaw_settings_schema_file);
+    if (($rc > 0) or (! defined $jsonsettings)) {
+        log_print sprintf "load_settings_info(): get_json_file() failed for %s\n", $rickshaw_settings_filename;
         exit 1;
     }
 
@@ -2124,14 +2124,6 @@ sub load_settings_info() {
         exit 1;
     } else {
         log_print sprintf "load_settings_info(): loaded engine script-start roadblock timeout: %d\n", $engine_script_start_timeout;
-    }
-
-    ($rc, $endpoint_move_data_rb_timeout) = get_json_setting("roadblock.timeouts.move-data", $jsonsettings);
-    if ($rc != 0 ) {
-        log_print "load_settings_info(): failed to load move-data roadblock timeout\n";
-        exit 1;
-    } else {
-        log_print sprintf "load_settings_info(): loaded endpoint move-data roadblock timeout: %d\n", $endpoint_move_data_rb_timeout;
     }
 
     ($rc, $workshop_force_builds) = get_json_setting("workshop.force-builds", $jsonsettings);
