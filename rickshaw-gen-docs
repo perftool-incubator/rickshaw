@@ -56,7 +56,7 @@ use rickshaw::fixup;
 $| = 1; # flush stdout
 $toolbox::logging::debug = 0;
 
-my @pids;
+my @pids = ();
 my $pid;
 my $do_tools = 1;
 my @supported_cdm_vers = ('v7dev', 'v8dev', 'v9dev');
@@ -87,6 +87,24 @@ sub usage {
     log_print "--base-run-dir <dir>  (this is a result-file in json that rickshaw-post-process generates)\n";
     log_print "--max-jobs <num>  (maximum number of background jobs)\n";
     log_print "--ver <v7dev|v8dev|v9dev>  (common data model version)\n";
+}
+
+sub wait_for_jobs {
+    my $pids_ref = shift;
+    debug_log sprintf "pids: " . Dumper $pids_ref;
+    my $job_count = scalar @{ $pids_ref };
+
+    if ($job_count > 0) {
+        log_print sprintf "Waiting for %d jobs to complete\n", scalar $job_count;
+        while (1) {
+            my $wait_return = wait();
+            if ($wait_return < 0) {
+                last;
+            }
+        }
+        log_print sprintf "%d jobs have completed\n\n", scalar $job_count;
+        @{ $pids_ref } = ();
+    }
 }
 
 sub cdm_sanity_check {
@@ -382,7 +400,6 @@ sub generate_metrics {
     } else {
         my $eng_env_fh = new IO::Uncompress::UnXz $eng_env_file, Transparent => 1 || die "[ERROR]could not open file " . $eng_env_file;
         # Cull out env vars which we want as metadata
-        #log_print sprintf "Looking for engine env vars\n";
         my @varnames = ('HOSTNAME', 'tool_name', 'engine_type', 'engine_role', 'benchmark_group', 'benchmark_role', 'hosted_by', 'hypervisor_host', 'osruntime', 'endpoint_label', 'userenv');
         while (<$eng_env_fh>) {
             chomp;
@@ -750,22 +767,19 @@ foreach my $job_args (@jobs) {
         push(@pids, $pid);
         $num_jobs++;
     } else {
+	log_print sprintf "pid %d calling generate_metrics() for tool-file[%s] collector[%s] num[%s]\n", $$, $$job_args{'tool-file'}, $$job_args{'collector'}, $$job_args{'num'};
         my $num_metric_docs_submitted = generate_metrics($$job_args{'tool-dir'}, $$job_args{'tool-file'}, $$job_args{'collector'}, $$job_args{'num'}, $$job_args{'doc-ref'});
+	log_print sprintf "pid %d returned from generate_metrics()\n", $$;
         write_ndjson();
         exit 0;
     }
     if ($num_jobs >= $max_jobs) {
         log_print sprintf "Waiting for %d jobs to complete\n", $max_jobs;
-        while (1) {
-            my $wait_return = wait();
-            if ($wait_return < 0) {
-                last;
-            }
-        }
-        $num_jobs = 0;
+	wait_for_jobs(\@pids);
     }
 }
-@pids = ();
+log_print sprintf "Waiting for %d tool gen-docs jobs to complete\n", $num_jobs;
+wait_for_jobs(\@pids);
 
 
 if (exists $result{'iterations'}) {
@@ -1096,17 +1110,6 @@ if (exists $result{'tags'}) {
         create_es_doc("ndjson", "tag", $tag_idx);
         $tag_idx++;
     }
-}
-
-if (scalar @pids > 0) {
-    log_print sprintf "Waiting for %d jobs to complete\n", scalar @pids;
-    while (1) {
-        my $wait_return = wait();
-        if ($wait_return < 0) {
-            last;
-        }
-    }
-    log_print sprintf "%d jobs have completed\n\n", scalar @pids;
 }
 
 log_print "Generating Opensearch documents\n";
