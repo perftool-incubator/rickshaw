@@ -237,6 +237,12 @@
             "type": "object",
             "minProperties": 1,
             "properties": {
+                "annotations": {
+                    "description": "Pod annotations to be applied to the associated engines. These are applied to the pod metadata.",
+                    "type": "object",
+                    "additionalProperties": true,
+                    "minProperties": 1
+                },
                 "cpu-partitioning": {
                     "description": "This parameter defines whether engines that have it assigned are to be configured with or without CPU partitioning enabled.",
                     "type": "boolean",
@@ -317,10 +323,10 @@
                                     "$ref": "#/definitions/memory"
                                 }
                             },
-                            "additionalProperties": false
+                            "additionalProperties": true
                         }
                     },
-                    "additionalProperties": false
+                    "additionalProperties": true
                 },
                 "runtimeClassName": {
                     "description": "This parameter defines a runtime class that should be assigned to the associated engines.  See the K8S (or similar) documentation for more details about what this means and the possible values.",
