@@ -70,7 +70,7 @@ my $sample_persistent_ids_schema_file;
 my $file_rc;
 my $ndjson = "";
 my %num_docs_submitted = ('run' => 0, 'iteration' => 0, 'param' => 0, 'tag' => 0, 'sample' => 0, 'period' => 0);
-my $max_jobs = 8;
+my $max_jobs = 32;
 my $update_run_json = 0;
 my $run_id_field;
 my $iter_id_field;
@@ -89,23 +89,6 @@ sub usage {
     log_print "--ver <v7dev|v8dev|v9dev>  (common data model version)\n";
 }
 
-sub wait_for_jobs {
-    my $pids_ref = shift;
-    debug_log sprintf "pids: " . Dumper $pids_ref;
-    my $job_count = scalar @{ $pids_ref };
-
-    if ($job_count > 0) {
-        log_print sprintf "Waiting for %d jobs to complete\n", scalar $job_count;
-        while (1) {
-            my $wait_return = wait();
-            if ($wait_return < 0) {
-                last;
-            }
-        }
-        log_print sprintf "%d jobs have completed\n\n", scalar $job_count;
-        @{ $pids_ref } = ();
-    }
-}
 
 sub cdm_sanity_check {
     debug_log(sprintf "cdm ver is: [%s]\n", $cdm{'ver'});
@@ -723,7 +706,7 @@ if (-e $tool_dir and $do_tools == 1) {
                 for my $num (@numbers) {
                     my $cd_id = $collector . "-" . $num;
                     my $num_dir = $collector_dir . "/" . $num; # $run_dir/tool-data/[client|server|worker|master]/[0-N]
-                    log_print sprintf "Tool document generation for %s starting\n", $cd_id;
+                    log_print sprintf "Tool document generation for %s queued\n", $cd_id;
                     if (opendir(NUMDIR, $num_dir)) {
                         my @tools = grep(/\w+/, readdir(NUMDIR));
                         for my $tool (@tools) {
@@ -743,7 +726,7 @@ if (-e $tool_dir and $do_tools == 1) {
                                         # we need to ensure only one of them was processed.
                                         next;
                                     }
-                                    log_print sprintf "Working on tool_file: %s\n", $tool_file;
+                                    debug_log sprintf "Working on tool_file: %s\n", $tool_file;
 
                                     my %job_args = ( 'tool-dir' => $tool_dir,
                                                     'tool-file' => $tool_file,
@@ -761,25 +744,27 @@ if (-e $tool_dir and $do_tools == 1) {
         }
     }
 }
+log_print sprintf "Launching up to %d jobs\n", $max_jobs;
 my $num_jobs = 0;
-foreach my $job_args (@jobs) {
+while (scalar @jobs > 0) {
+
+    my $job_args = shift(@jobs);
     if ($pid = fork) {
         push(@pids, $pid);
         $num_jobs++;
     } else {
-	log_print sprintf "pid %d calling generate_metrics() for tool-file[%s] collector[%s] num[%s]\n", $$, $$job_args{'tool-file'}, $$job_args{'collector'}, $$job_args{'num'};
         my $num_metric_docs_submitted = generate_metrics($$job_args{'tool-dir'}, $$job_args{'tool-file'}, $$job_args{'collector'}, $$job_args{'num'}, $$job_args{'doc-ref'});
-	log_print sprintf "pid %d returned from generate_metrics()\n", $$;
         write_ndjson();
         exit 0;
     }
+
     if ($num_jobs >= $max_jobs) {
-        log_print sprintf "Waiting for %d jobs to complete\n", $max_jobs;
-	wait_for_jobs(\@pids);
+        wait();
+        log_print ".";
+        $num_jobs--;
     }
 }
-log_print sprintf "Waiting for %d tool gen-docs jobs to complete\n", $num_jobs;
-wait_for_jobs(\@pids);
+log_print "\n";
 
 
 if (exists $result{'iterations'}) {
@@ -1112,7 +1097,17 @@ if (exists $result{'tags'}) {
     }
 }
 
-log_print "Generating Opensearch documents\n";
 create_es_doc("ndjson", "run");
 write_ndjson();
+
+log_print sprintf "Waiting for jobs to complete\n";
+while (1) {
+    my $wait_return = wait();
+    log_print ".";
+    if ($wait_return < 0) {
+        log_print "\n";
+        last;
+    }
+}
+
 log_print "Generating OpenSearch documents complete\n";
