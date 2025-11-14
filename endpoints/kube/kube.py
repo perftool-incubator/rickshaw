@@ -1252,7 +1252,14 @@ def create_cs_pods(cpu_partitioning = None, abort_event = None):
             else:
                 logger.error("CRD generated for %s-%d is:\n%s" % (engine["role"], engine["id"], endpoints.dump_json(engine["crd"])))
         else:
-            logger.info("Created CRD for %s-%d:\n%s" % (engine["role"], engine["id"], endpoints.dump_json(engine["crd"])))
+            crd_json_str = endpoints.dump_json(engine["crd"])
+            
+            logger.info("Created CRD for %s-%d:\n%s" % (engine["role"], engine["id"], crd_json_str))
+
+            crd_filename = settings["dirs"]["local"]["crds"]["pods"] + "/%s-%s.json" % (engine["role"], engine["id"])
+            with open(crd_filename, "w", encoding = "ascii") as crd_fp:
+                crd_fp.write(crd_json_str)
+            logger.info("Wrote CRD for %s-%s to %s" % (engine["role"], engine["id"], crd_filename))
 
     if not "validation" in settings["engines"]["endpoint"]:
         settings["engines"]["endpoint"]["validation"] = {
@@ -1512,7 +1519,14 @@ def create_tools_pods(abort_event):
             else:
                 logger.error("CRD generated for '%s-%d':\n%s" % (pod["role"], pod["id"], endpoints.dump_json(pod["crd"])))
         else:
-            logger.info("Created CRD for '%s-%d':\n%s" % (pod["role"], pod["id"], endpoints.dump_json(pod["crd"])))
+            crd_json_str = endpoints.dump_json(pod["crd"])
+
+            logger.info("Created CRD for '%s-%d':\n%s" % (pod["role"], pod["id"], crd_json_str))
+
+            crd_filename = settings["dirs"]["local"]["crds"]["pods"] + "/%s-%s.json" % (pod["role"], pod["id"])
+            with open(crd_filename, "w", encoding = "ascii") as crd_fp:
+                crd_fp.write(crd_json_str)
+            logger.info("Wrote CRD for %s-%s to %s" % (pod["role"], pod["id"], crd_filename))
         
         settings["engines"]["endpoint"]["classes"]["profiled-nodes"].append(pod)
 
@@ -2347,6 +2361,27 @@ def test_start(msgs_dir, test_id, tx_msgs_dir):
 
     with endpoints.remote_connection(settings["run-file"]["endpoints"][args.endpoint_index]["host"],
                                      settings["run-file"]["endpoints"][args.endpoint_index]["user"], validate = False) as con:
+        logger.info("Writing networking model CRDs to disk")
+        for key in settings["networking"][test_id].keys():
+            logger.info("Processing networking model: %s" % (key))
+
+            logger.info("There are %d server engines to process for this networking mode (%s)" % (len(settings["networking"][test_id][key]), key))
+            for obj in settings["networking"][test_id][key]:
+                logger.info("Processing server engine %s" % (obj["server-engine"]))
+
+                if len(obj["crds"]) == 0:
+                    logger.info("There are no CRDs to process")
+                    continue
+
+                for crd in obj["crds"]:
+                    logger.info("Processing %s CRD" % (crd["type"]))
+
+                    crd_filename = settings["dirs"]["local"]["crds"]["networking"] + "/%s--%s--%s--%s.json" % (test_id, key, obj["server-engine"], crd["type"])
+                    crd_json_str = endpoints.dump_json(crd["crd"])
+                    with open(crd_filename, "w", encoding = "ascii") as crd_fp:
+                        crd_fp.write(crd_json_str)
+                    logger.info("Wrote %s CRD to %s" % (crd["type"], crd_filename))
+
         logger.info("Validating networking model CRDs")
         for key in settings["networking"][test_id].keys():
             logger.info("Processing networking model: %s" % (key))
@@ -2643,6 +2678,46 @@ def create_pull_secret_crd(name, token_file):
 
     return crd
 
+def init_kube_settings():
+    """
+    Initialize settings that are unique to the kube endpoint
+
+    Args:
+        None
+
+    Globals:
+        logger: a logger instance
+        settings (dict): the one data structure to rule then all
+
+    Returns:
+        None
+    """
+    logger.info("Initializing kube endpoint specific settings")
+
+    settings["dirs"]["local"]["crds"] = dict()
+
+    for crd_type in [ "pods", "networking" ]:
+        settings["dirs"]["local"]["crds"][crd_type] = settings["dirs"]["local"]["endpoint"] + "/crds/" + crd_type
+
+def create_kube_dirs():
+    """
+    Create the kube specific directories
+
+    Args:
+        None
+
+    Globals:
+        logger: a logger instance
+        settings (dict): the one data structure to rule then all
+
+    Returns:
+        None
+    """
+    logger.info("Creating kube endpoint specific directories")
+
+    for crd_type in settings["dirs"]["local"]["crds"].keys():
+        endpoints.my_make_dirs(settings["dirs"]["local"]["crds"][crd_type])
+
 def main():
     """
     Main control block
@@ -2671,6 +2746,8 @@ def main():
     endpoints.log_cli(args)
     settings = endpoints.init_settings(settings, args)
 
+    init_kube_settings()
+
     settings = endpoints.load_settings(settings,
                                        endpoint_name = "kube",
                                        run_file = args.run_file,
@@ -2690,6 +2767,7 @@ def main():
 
     if not early_abort:
         endpoints.create_local_dirs(settings)
+        create_kube_dirs()
     else:
         logger.warning("Skipping call to endpoints.create_local_dirs due to early abort")
 
