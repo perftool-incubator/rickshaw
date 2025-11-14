@@ -4,17 +4,12 @@ on:
   pull_request_target:
     types: [ closed ]
     branches: [ master ]
-    paths-ignore:
-    - LICENSE
-    - '**.md'
-    - '.github/rulesets/**'
-    - .github/workflows/run-crucible-tracking.yaml
-    - .github/workflows/faux-unittest.yaml
-    - .github/workflows/faux-crucible-ci.yaml
-    - 'docs/**'
-    - engine/engine-script-library.py
-    - engine/engine-script.py
-    - 'userenvs/rhel-ai-*.json'
+    paths:
+    - .github/workflows/crucible-merged.yaml
+    - rickshaw-run
+    - 'userenvs/*.json'
+    - '!userenvs/rhel-ai-*.json'
+    - '!userenvs/stream8-flexran.json'
   workflow_dispatch:
 
 jobs:
