@@ -729,7 +729,12 @@ def create_pod_crd(role = None, id = None, node = None):
             "app": crd["metadata"]["name"]
         }
 
-    # handle annotations here
+    # handle annotations 
+    if role == "client" or role == "server":
+        if "annotations" in pod_settings:
+            if "annotations" not in crd["metadata"]:
+                crd["metadata"]["annotations"] = {}
+            crd["metadata"]["annotations"].update(copy.deepcopy(pod_settings["annotations"]))
 
     if role == "master":
         # ensure master pod can be scheduled on the master node in case
