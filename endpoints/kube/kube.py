@@ -729,7 +729,8 @@ def create_pod_crd(role = None, id = None, node = None):
             "app": crd["metadata"]["name"]
         }
 
-    # handle annotations here
+        if "annotations" in pod_settings:
+            crd["metadata"]["annotations"] = copy.deepcopy(pod_settings["annotations"])
 
     if role == "master":
         # ensure master pod can be scheduled on the master node in case
