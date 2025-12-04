@@ -237,6 +237,11 @@
             "type": "object",
             "minProperties": 1,
             "properties": {
+                "annotations": {
+                    "description": "This parameter define pod annotations to be applied to the associated engines. These are applied to the pod metadata.",
+                    "type": "object",
+                    "minProperties": 1
+                },
                 "cpu-partitioning": {
                     "description": "This parameter defines whether engines that have it assigned are to be configured with or without CPU partitioning enabled.",
                     "type": "boolean",
