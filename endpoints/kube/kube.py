@@ -789,6 +789,8 @@ def create_pod_crd(role = None, id = None, node = None):
             ]
         )
 
+    has_hugepages = False
+
     if role == "client" or role == "server":
         if "securityContext" in pod_settings and "pod" in pod_settings["securityContext"]:
             crd["spec"]["securityContext"] = copy.deepcopy(pod_settings["securityContext"]["pod"])
@@ -819,13 +821,19 @@ def create_pod_crd(role = None, id = None, node = None):
 
                 crd["spec"]["volumes"].append(new_volume)
 
-        if "resources" in pod_settings and "hugepages" in pod_settings["resources"]:
-            crd["spec"]["volumes"].append({
-                "name": "hugepage",
-                "emptyDir": {
-                    "medium": "HugePages"
-                }
-            })
+        if "resources" in pod_settings:
+            for key in pod_settings["resources"].keys():
+                if "hugepages" in key:
+                    has_hugepages = True
+
+                    crd["spec"]["volumes"].append({
+                        "name": "hugepage",
+                        "emptyDir": {
+                            "medium": "HugePages"
+                        }
+                    })
+
+                    break
 
     container_names = []
     if role == "client" or role == "server":
@@ -1010,53 +1018,17 @@ def create_pod_crd(role = None, id = None, node = None):
 
                     container["volumeMounts"].append(new_volume_mount)
 
+            if has_hugepages:
+                container["volumeMounts"].append({
+                    "mountPath": "/dev/hugepages",
+                    "name": "hugepage"
+                })
+
             if "resources" in pod_settings:
-                has_limits = False
-                has_requests = False
-                if "cpu" in pod_settings["resources"]:
-                    if "limits" in pod_settings["resources"]["cpu"]:
-                        has_limits = True
-                    if "requests" in pod_settings["resources"]["cpu"]:
-                        has_requests = True
-                if "memory" in pod_settings["resources"]:
-                    if "limits" in pod_settings["resources"]["memory"]:
-                        has_limits = True
-                    if "requests" in pod_settings["resources"]["memory"]:
-                        has_requests = True
-                if "hugepages" in pod_settings["resources"]:
-                    has_limits = True
-                    has_requests = True
-
-                container["resources"] = dict()
-                if has_limits:
-                    container["resources"]["limits"] = dict()
-                if has_requests:
-                    container["resources"]["requests"] = dict()
-
-                if "cpu" in pod_settings["resources"]:
-                    if "limits" in pod_settings["resources"]["cpu"]:
-                        container["resources"]["limits"]["cpu"] = pod_settings["resources"]["cpu"]["limits"]
-                    if "requests" in pod_settings["resources"]["cpu"]:
-                        container["resources"]["requests"]["cpu"] = pod_settings["resources"]["cpu"]["requests"]
-
-                if "memory" in pod_settings["resources"]:
-                    if "limits" in pod_settings["resources"]["memory"]:
-                        container["resources"]["limits"]["memory"] = pod_settings["resources"]["memory"]["limits"]
-                    if "requests" in pod_settings["resources"]["memory"]:
-                        container["resources"]["requests"]["memory"] = pod_settings["resources"]["memory"]["requests"]
-
-                if "hugepages" in pod_settings["resources"]:
-                    container["resources"]["limits"][pod_settings["resources"]["hugepages"]["type"]] = pod_settings["resources"]["hugepages"]["size"]
-                    container["resources"]["requests"][pod_settings["resources"]["hugepages"]["type"]] = pod_settings["resources"]["hugepages"]["size"]
-
-                    container["volumeMounts"].append({
-                        "mountPath": "/dev/hugepages",
-                        "name": "hugepage"
-                    })
+                container["resources"] = copy.deepcopy(pod_settings["resources"])
 
         crd["spec"]["containers"].append(container)
-        
-    
+
     return crd, 0
 
 def verify_pods_running(connection, pods, pod_details, abort_event):
