@@ -1,0 +1,3 @@
+           The k8s endpoint is being replaced by the kube endpoint.
+           Please migrate to kube as soon as possible since the k8s endpoint will
+           be removed at the end of 1Q2026.
