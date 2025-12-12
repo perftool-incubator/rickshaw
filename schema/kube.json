@@ -268,64 +268,7 @@
                 "resources": {
                     "description": "This object is used to define resource configuration settings that should be made by the assigned engines.  The values come from the K8S documentation",
                     "type": "object",
-                    "minProperties": 1,
-                    "properties": {
-                        "cpu": {
-                            "description": "This object is used to configure CPU resources.  At least one property is expected to be defined.",
-                            "type": "object",
-                            "minProperties": 1,
-                            "properties": {
-                                "limits": {
-                                    "description": "This parameter defines the CPU limits that should be assigned to the associated engines.",
-                                    "type": "number",
-                                    "exclusiveMinimum": 0
-                                },
-                                "requests": {
-                                    "description": "This parameter defines the CPU requests that should be assigned to the associated engines.",
-                                    "type": "number",
-                                    "exclusiveMinimum": 0
-                                }
-                            },
-                            "additionalProperties": false
-                        },
-                        "hugepages": {
-                            "description": "This object is used to configure hugepage resources.",
-                            "type": "object",
-                            "properties": {
-                                "size": {
-                                    "description": "This paramter controls the total amount of hugepage memory that should be assigned to the associate engines.",
-                                    "$ref": "#/definitions/memory"
-                                },
-                                "type": {
-                                    "description": "This parameter controls the size of the hugepages to use for the associated engines.  Be aware that the available sizes are hardware dependent and can vary from one system to another based on a variety of details (CPU manufacturer, family, generation, architecture, etc.).  The accepted values are controlled by a regular expression and are expected to be one or more mebibytes or gibibytes.",
-                                    "type": "string",
-                                    "pattern": "^hugepages-[1-9][0-9]*(Mi|Gi)$"
-                                }
-                            },
-                            "additionalProperties": false,
-                            "required": [
-                                "count",
-                                "size"
-                            ]
-                        },
-                        "memory": {
-                            "description": "This object is used to configure the memory resources.  At least one property is expected to be defined.",
-                            "type": "object",
-                            "minProperties": 1,
-                            "properties": {
-                                "limits": {
-                                    "description": "This parameter defines the memory limits that should be assigned to the associated engines.  The 'memory' definition above explains what the available values are.",
-                                    "$ref": "#/definitions/memory"
-                                },
-                                "requests": {
-                                    "description": "This parameter defines the memory requests that should be assigned to the associated engines.  The 'memory definition above explains what the available values are.",
-                                    "$ref": "#/definitions/memory"
-                                }
-                            },
-                            "additionalProperties": false
-                        }
-                    },
-                    "additionalProperties": false
+                    "minProperties": 1
                 },
                 "runtimeClassName": {
                     "description": "This parameter defines a runtime class that should be assigned to the associated engines.  See the K8S (or similar) documentation for more details about what this means and the possible values.",
