@@ -1,0 +1,23 @@
+  "userenv": {
+    "name": "fedora43",
+    "label": "Fedora 43",
+    "origin": {
+      "image": "registry.fedoraproject.org/fedora",
+      "tag": "43",
+      "build-policy": "missing"
+    },
+    "properties": {
+      "platform": [
+        {
+          "architecture": "x86_64"
+        },
+        {
+          "architecture": "aarch64"
+        }
+      ],
+      "packages": {
+        "type": "rpm",
+        "manager": "dnf"
+      }
+    }
+  },

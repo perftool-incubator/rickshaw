@@ -1,0 +1,105 @@
+{
+  "workshop": {
+    "schema": {
+      "version": "2024.08.07"
+    }
+  },
+  "userenv": {
+    "name": "fedora43",
+    "label": "Fedora 43",
+    "origin": {
+      "image": "registry.fedoraproject.org/fedora",
+      "tag": "43",
+      "build-policy": "missing"
+    },
+    "properties": {
+      "platform": [
+        {
+          "architecture": "x86_64"
+        },
+        {
+          "architecture": "aarch64"
+        }
+      ],
+      "packages": {
+        "type": "rpm",
+        "manager": "dnf"
+      }
+    }
+  },
+  "requirements": [
+    {
+      "name": "python310",
+      "type": "distro",
+      "distro_info": {
+        "packages": [
+          "python310",
+          "python3-pip",
+          "python3-devel"
+        ]
+      }
+    },
+    {
+      "name": "utils",
+      "type": "distro",
+      "distro_info": {
+        "packages": [
+          "curl",
+          "tar",
+          "cpio",
+          "gzip",
+          "jq",
+          "git",
+          "cpio",
+          "findutils",
+          "hostname",
+          "iputils",
+          "iproute",
+          "elfutils-libelf",
+          "openssl",
+          "xz",
+          "libcap",
+          "libzstd",
+          "numactl"
+        ]
+      }
+    },
+    {
+      "name": "core-compiling",
+      "type": "distro",
+      "distro_info": {
+        "packages": [
+          "diffutils",
+          "gcc",
+          "libtool",
+          "autoconf",
+          "automake",
+          "make",
+          "clang",
+          "slang-devel",
+          "libbabeltrace",
+          "elfutils-libelf-devel",
+          "elfutils-debuginfod",
+          "elfutils-debuginfod-client-devel",
+          "openssl-devel",
+          "xz-devel",
+          "libzstd-devel",
+          "libcap-devel",
+          "libnl3-devel",
+          "numactl-devel",
+          "libpfm",
+          "glibc-gconv-extra"
+        ]
+      }
+    },
+    {
+      "name": "core-node",
+      "type": "distro",
+      "distro_info": {
+        "packages": [
+          "nodejs"
+        ]
+      }
+    }
+  ]
+}
