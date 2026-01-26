@@ -1,0 +1,46 @@
+{
+  "id": 3847664,
+  "name": "releases-required",
+  "target": "branch",
+  "source_type": "Repository",
+  "source": "perftool-incubator/rickshaw",
+  "enforcement": "active",
+  "conditions": {
+    "ref_name": {
+      "exclude": [],
+      "include": [
+        "refs/heads/20[2-9][0-9]\\.[1234]",
+        "refs/heads/ci-version-test"
+      ]
+    }
+  },
+  "rules": [
+    {
+      "type": "deletion"
+    },
+    {
+      "type": "non_fast_forward"
+    },
+    {
+      "type": "pull_request",
+      "parameters": {
+        "required_approving_review_count": 0,
+        "dismiss_stale_reviews_on_push": true,
+        "required_reviewers": [],
+        "require_code_owner_review": false,
+        "require_last_push_approval": false,
+        "required_review_thread_resolution": true,
+        "allowed_merge_methods": [
+          "merge"
+        ]
+      }
+    }
+  ],
+  "bypass_actors": [
+    {
+      "actor_id": 962037,
+      "actor_type": "Integration",
+      "bypass_mode": "always"
+    }
+  ]
+}
