@@ -1,6 +1,6 @@
 {
-  "id": 3847664,
-  "name": "releases",
+  "id": 12151396,
+  "name": "default-branch-bypassable",
   "target": "branch",
   "source_type": "Repository",
   "source": "perftool-incubator/rickshaw",
@@ -9,27 +9,20 @@
     "ref_name": {
       "exclude": [],
       "include": [
-        "refs/heads/20[2-9][0-9]\\.[1234]",
-        "refs/heads/ci-version-test"
+        "~DEFAULT_BRANCH"
       ]
     }
   },
   "rules": [
     {
-      "type": "deletion"
-    },
-    {
-      "type": "non_fast_forward"
-    },
-    {
       "type": "pull_request",
       "parameters": {
         "required_approving_review_count": 1,
         "dismiss_stale_reviews_on_push": true,
+        "required_reviewers": [],
         "require_code_owner_review": false,
         "require_last_push_approval": false,
-        "required_review_thread_resolution": true,
-        "automatic_copilot_code_review_enabled": false,
+        "required_review_thread_resolution": false,
         "allowed_merge_methods": [
           "merge"
         ]
@@ -38,8 +31,8 @@
   ],
   "bypass_actors": [
     {
-      "actor_id": 962037,
-      "actor_type": "Integration",
+      "actor_id": 3434504,
+      "actor_type": "Team",
       "bypass_mode": "always"
     }
   ]
