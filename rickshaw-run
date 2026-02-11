@@ -1824,7 +1824,7 @@ sub validate_controller_env() {
         if ( ! exists $run{'registries'}{'public'}{'push-token'} ) {
             die "You must define a path to a public registry token file (\$run{'registries'}{'public'}{'push-token'}) to use rickshaw with workshop"
         }
-        if (!$run{'registries'}{'public'}{'repo'} =~ /^(\w+:\/){0,1}([^\/]+\/){0,1}([^\/]+\/){0,1}([^\/]+)$/) {
+        if ($run{'registries'}{'public'}{'repo'} !~ /^(\w+:\/){0,1}([^\/]+\/){0,1}([^\/]+\/){0,1}([^\/]+)$/) {
             die "The \$run{'registries'}{'public'}{'repo'} does not match the pattern [protocol:][host[:port]][/<project>]/<repo>: " . $run{'registries'}{'public'}{'repo'};
         }
     }
@@ -3442,7 +3442,7 @@ sub organize_run_data() {
                     my $mv_cmd = "/bin/mv * " . $cs_tool_dest_path;
                     ($mv_cmd, my $mv_output, my $mv_cmd_rc) = run_cmd($mv_cmd);
                 } else {
-                    if (! $cs_type eq "profiler") {
+                    if ($cs_type ne "profiler") {
                         log_print sprintf "WARNING: did not find expected sub-directories in %s\n", $pushd_dir . "/" . "tool-data";
                     }
                 }
