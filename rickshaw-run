@@ -2955,7 +2955,7 @@ sub prepare_bench_tool_engines() {
             # NOTE: for multi-bench, this will require some new logic.  One may have a benchmark
             # which uses a pre-script but does not use ID 1.  Instead we will need to run from the 
             # first ID for that benchmark.
-            log_print "generating pre-script cmd\n";
+            log_print sprintf "generating pre-script cmd for benchmark '%s'\n", $this_benchmark;
             my $cmd = $bench_configs{$this_benchmark}{"controller"}{"pre-script"} . " " . dump_params($run{'iterations'}[0]{'params'}, 1, "client");
             $cmd =~ s/\%bench-dir\%/$bench_dirs{$this_benchmark}/g;
             $cmd =~ s/\%run-dir\%/$run_dir/g;
