@@ -490,7 +490,7 @@ function k8s_req_check() {
     fi
     # Validation returns what clients and servers would be used and the userenv
     if [ "$do_validate" == 1 ]; then
-        echo_clients_servers
+        echo_clients_servers "profiler" "master" "worker"
         echo "userenv $userenv"
         exit
     fi
