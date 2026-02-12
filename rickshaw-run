@@ -1930,7 +1930,6 @@ sub load_tool_params() {
     if (not exists $run{'tool-params'} ) {
         $run{'tool-params'} = $rickshaw_project_dir . "/config/tool-params.json";
     }
-    # TODO: need schema for tool-params
     ($rc, my $json_ref) = get_json_file($run{'tool-params'}, $tool_params_schema_file);
     if ($rc > 0 or ! defined $json_ref) {
         log_print "Could not open the tool params file\n";
