@@ -46,7 +46,7 @@ use toolbox::jsonsettings;
 $toolbox::logging::debug = 0;
 
 my $ug = Data::UUID->new;
-my %defaults = ( "num-samples" => 1, "tool-group" => "default", "test-order" => "s",
+my %defaults = ( "num-samples" => 1, "tool-group" => "default", "test-order" => "sample",
                  "base-run-dir" => tempdir(), "id" => $ug->create_str(),
                  "max-sample-failures" => 1, "run-file" => "", "roadblock-password" => "flubber");
 
@@ -1824,7 +1824,7 @@ sub validate_controller_env() {
         if ( ! exists $run{'registries'}{'public'}{'push-token'} ) {
             die "You must define a path to a public registry token file (\$run{'registries'}{'public'}{'push-token'}) to use rickshaw with workshop"
         }
-        if (!$run{'registries'}{'public'}{'repo'} =~ /^(\w+:\/){0,1}([^\/]+\/){0,1}([^\/]+\/){0,1}([^\/]+)$/) {
+        if ($run{'registries'}{'public'}{'repo'} !~ /^(\w+:\/){0,1}([^\/]+\/){0,1}([^\/]+\/){0,1}([^\/]+)$/) {
             die "The \$run{'registries'}{'public'}{'repo'} does not match the pattern [protocol:][host[:port]][/<project>]/<repo>: " . $run{'registries'}{'public'}{'repo'};
         }
     }
@@ -2749,22 +2749,59 @@ sub validate_endpoints() {
 
 sub build_test_order() {
     log_print "Building test execution order\n";
-    # Build test execution order (and the iteration/sample dirs)
+
     if ($run{'test-order'} eq 's') {
+        log_print "WARNING: The short forms of 'test-order' are deprecated.  Please change 's' to 'sample'.\n";
+        $run{'test-order'} = "sample";
+    } elsif ($run{'test-order'} eq 'i') {
+        log_print "WARNING: The short forms of 'test-order' are deprecated.  Please change 'i' to 'iteration'.\n";
+        $run{'test-order'} = "iteration";
+    } elsif ($run{'test-order'} eq 'r') {
+        log_print "WARNING: The short forms of 'test-order' are deprecated.  Please change 'r' to 'random'.\n";
+        $run{'test-order'} = "random";
+    }
+
+    if ($run{'test-order'} eq 'sample') {
+        # in sample mode, the tests are executed by running all
+        # samples of an iteration before moving on to the next
+        # iteration; the iterations are also executed in order from 1
+        # to N
         for (my $iid = 1; $iid <= scalar @{ $run{'iterations'} }; $iid++) {
             for (my $sid = 1; $sid <= $run{'num-samples'}; $sid++) {
                 my %test = ('iteration-id' => $iid, 'sample-id' => $sid);
                 push(@tests, \%test);
             }
         }
-    } elsif ($run{'test-order'} eq 'i') {
+    } elsif ($run{'test-order'} eq 'iteration') {
+        # in iteration mode, the tests are executed by running one
+        # sample from each iteration before running an additional
+        # sample (again from each iteration before moving on to the
+        # next sample); the iterations are also executed in order from
+        # 1 to N
         for (my $sid = 1; $sid <= $run{'num-samples'}; $sid++) {
             for (my $iid = 1; $iid <= scalar @{ $run{'iterations'} }; $iid++) {
                 my %test = ('iteration-id' => $iid, 'sample-id' => $sid);
                 push(@tests, \%test);
             }
         }
-    } elsif ($run{'test-order'} eq 'r') {
+    } elsif ($run{'test-order'} eq 'random') {
+        # in random mode (which could also be described as chaos
+        # mode), there is no set algorithm that determines the order
+        # in which iteration samples are executed; an iteration is
+        # chosen at random as the next sample to run and this logic
+        # repeats itself until all iteration samples have been
+        # exhausted; sample numbers are executed in order for
+        # simplicity -- sample 2 of a given iteration never executes
+        # before sample 1 -- but since the individual samples of an
+        # iteration are interchangeable that is irrelevant; the idea
+        # here is to prevent systemic side affects from one iteration
+        # having undo influence on another (for example, running a
+        # read test after a write test could give different results
+        # than running the read test before the write test due to
+        # caching of the write data) and by randomly choosing which
+        # iteration to run next the pattern of execution will always
+        # be different thus avoiding such pathological test execution
+        # behavior
         my $total_samples = scalar( @{$run{'iterations'} }) * $run{'num-samples'};
         my @available_tests;
         for (my $iid = 1; $iid <= scalar @{ $run{'iterations'} }; $iid++) {
@@ -2918,7 +2955,7 @@ sub prepare_bench_tool_engines() {
             # NOTE: for multi-bench, this will require some new logic.  One may have a benchmark
             # which uses a pre-script but does not use ID 1.  Instead we will need to run from the 
             # first ID for that benchmark.
-            log_print "generating pre-script cmd\n";
+            log_print sprintf "generating pre-script cmd for benchmark '%s'\n", $this_benchmark;
             my $cmd = $bench_configs{$this_benchmark}{"controller"}{"pre-script"} . " " . dump_params($run{'iterations'}[0]{'params'}, 1, "client");
             $cmd =~ s/\%bench-dir\%/$bench_dirs{$this_benchmark}/g;
             $cmd =~ s/\%run-dir\%/$run_dir/g;
@@ -3405,7 +3442,7 @@ sub organize_run_data() {
                     my $mv_cmd = "/bin/mv * " . $cs_tool_dest_path;
                     ($mv_cmd, my $mv_output, my $mv_cmd_rc) = run_cmd($mv_cmd);
                 } else {
-                    if (! $cs_type eq "profiler") {
+                    if ($cs_type ne "profiler") {
                         log_print sprintf "WARNING: did not find expected sub-directories in %s\n", $pushd_dir . "/" . "tool-data";
                     }
                 }
