@@ -673,9 +673,6 @@ def compile_object_configs():
                     "id": int(csid)
                 }
 
-                if not "first-engine" in settings["engines"]["endpoint"]:
-                    settings["engines"]["endpoint"]["first-engine"] = copy.deepcopy(engine)
-
                 if endpoint["engines"]["settings"][role][csid]["cpu-partitioning"]:
                     settings["engines"]["endpoint"]["classes"]["cpu-partitioning"]["with"].append(engine)
                 else:
@@ -1453,8 +1450,7 @@ def create_tools_pods(abort_event):
     logger.info("Loading tools information and creating profiler mapping")
     tools = []
     try:
-        tool_cmd_dir = "%s/%s" % (settings["engines"]["endpoint"]["first-engine"]["role"], settings["engines"]["endpoint"]["first-engine"]["id"])
-        with open(settings["dirs"]["local"]["tool-cmds"] + "/" + tool_cmd_dir + "/start") as tool_cmd_file:
+        with open(settings["dirs"]["local"]["tool-cmds"] + "/profiler/start") as tool_cmd_file:
             for line in tool_cmd_file:
                 split_line = line.split(":")
                 tool = split_line[0]

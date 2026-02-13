@@ -3025,14 +3025,16 @@ sub prepare_bench_tool_engines() {
             }
         }
     }
-    # Now build all of the tool start and stop cmd files for each collector
+    # Now build all of the tool start and stop cmd files for each collector type
+    log_print "Generating collector type tool commands\n";
     for my $collector (@all_collector_types) {
+        debug_log(sprintf "processing collector type [%s]\n", $collector);
         for my $start_stop ("start", "stop") {
+            debug_log(sprintf "processing start/stop [%s]\n", $start_stop);
             my $collector_tool_cmds_dir = $tool_cmds_dir . "/" . $collector;
             -e $collector_tool_cmds_dir || make_path($collector_tool_cmds_dir) ||
                 die "[ERROR]Create collector directory failed: [" . $collector_tool_cmds_dir . "]\n";
             my $tool_cmd_file = $collector_tool_cmds_dir . "/" . $start_stop; 
-            my $tool_count = 0;
             open(my $fh, ">" . $tool_cmd_file) ||
                 die "[ERROR]could not open cmd file for writing: [" . $tool_cmd_file . "]\n";
             debug_log(sprintf "writing tool-cmds [%s]\n", $tool_cmd_file);
@@ -3044,7 +3046,11 @@ sub prepare_bench_tool_engines() {
                     if (grep(/^$collector$/, @{ $$i{'collector-types'} })) {
                         debug_log(sprintf "building tool cmd for [%s]\n", $tool_name);
                         build_tool_cmd($tool_entry, $start_stop, $fh);
-                        $tool_count++;
+                        # multiple endpoints might have the same
+                        # collector type so we have to stop once we
+                        # have found one otherwise we could add the
+                        # tool more than once
+                        last;
                     } else {
                         debug_log(sprintf "collector [%s] was not found in collector-types: [%s]\n", $collector, join(" ", @{ $$i{'collector-types'} }));
                     }
@@ -3060,7 +3066,7 @@ sub prepare_bench_tool_engines() {
     # already collecting that data from a different source (and a client
     # and/or server would be collecting duplicate data).  For this reason tool
     # cmd files are built specifically for each client and server.
-    log_print "Generating tool cmds\n";
+    log_print "Generating per client/server engine tool commands\n";
     foreach my $cs_type (keys %clients_servers) {
         next if ($cs_type eq "profiler"); # Currently we do not generate specific tools cmds for each profiler
         for my $start_stop ("start", "stop") {

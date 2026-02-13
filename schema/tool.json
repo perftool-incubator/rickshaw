@@ -78,7 +78,8 @@
                 "enum": [
                   "osp",
                   "remotehosts",
-                  "k8s"
+                  "k8s",
+                  "kube"
                 ]
               },
               "collector-types": {
@@ -114,7 +115,8 @@
                 "enum": [
                   "osp",
                   "remotehosts",
-                  "k8s"
+                  "k8s",
+                  "kube"
                 ]
               },
               "collector-types": {
