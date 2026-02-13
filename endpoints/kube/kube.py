@@ -340,6 +340,19 @@ def validate():
     benchmark_engine_mapping = endpoints.build_benchmark_engine_mapping(json["benchmarks"])
     endpoints.validate_comment("benchmark-engine-mapping: %s" % (benchmark_engine_mapping))
 
+    engine_types = set()
+    for engine_role in endpoint_settings["engines"]["settings"].keys():
+        engine_types.add(engine_role)
+    if not endpoint_settings["disable-tools"]["all"] and not endpoint_settings["disable-tools"]["masters"]:
+        engine_types.add("profiler")
+        engine_types.add("master")
+    if not endpoint_settings["disable-tools"]["all"] and not endpoint_settings["disable-tools"]["workers"]:
+        engine_types.add("profiler")
+        engine_types.add("worker")
+    
+    endpoints.validate_comment("engine types that this endpoint is using")
+    endpoints.validate_log("engine-types %s" % (" ".join(list(engine_types))))
+
     engines = dict()
     userenvs = []
     for engine_role in endpoint_settings["engines"]["settings"].keys():

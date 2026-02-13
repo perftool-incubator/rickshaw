@@ -379,16 +379,25 @@ function set_osruntime_numanode_cpupart() {
     set -u
 }
 
+# accepts optional arguments listing endpoint specific engine types
 function echo_clients_servers() {
+    local engine_types=""
+
     if [ $num_clients -gt 0 ]; then
+        engine_types+="client "
         echo "client ${!clients[@]}"
     fi
     if [ $num_servers -gt 0 ]; then
+        engine_types+="server "
         echo "server ${!servers[@]}"
     fi
     if [ $num_profilers -gt 0 ]; then
         echo "profiler ${!profilers[@]}"
     fi
+
+    engine_types+="$@"
+
+    echo "engine-types ${engine_types}"
 }
 
 function init_common_dirs() {

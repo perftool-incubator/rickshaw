@@ -131,6 +131,7 @@ my %clients_servers;
 my @rb_cs_ids; # unique IDs for roadblock
 my $abort_test_id;
 my @active_followers;
+my %active_collector_types;
 
 (my $detect_arch_cmd, my $arch, my $detect_arch_cmd_rc) = run_cmd('uname -m');
 chomp($arch);
@@ -1929,7 +1930,6 @@ sub load_tool_params() {
     if (not exists $run{'tool-params'} ) {
         $run{'tool-params'} = $rickshaw_project_dir . "/config/tool-params.json";
     }
-    # TODO: need schema for tool-params
     ($rc, my $json_ref) = get_json_file($run{'tool-params'}, $tool_params_schema_file);
     if ($rc > 0 or ! defined $json_ref) {
         log_print "Could not open the tool params file\n";
@@ -2626,7 +2626,18 @@ sub validate_endpoints() {
         $$endpoint{'userenvs'} = [];
         foreach my $line (@output) {
             chomp $line;
-            if ($line =~ /(client|server|profiler)\s+(.+)$/) {
+            if ($line =~ /^engine-types\s+(.+)$/) {
+                debug_log(sprintf("Processing engine types: %s\n", $1));
+                my @engine_types = split(/ /, $1);
+                foreach my $engine_type (@engine_types) {
+                    if (! exists $active_collector_types{$engine_type}) {
+                        debug_log(sprintf("Adding engine type '%s' as an active collector type\n", $engine_type));
+                        $active_collector_types{$engine_type} = 1;
+                    } else {
+                        debug_log(sprintf("Engine type '%s' has already been added as an active collector type\n", $engine_type));
+                    }
+                }
+            } elsif ($line =~ /(client|server|profiler)\s+(.+)$/) {
                 my $engine = $1;
                 my $ids = $2;
                 # An endpoint with a profiler adds its engines' roadblock followers
@@ -2985,7 +2996,11 @@ sub prepare_bench_tool_engines() {
         || die "Could not copy roadblock.py to " . $engine_roadblock_module;
 
     my @collectors = grep(/[^client|^server]/, keys %clients_servers);
-    my @all_collector_types = qw(client server worker master profiler compute);
+    my @all_collector_types;
+    foreach my $collector_type (sort(keys %active_collector_types)) {
+        push @all_collector_types, $collector_type;
+    }
+    log_print sprintf "Active Collector Types: %s\n", join(" ", @all_collector_types);
 
     # Each tool may specify, for specific endpoints, that it needs to run somewhere other than a client
     # or server (a "collector").  This preference is in the "whitelist" section.  Check each tool used
