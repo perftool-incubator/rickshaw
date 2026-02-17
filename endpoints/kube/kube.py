@@ -1456,7 +1456,7 @@ def create_tools_pods(abort_event):
                 tools.append(tool)
                 logger.info("Adding tool '%s' to the list of tools" % (tool))
     except IOError as e:
-        logger.error("Failed to load the start tools command file from %s" % (tool_cmd_dir))
+        logger.error("Failed to load the start tools command file")
         return 1
     for tool in tools:
         if not tool in settings["engines"]["profiler-mapping"]:
