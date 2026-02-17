@@ -1751,7 +1751,7 @@ def engine_init():
             
             env_vars_payload = {
                 "env-vars": {
-                    "endpoint-label": args.endpoint_label,
+                    "endpoint_label": args.endpoint_label,
                     "hosted_by": node_name,
                     "hypervisor_host": None,
                     "userenv": userenv,
