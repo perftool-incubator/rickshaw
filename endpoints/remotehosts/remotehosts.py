@@ -122,11 +122,10 @@ def validate():
     endpoints.validate_comment("benchmark-engine-mapping: %s" % (benchmark_engine_mapping))
 
     engine_types = set()
+    engine_types.add("profiler")
     for remote in endpoint_settings["remotes"]:
         for engine in remote["engines"]:
             engine_types.add(engine["role"])
-        if not remote["config"]["settings"]["disable-tools"]:
-            engine_types.add("profiler")
     
     endpoints.validate_comment("engine types that this endpoint is using")
     endpoints.validate_log("engine-types %s" % (" ".join(list(engine_types))))
@@ -327,7 +326,6 @@ def build_unique_remote_configs():
     for remote_idx,remote in enumerate(settings["run-file"]["endpoints"][args.endpoint_index]["remotes"]):
         if not remote["config"]["host"] in settings["engines"]["remotes"]:
             settings["engines"]["remotes"][remote["config"]["host"]] = {
-                "first-engine": None,
                 "roles": dict(),
                 "run-file-idx": [],
                 "disable-tools": None,
@@ -354,21 +352,6 @@ def build_unique_remote_configs():
             if "ids" in settings["engines"]["remotes"][remote]["roles"][role]:
                 settings["engines"]["remotes"][remote]["roles"][role]["ids"].sort()
 
-    for remote in settings["engines"]["remotes"].keys():
-        for role in [ "client", "server" ]:
-            if settings["engines"]["remotes"][remote]["first-engine"] is None and role in settings["engines"]["remotes"][remote]["roles"] and len(settings["engines"]["remotes"][remote]["roles"][role]["ids"]) > 0:
-                settings["engines"]["remotes"][remote]["first-engine"] = {
-                    "role": role,
-                    "id": settings["engines"]["remotes"][remote]["roles"][role]["ids"][0]
-                }
-                break
-
-        if settings["engines"]["remotes"][remote]["first-engine"] is None:
-            settings["engines"]["remotes"][remote]["first-engine"] = {
-                "role": "profiler",
-                "id": None
-            }
-
     profiler_count = 0
     for remote in settings["engines"]["remotes"].keys():
         if settings["engines"]["remotes"][remote]["disable-tools"]:
@@ -376,15 +359,12 @@ def build_unique_remote_configs():
 
         tools = []
         try:
-            tool_cmd_dir = settings["engines"]["remotes"][remote]["first-engine"]["role"]
-            if tool_cmd_dir != "profiler":
-                tool_cmd_dir += "/" + str(settings["engines"]["remotes"][remote]["first-engine"]["id"])
-            with open(settings["dirs"]["local"]["tool-cmds"] + "/" + tool_cmd_dir + "/start") as tool_cmd_file:
+            with open(settings["dirs"]["local"]["tool-cmds"] + "/profiler/start") as tool_cmd_file:
                 for line in tool_cmd_file:
                     split_line = line.split(":")
                     tools.append(split_line[0])
         except IOError as e:
-            logger.error("Failed to load the start tools command file from %s" % (tool_cmd_dir))
+            logger.error("Failed to load the start tools command file")
             return 1
 
         profiler_count += 1
