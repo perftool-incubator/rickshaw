@@ -367,7 +367,6 @@ function setup_core_env() {
     config_dir="$base_run_dir/config"
     engine_config_dir="$config_dir/engine"
     tool_cmds_dir="$config_dir/tool-cmds/$cs_type"
-    tool_cmds_dir="$config_dir/tool-cmds/$cs_type"
     run_dir="$base_run_dir/run"
     archives_dir="$run_dir/engine/archives"
     sync_prefix=engine
