@@ -358,14 +358,13 @@ def build_unique_remote_configs():
             continue
 
         tools = []
-        try:
-            with open(settings["dirs"]["local"]["tool-cmds"] + "/profiler/start") as tool_cmd_file:
-                for line in tool_cmd_file:
-                    split_line = line.split(":")
-                    tools.append(split_line[0])
-        except IOError as e:
-            logger.error("Failed to load the start tools command file")
+        start_tools,err = load_json_file(settings["dirs"]["local"]["tool-cmds"] + "/profiler/start.json.xz", uselzma = True)
+        if start_tools is None:
+            logger.error("Failed to load the start tools command file from %s" % (tool_cmd_dir))
             return 1
+        for tool in start_tools["tools"]:
+            tools.append(tool["name"])
+            #logger.info("Adding tool '%s' to the list of tools" % (tool["name"]))
 
         profiler_count += 1
         for tool in tools:

@@ -1278,7 +1278,7 @@ function get_image_name() {
 }
 
 function add_profiler_engines() {
-    local var new_profilers tool tools scope
+    local var new_profilers tool tools scope total_tools
     scope=$1; shift # client-<n>, server-<n>, worker, master, compute
     typeset -n var=$1; shift
     new_profilers=""
@@ -1291,19 +1291,22 @@ function add_profiler_engines() {
             # convert a client-1 to client/1 to match tool-cmds dir heirarchy
             scope=`echo $scope | sed -e 'sX-X/X'`
         fi
-        tools=`awk -F: '{print $1}' $config_dir/tool-cmds/$scope/start`
-        if [ ! -z "$tools" ]; then
-            let profiler_count=$profiler_count+1
-            for tool in $tools; do
-                echo "tool: $tool"
-                engine_type=profiler-$endpoint_label-$tool
-                engine_label=$engine_type-$profiler_count
+        total_tools=$(xzcat "${config_dir}/tool-cmds/${scope}/start.json.xz" | jq -j '.tools? | length // 0')
+        echo "processing ${total_tools} tools"
+        if [ ${total_tools} -gt 0 ]; then
+            let profiler_count=${profiler_count}+1
+
+            while IFS=$'\t' read -u 9 -r -d '' tool; do
+                echo "tool: ${tool}"
+
+                engine_type="profiler-${endpoint_label}-${tool}"
+                engine_label="${engine_type}-${profiler_count}"
                 # new RB followers, cumultive, over multiple calls add_profiler_engines()
-                new_followers+=" $engine_label"
+                new_followers+=" ${engine_label}"
                 # new profiler engines, only for this call add_profiler_engines()
-                new_profilers+=" $engine_label"
-                addto_clients_servers "$engine_type" "$profiler_count"
-            done
+                new_profilers+=" ${engine_label}"
+                addto_clients_servers "${engine_type}" "${profiler_count}"
+            done 9< <(xzcat "${config_dir}/tool-cmds/${scope}/start.json.xz" | jq -j '.tools[] | "\(.name)\u0000"')
         fi
     fi
     var="$new_profilers"

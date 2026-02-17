@@ -1117,7 +1117,7 @@ sub source_container_image {
             }
         } else {
             $req_arg = shift(@requirements);
-            $skip_update = "true";
+            $skip_update = "false";
         }
 
         # keep separate cs_conf_file contents before and after md5
@@ -2849,32 +2849,35 @@ sub build_test_order() {
 sub build_tool_cmd {
     my $tool_entry = shift;
     my $start_stop = shift;
-    my $fh = shift;
     my $endpoint_type = shift;
+
     my $tool_name = $$tool_entry{'tool'};
-    # Assemble the arguments as a bash array in order to not get them scrambled later
-    my $tool_cmd = $tool_name . ':declare -a ARGS=(';
-    foreach my $tool_param (@{ $$tool_entry{'params'} }) {
-        if (exists($$tool_param{'enabled'}) && ($$tool_param{'enabled'} eq "no")) {
-            next;
-        }
-        $tool_cmd .= "'--" . $$tool_param{'arg'} . "' '" . $$tool_param{'val'} . "' ";
-    }
-    $tool_cmd =~ s/\s$//;
-    $tool_cmd .= ") && ";
-    $tool_cmd .= $tools_configs{$tool_name}{'collector'}{$start_stop} . ' "${ARGS[@]}"';
+
     # Check if the engine is deployed by an endpoint that blacklists this tool
     if (exists $tools_configs{$tool_name}{'collector'}{'blacklist'}) {
         for my $i (@{ $tools_configs{$tool_name}{'collector'}{'blacklist'} }) {
             if (defined $endpoint_type and $endpoint_type eq $$i{'endpoint'}) {
-                # If it is, don't let this client/server run this tool
-                undef $tool_cmd;
+                debug_log(sprintf "returning undefined because this tool [%s] is not allowed to run on the specified endpoint [%s]\n", $tool_name, $endpoint_type);
+                return;
             }
         }
     }
-    if (defined $tool_cmd) {
-        printf $fh "%s\n", $tool_cmd;
+
+    # Assemble the arguments as a bash array in order to not get them scrambled later
+    my %tool = ( 'name' => $tool_name, 'command' => 'declare -a ARGS=(' );
+
+    foreach my $tool_param (@{ $$tool_entry{'params'} }) {
+        if (exists($$tool_param{'enabled'}) && ($$tool_param{'enabled'} eq "no")) {
+            next;
+        }
+        $tool{'command'} .= "'--" . $$tool_param{'arg'} . "' '" . $$tool_param{'val'} . "' ";
     }
+
+    $tool{'command'} =~ s/\s$//;
+    $tool{'command'} .= ") && ";
+    $tool{'command'} .= $tools_configs{$tool_name}{'collector'}{$start_stop} . ' "${ARGS[@]}"';
+
+    return \%tool;
 }
 
 sub build_files_list {
@@ -3034,30 +3037,44 @@ sub prepare_bench_tool_engines() {
             my $collector_tool_cmds_dir = $tool_cmds_dir . "/" . $collector;
             -e $collector_tool_cmds_dir || make_path($collector_tool_cmds_dir) ||
                 die "[ERROR]Create collector directory failed: [" . $collector_tool_cmds_dir . "]\n";
-            my $tool_cmd_file = $collector_tool_cmds_dir . "/" . $start_stop; 
-            open(my $fh, ">" . $tool_cmd_file) ||
-                die "[ERROR]could not open cmd file for writing: [" . $tool_cmd_file . "]\n";
-            debug_log(sprintf "writing tool-cmds [%s]\n", $tool_cmd_file);
+
+            my $tool_cmd_file = $collector_tool_cmds_dir . "/" . $start_stop . ".json";
+            my %tool_data = ( 'tools' => [] );
+
             foreach my $tool_entry (@tools_params) {
                 my $tool_name = $$tool_entry{'tool'};
+
                 debug_log(sprintf "tool_name: [%s]\n", $tool_name);
+
                 for my $i (@{ $tools_configs{$tool_name}{'collector'}{'whitelist'} }) {
                     debug_log(sprintf "endpoint: [%s]\n", $$i{'endpoint'});
+
                     if (grep(/^$collector$/, @{ $$i{'collector-types'} })) {
-                        debug_log(sprintf "building tool cmd for [%s]\n", $tool_name);
-                        build_tool_cmd($tool_entry, $start_stop, $fh);
-                        # multiple endpoints might have the same
-                        # collector type so we have to stop once we
-                        # have found one otherwise we could add the
-                        # tool more than once
-                        last;
+                        debug_log(sprintf "building tool [%s]\n", $tool_name);
+
+                        my $tool = build_tool_cmd($tool_entry, $start_stop);
+
+                        if (defined $tool) {
+                            debug_log("appending tool to list\n");
+                            push @{ $tool_data{'tools'} }, $tool;
+
+                            # multiple endpoints might have the same
+                            # collector type so we have to stop once we
+                            # have found one otherwise we could add the
+                            # tool more than once
+                            last;
+                        } else {
+                            debug_log("not appending tool to list because it is undefined\n");
+                        }
                     } else {
                         debug_log(sprintf "collector [%s] was not found in collector-types: [%s]\n", $collector, join(" ", @{ $$i{'collector-types'} }));
                     }
                 }
             }
-            close($fh);
-            chmod 0755, $tool_cmd_file;
+
+            debug_log(sprintf "writing tool-cmds [%s]\n", $tool_cmd_file);
+            put_json_file($tool_cmd_file, \%tool_data) &&
+                die "[ERROR] Failed to create " . $tool_cmd_file . "!\n";
         }
     }
     # By default all tools run on client and servers.  However,
@@ -3077,15 +3094,28 @@ sub prepare_bench_tool_engines() {
                 }
                 my $cs_tool_cmds_dir = $tool_cmds_dir . "/" . $cs_type . "/" . $$cs_ref{'id'};
                 make_path($cs_tool_cmds_dir);
-                my $tool_cmd_file = $cs_tool_cmds_dir . "/" . $start_stop;
-                open(my $fh, ">" . $tool_cmd_file) ||
-                    die "[ERROR]could not open cmd file for writing: [" . $tool_cmd_file . "]\n";
-                debug_log(sprintf "writing tool-cmds [%s]\n", $tool_cmd_file);
+
+                my $tool_cmd_file = $cs_tool_cmds_dir . "/" . $start_stop . ".json";
+                my %tool_data = ( 'tools' => [] );
+
                 foreach my $tool_entry (@tools_params) {
-                    build_tool_cmd($tool_entry, $start_stop, $fh, $$cs_ref{'endpoint-type'});
+                    my $tool_name = $$tool_entry{'tool'};
+
+                    debug_log(sprintf "building tool [%s]\n", $tool_name);
+
+                    my $tool = build_tool_cmd($tool_entry, $start_stop, $$cs_ref{'endpoint-type'});
+
+                    if (defined $tool) {
+                        debug_log("appending tool to list\n");
+                        push @{ $tool_data{'tools'} }, $tool;
+                    } else {
+                        debug_log("not appending tool to list because it is undefined\n");
+                    }
                 }
-                close($fh);
-                chmod 0755, $tool_cmd_file;
+
+                debug_log(sprintf "writing tool-cmds [%s]\n", $tool_cmd_file);
+                put_json_file($tool_cmd_file, \%tool_data) &&
+                    die "[ERROR] Failed to create " . $tool_cmd_file . "!\n";
             }
         }
     }
@@ -3464,7 +3494,7 @@ sub organize_run_data() {
                     ($mv_cmd, my $mv_output, my $mv_cmd_rc) = run_cmd($mv_cmd);
                 } else {
                     if ($cs_type ne "profiler") {
-                        log_print sprintf "WARNING: did not find expected sub-directories in %s\n", $pushd_dir . "/" . "tool-data";
+                        log_print sprintf "WARNING: did not find expected sub-directories in %s for %s-%s\n", $pushd_dir . "/" . "tool-data", $cs_type, $cs_id;
                     }
                 }
             }
