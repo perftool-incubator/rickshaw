@@ -341,13 +341,12 @@ def validate():
     endpoints.validate_comment("benchmark-engine-mapping: %s" % (benchmark_engine_mapping))
 
     engine_types = set()
+    engine_types.add("profiler")
     for engine_role in endpoint_settings["engines"]["settings"].keys():
         engine_types.add(engine_role)
     if not endpoint_settings["disable-tools"]["all"] and not endpoint_settings["disable-tools"]["masters"]:
-        engine_types.add("profiler")
         engine_types.add("master")
     if not endpoint_settings["disable-tools"]["all"] and not endpoint_settings["disable-tools"]["workers"]:
-        engine_types.add("profiler")
         engine_types.add("worker")
     
     endpoints.validate_comment("engine types that this endpoint is using")

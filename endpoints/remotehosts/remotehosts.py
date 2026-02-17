@@ -122,11 +122,10 @@ def validate():
     endpoints.validate_comment("benchmark-engine-mapping: %s" % (benchmark_engine_mapping))
 
     engine_types = set()
+    engine_types.add("profiler")
     for remote in endpoint_settings["remotes"]:
         for engine in remote["engines"]:
             engine_types.add(engine["role"])
-        if not remote["config"]["settings"]["disable-tools"]:
-            engine_types.add("profiler")
     
     endpoints.validate_comment("engine types that this endpoint is using")
     endpoints.validate_log("engine-types %s" % (" ".join(list(engine_types))))
