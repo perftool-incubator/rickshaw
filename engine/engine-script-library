@@ -356,8 +356,8 @@ function setup_core_env() {
     # Directories on the client/server
     cs_dir="`mktemp -d`"
     echo "cs_dir: $cs_dir"
-    tool_start_cmds="$cs_dir/tool-start"
-    tool_stop_cmds="$cs_dir/tool-stop"
+    tool_start_cmds="${cs_dir}/tool-start.json.xz"
+    tool_stop_cmds="${cs_dir}/tool-stop.json.xz"
     roadblock_msgs_dir="$cs_dir/roadblock-msgs"
     mkdir -p "$roadblock_msgs_dir"
     sysinfo_dir="$cs_dir/sysinfo"
@@ -366,7 +366,6 @@ function setup_core_env() {
     # Directories on the controller
     config_dir="$base_run_dir/config"
     engine_config_dir="$config_dir/engine"
-    tool_cmds_dir="$config_dir/tool-cmds/$cs_type"
     tool_cmds_dir="$config_dir/tool-cmds/$cs_type"
     run_dir="$base_run_dir/run"
     archives_dir="$run_dir/engine/archives"
@@ -426,12 +425,12 @@ function get_data() {
         if [ "$cs_type" == "server" ]; then
             scp_from_controller "$ssh_id_file" "$engine_config_dir/bench-cmds/$cs_type/$cs_id/stop" "bench-stop-cmds" abort get-data-end
         fi
-        scp_from_controller "$ssh_id_file" "$tool_cmds_dir/$cs_id/start" "$tool_start_cmds" abort get-data-end
-        scp_from_controller "$ssh_id_file" "$tool_cmds_dir/$cs_id/stop" "$tool_stop_cmds" abort get-data-end
+        scp_from_controller "${ssh_id_file}" "${tool_cmds_dir}/${cs_id}/start.json.xz" "${tool_start_cmds}" abort get-data-end
+        scp_from_controller "${ssh_id_file}" "${tool_cmds_dir}/${cs_id}/stop.json.xz" "${tool_stop_cmds}" abort get-data-end
     else
         # non-client/server get tool cmds based on endpoint-specific collector = $cs_label like "worker"
-        scp_from_controller "$ssh_id_file" "$tool_cmds_dir/start" "$tool_start_cmds" abort get-data-end
-        scp_from_controller "$ssh_id_file" "$tool_cmds_dir/stop" "$tool_stop_cmds" abort get-data-end
+        scp_from_controller "${ssh_id_file}" "${tool_cmds_dir}/start.json.xz" "${tool_start_cmds}" abort get-data-end
+        scp_from_controller "${ssh_id_file}" "${tool_cmds_dir}/stop.json.xz" "${tool_stop_cmds}" abort get-data-end
     fi
 }
 
@@ -463,7 +462,7 @@ function collect_sysinfo() {
 
 function start_tools() {
     local one_tool=$1; shift
-    local tool_name tool_cmd tool_cmd_rc total_tools
+    local tool_name tool_command tool_command_rc total_tools
 
     echo "running start_tools()"
 
@@ -479,26 +478,30 @@ function start_tools() {
 
         if pushd tool-data >/dev/null; then
             total_tools=0
-            while read -u 9 line; do
-                tool_name=`echo $line | awk -F: '{print $1}'`
-                tool_cmd=`echo $line | sed -e s/^$tool_name://`
-                if [ ! -z "$one_tool" -a "$one_tool" != "$tool_name" ]; then
-                    echo "Not starting $tool_name because this engine only runs one tool, $one_tool"
+
+            while IFS=$'\t' read -u 9 -r -d '' tool_name tool_command; do
+                echo "TOOL:     ${tool_name}"
+                echo "COMMAND:  ${tool_command}"
+
+                if [ ! -z "${one_tool}" -a "${one_tool}" != "${tool_name}" ]; then
+                    echo "Not starting tool '${tool_name}' because this engine only runs one tool, '${one_tool}'"
                     continue
                 fi
+
                 (( total_tools += 1 ))
-                /bin/mkdir -p $tool_name
-                if pushd $tool_name >/dev/null; then
-                    echo "Starting tool '${tool_name}' with command '${tool_cmd}'"
-                    eval $tool_cmd
-                    tool_cmd_rc=$?
-                    echo "Starting tool '${tool_name}' with command '${tool_cmd}' returned ${tool_cmd_rc}"
+
+                /bin/mkdir -p ${tool_name}
+                if pushd ${tool_name} >/dev/null; then
+                    echo "Starting tool '${tool_name}' with command '${tool_command}'"
+                    eval ${tool_command}
+                    tool_command_rc=$?
+                    echo "Starting tool '${tool_name}' with command '${tool_command}' returned ${tool_command_rc}"
 
                     popd >/dev/null
                 else
                     abort_error "start_tools: Failed to pushd to ${tool_name}" start-tools-end
                 fi
-            done 9<"$tool_start_cmds"
+            done 9< <(xzcat "${tool_start_cmds}" | jq -j '.tools[] | "\(.name)\t\(.command)\u0000"')
 
             if [ ${total_tools} -eq 0 ]; then
                 echo "No tools configured for this engine"
@@ -1120,10 +1123,10 @@ function process_bench_roadblocks() {
 }
 
 function stop_tools() {
-    local working_directory tool_stop_cmds_file tools_disabled tool_cmd_rc tool_name tool_cmd total_tools
+    local working_directory tool_stop_commands_file tools_disabled tool_command_rc tool_name tool_command total_tools
 
     working_directory=${1}; shift
-    tool_stop_cmds_file=${1}; shift
+    tool_stop_commands_file=${1}; shift
     tools_disabled=${1}; shift
     local one_tool=$1; shift
 
@@ -1136,26 +1139,32 @@ function stop_tools() {
     else
         if pushd ${working_directory}/tool-data >/dev/null; then
             total_tools=0
-            while read -u 9 line; do
-                tool_name=`echo $line | awk -F: '{print $1}'`
-                tool_cmd=`echo $line | sed -e s/^$tool_name://`
-                if [ ! -z "$one_tool" -a "$one_tool" != "$tool_name" ]; then
-                    echo "Not stopping $tool_name because this engine only runs one tool, $one_tool"
+
+            while IFS=$'\t' read -u 9 -r -d '' tool_name tool_command; do
+                echo "TOOL:     ${tool_name}"
+                echo "COMMAND:  ${tool_command}"
+
+                if [ ! -z "${one_tool}" -a "${one_tool}" != "${tool_name}" ]; then
+                    echo "Not stopping tool '${tool_name}' because this engine only runs one tool, '${one_tool}'"
                     continue
                 fi
+
                 (( total_tools += 1 ))
-                if pushd $tool_name >/dev/null; then
-                    echo "Stopping tool '${tool_name}' with command '${tool_cmd}'"
-                    eval $tool_cmd
-                    tool_cmd_rc=$?
-                    echo "Stopping tool '${tool_name}' with command '${tool_cmd}' returned ${tool_cmd_rc}"
-                    echo "Copying $old_dir/engine-env.txt to `/bin/pwd`"
-                    /bin/cp $old_dir/engine-env.txt .
-                    popd >/dev/null
+
+                if pushd ${tool_name} >/dev/null; then
+                    echo "Stopping tool '${tool_name}' with command '${tool_command}'"
+                    eval ${tool_command}
+                    tool_command_rc=$?
+                    echo "Stopping tool '${tool_name}' with command '${tool_command}' returned ${tool_command_rc}"
+
+                    echo "Copying ${old_dir}/engine-env.txt to `/bin/pwd`"
+                    /bin/cp ${old_dir}/engine-env.txt .
+
+                    popd > /dev/null
                 else
                     abort_error "stop_tools: Failed to pushd to ${tool_name}" stop-tools-end
                 fi
-            done 9<"${tool_stop_cmds_file}"
+            done 9< <(xzcat "${tool_stop_commands_file}" | jq -j '.tools[] | "\(.name)\t\(.command)\u0000"')
 
             if [ ${total_tools} -eq 0 ]; then
                 echo "No tools configured for this engine"

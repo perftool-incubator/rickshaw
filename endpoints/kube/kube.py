@@ -1448,16 +1448,14 @@ def create_tools_pods(abort_event):
 
     logger.info("Loading tools information and creating profiler mapping")
     tools = []
-    try:
-        with open(settings["dirs"]["local"]["tool-cmds"] + "/profiler/start") as tool_cmd_file:
-            for line in tool_cmd_file:
-                split_line = line.split(":")
-                tool = split_line[0]
-                tools.append(tool)
-                logger.info("Adding tool '%s' to the list of tools" % (tool))
-    except IOError as e:
+
+    start_tools,err = load_json_file(settings["dirs"]["local"]["tool-cmds"] + "/profiler/start.json.xz", uselzma = True)
+    if start_tools is None:
         logger.error("Failed to load the start tools command file")
         return 1
+    for tool in start_tools["tools"]:
+        tools.append(tool["name"])
+        logger.info("Adding tool '%s' to the list of tools" % (tool["name"]))
     for tool in tools:
         if not tool in settings["engines"]["profiler-mapping"]:
             settings["engines"]["profiler-mapping"][tool] = {
@@ -1751,7 +1749,7 @@ def engine_init():
             
             env_vars_payload = {
                 "env-vars": {
-                    "endpoint-label": args.endpoint_label,
+                    "endpoint_label": args.endpoint_label,
                     "hosted_by": node_name,
                     "hypervisor_host": None,
                     "userenv": userenv,
