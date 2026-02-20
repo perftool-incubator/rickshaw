@@ -133,6 +133,24 @@
                     "type": "string",
                     "enum": [ "chroot", "podman" ]
                 },
+                "tool-opt-in-tags": {
+                    "type": "array",
+                    "minItems": 1,
+                    "uniqueItems": true,
+                    "items": {
+                        "type": "string",
+                        "minLength": 1
+                    }
+                },
+                "tool-opt-out-tags": {
+                    "type": "array",
+                    "minItems": 1,
+                    "uniqueItems": true,
+                    "items": {
+                        "type": "string",
+                        "minLength": 1
+                    }
+                },
                 "user": {
                     "type": "string",
                     "minLength": 1
