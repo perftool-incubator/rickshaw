@@ -400,7 +400,18 @@ def build_unique_remote_configs():
             continue
 
         settings["engines"]["remotes"][remote]["run-file-idx"].sort()
-        run_file_idx = settings["engines"]["remotes"][remote]["run-file-idx"][0]
+
+        remote_profilers = 0
+        for tmp_run_file_idx in settings["engines"]["remotes"][remote]["run-file-idx"]:
+            for engine in settings["run-file"]["endpoints"][args.endpoint_index]["remotes"][tmp_run_file_idx]["engines"]:
+                if engine["role"] == "profiler":
+                    run_file_idx = tmp_run_file_idx
+                    remote_profilers += 1
+
+        if remote_profilers == 0:
+            run_file_idx = settings["engines"]["remotes"][remote]["run-file-idx"][0]
+        elif remote_profilers > 1:
+            raise ValueError("You cannot have more than one profiler role for remote %s" % (remote))
 
         profiler_role_idx = None
         for engine_idx,engine in enumerate(settings["run-file"]["endpoints"][args.endpoint_index]["remotes"][run_file_idx]["engines"]):
