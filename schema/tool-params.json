@@ -50,6 +50,18 @@
       },
       "userenv": {
         "type": "string"
+      },
+      "deployment": {
+        "type": "string",
+        "enum": [
+          "auto",
+          "opt-in",
+          "opt-out"
+        ]
+      },
+      "opt-tag": {
+        "type": "string",
+        "minLength": 1
       }
     },
     "required": [

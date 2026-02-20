@@ -329,13 +329,19 @@ def build_unique_remote_configs():
                 "roles": dict(),
                 "run-file-idx": [],
                 "disable-tools": None,
-                "engines": []
+                "engines": [],
+                "tool-opt-in-tags": [],
+                "tool-opt-out-tags": []
             }
 
         if settings["engines"]["remotes"][remote["config"]["host"]]["disable-tools"] is None:
             settings["engines"]["remotes"][remote["config"]["host"]]["disable-tools"] = remote["config"]["settings"]["disable-tools"]
         elif settings["engines"]["remotes"][remote["config"]["host"]]["disable-tools"] != remote["config"]["settings"]["disable-tools"]:
             raise ValueError("Conflicting values for disable-tools for remote %s" % (remote["config"]["host"]))
+
+        for opt_tag_type in [ "tool-opt-in-tags", "tool-opt-out-tags" ]:
+            if opt_tag_type in remote["config"]["settings"]:
+                settings["engines"]["remotes"][remote["config"]["host"]][opt_tag_type].extend(remote["config"]["settings"][opt_tag_type])
 
         settings["engines"]["remotes"][remote["config"]["host"]]["run-file-idx"].append(remote_idx)
 
@@ -354,21 +360,38 @@ def build_unique_remote_configs():
 
     profiler_count = 0
     for remote in settings["engines"]["remotes"].keys():
+        logger.info("Configuring tools for remote %s" % (remote))
+
         if settings["engines"]["remotes"][remote]["disable-tools"]:
+            logger.info("Remote %s has tools disabled" % (remote))
             continue
 
-        tools = []
         start_tools,err = load_json_file(settings["dirs"]["local"]["tool-cmds"] + "/profiler/start.json.xz", uselzma = True)
         if start_tools is None:
             logger.error("Failed to load the start tools command file from %s" % (tool_cmd_dir))
             return 1
-        for tool in start_tools["tools"]:
-            tools.append(tool["name"])
-            #logger.info("Adding tool '%s' to the list of tools" % (tool["name"]))
 
         profiler_count += 1
-        for tool in tools:
-            profiler_id = args.endpoint_label + "-" + tool + "-" + str(profiler_count)
+        for tool in start_tools["tools"]:
+            logger.info("Processing tool %s with deployment mode %s" % (tool["name"], tool["deployment"]))
+
+            if tool["deployment"] != "auto":
+                if tool["deployment"] == "opt-in":
+                    if not tool["opt-tag"] in settings["engines"]["remotes"][remote]["tool-opt-in-tags"]:
+                        logger.info("Not enabling tool %s on remote %s due to missing opt-in tag" % (tool["name"], remote))
+                        continue
+                    else:
+                        logger.info("Tool %s opt-in tag found for remote %s" % (tool["name"], remote))
+                elif tool["deployment"] == "opt-out":
+                    if tool["opt-tag"] in settings["engines"]["remotes"][remote]["tool-opt-out-tags"]:
+                        logger.info("Not enabling tool %s on remote %s due to present opt-out tag" % (tool["name"], remote))
+                        continue
+                    else:
+                        logger.info("Tool %s opt-out tag not found for remote %s" % (tool["name"], remote))
+
+            logger.info("Enabling tool %s on remote %s" % (tool["name"], remote))
+
+            profiler_id = args.endpoint_label + "-" + tool["name"] + "-" + str(profiler_count)
 
             if not "profiler" in settings["engines"]["remotes"][remote]["roles"]:
                 settings["engines"]["remotes"][remote]["roles"]["profiler"] = {
@@ -377,14 +400,17 @@ def build_unique_remote_configs():
 
             settings["engines"]["remotes"][remote]["roles"]["profiler"]["ids"].append(profiler_id)
 
-            settings["engines"]["new-followers"].append("profiler-" + profiler_id)
+            profiler_engine_name = "profiler-" + profiler_id
+            logger.info("Tool %s will be engine %s on remote %s" % (tool["name"], profiler_engine_name, remote))
+            
+            settings["engines"]["new-followers"].append(profiler_engine_name)
 
-            if not tool in settings["engines"]["profiler-mapping"]:
-                settings["engines"]["profiler-mapping"][tool] = {
-                    "name": tool,
+            if not tool["name"] in settings["engines"]["profiler-mapping"]:
+                settings["engines"]["profiler-mapping"][tool["name"]] = {
+                    "name": tool["name"],
                     "ids": []
                 }
-            settings["engines"]["profiler-mapping"][tool]["ids"].append(profiler_id)
+            settings["engines"]["profiler-mapping"][tool["name"]]["ids"].append(profiler_id)
 
     for remote in settings["engines"]["remotes"].keys():
         for role in settings["engines"]["remotes"][remote]["roles"].keys():
@@ -400,7 +426,18 @@ def build_unique_remote_configs():
             continue
 
         settings["engines"]["remotes"][remote]["run-file-idx"].sort()
-        run_file_idx = settings["engines"]["remotes"][remote]["run-file-idx"][0]
+
+        remote_profilers = 0
+        for tmp_run_file_idx in settings["engines"]["remotes"][remote]["run-file-idx"]:
+            for engine in settings["run-file"]["endpoints"][args.endpoint_index]["remotes"][tmp_run_file_idx]["engines"]:
+                if engine["role"] == "profiler":
+                    run_file_idx = tmp_run_file_idx
+                    remote_profilers += 1
+
+        if remote_profilers == 0:
+            run_file_idx = settings["engines"]["remotes"][remote]["run-file-idx"][0]
+        elif remote_profilers > 1:
+            raise ValueError("You cannot have more than one profiler role for remote %s" % (remote))
 
         profiler_role_idx = None
         for engine_idx,engine in enumerate(settings["run-file"]["endpoints"][args.endpoint_index]["remotes"][run_file_idx]["engines"]):

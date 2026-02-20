@@ -2864,7 +2864,18 @@ sub build_tool_cmd {
     }
 
     # Assemble the arguments as a bash array in order to not get them scrambled later
-    my %tool = ( 'name' => $tool_name, 'command' => 'declare -a ARGS=(' );
+    my %tool = ( 'name' => $tool_name,
+                 'command' => 'declare -a ARGS=(',
+                 'deployment' => "auto",
+                 'opt-tag' => undef );
+
+    if (exists($$tool_entry{'deployment'}) && ($$tool_entry{'deployment'} ne "auto")) {
+        $tool{'deployment'} = $$tool_entry{'deployment'};
+
+        if (exists($$tool_entry{'opt-tag'})) {
+            $tool{'opt-tag'} = $$tool_entry{'opt-tag'};
+        }
+    }
 
     foreach my $tool_param (@{ $$tool_entry{'params'} }) {
         if (exists($$tool_param{'enabled'}) && ($$tool_param{'enabled'} eq "no")) {
