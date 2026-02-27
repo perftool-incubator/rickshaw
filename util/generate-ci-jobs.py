@@ -55,6 +55,12 @@ def process_options():
                         default = "",
                         type = str)
 
+    parser.add_argument("--runner-pool",
+                        dest = "runner_pool",
+                        help = "Which pool of self-hosted runners to use (e.g., 'kmr-cloud-1', 'aws-cloud-1')",
+                        default = "",
+                        type = str)
+
     parser.add_argument("--runner-type",
                         dest = "runner_type",
                         help = "Which runner type to generate jobs for",
@@ -128,6 +134,46 @@ def dump_raw_json(obj):
     """
     return json.dumps(obj, separators=(',', ':'), sort_keys = True, default = not_json_serializable)
 
+def build_runner_labels(logger, runner_type, runner_tags, runner_pool):
+    """
+    Build the list of runner labels for the runs-on directive
+
+    Args:
+        logger: a logger instance used to output status
+        runner_type: The type of runner (github or self-hosted)
+        runner_tags: List of tags for self-hosted runners
+        runner_pool: Optional pool identifier for self-hosted runners
+
+    Globals:
+        None
+
+    Returns:
+        list: A list of runner labels to be used in the runs-on directive
+    """
+    labels = []
+
+    if runner_type == "self-hosted":
+        labels.append("self-hosted")
+
+        # Add pool identifier if specified (e.g., 'kmr-cloud-1', 'aws-cloud-1')
+        # This is optional for backward compatibility
+        if runner_pool:
+            labels.append(runner_pool)
+            logger.debug("Adding runner pool label '%s'" % (runner_pool))
+
+        # Add other runner tags (e.g., 'cpu-partitioning', 'remotehosts')
+        # Filter out empty strings that might come from split
+        for tag in runner_tags:
+            if tag:  # only add non-empty tags
+                labels.append(tag)
+                logger.debug("Adding runner tag '%s'" % (tag))
+    else:
+        # For GitHub-hosted runners, use ubuntu-latest
+        labels.append("ubuntu-latest")
+
+    logger.debug("Built runner labels: %s" % (str(labels)))
+    return labels
+
 def get_jobs(logger):
     """
     Load the CI config file and generate raw jobs from it based on the user input
@@ -189,11 +235,19 @@ def get_jobs(logger):
 
                                 if add_scenario:
                                     logger.info("Adding jobs for benchmark '%s' and runner type '%s'" % (benchmark["name"], scenario["runners"]["type"]))
+                                    # Build runner labels for this scenario
+                                    runner_labels = build_runner_labels(
+                                        logger,
+                                        scenario["runners"]["type"],
+                                        scenario["runners"].get("tags", []) if args.runner_type == "self-hosted" else [],
+                                        args.runner_pool
+                                    )
                                     for endpoint in scenario["endpoints"]:
                                         job = {
                                             "benchmark": benchmark["name"],
                                             "enabled": True,
-                                            "endpoint": endpoint
+                                            "endpoint": endpoint,
+                                            "runner_labels": runner_labels
                                         }
                                         logger.info("Adding job for endpoint '%s'" % (endpoint))
                                         raw_jobs.append(job)
@@ -223,10 +277,12 @@ def get_jobs(logger):
         # specifying the remotehosts endpoint since that should work on
         # all current runner types (not that it really matters since it
         # won't actually run)
+        runner_labels = build_runner_labels(logger, args.runner_type, args.runner_tags, args.runner_pool)
         job = {
             "benchmark": args.benchmark,
             "enabled": False,
-            "endpoint": "remotehosts"
+            "endpoint": "remotehosts",
+            "runner_labels": runner_labels
         }
         raw_jobs.append(job)
 
