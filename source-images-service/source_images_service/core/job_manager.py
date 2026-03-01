@@ -11,6 +11,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from source_images_service.config import ServiceConfig
+from source_images_service.core.image_sourcer import source_all_images
 from source_images_service.core.workspace import (
     WorkspacePaths,
     cleanup_workspace,
@@ -147,8 +148,7 @@ class JobManager:
             job.workspace = workspace
             job.append_log(f"Workspace materialized at {workspace.root}")
 
-            # Phase 1 placeholder: echo back image_ids keys with placeholder values
-            result = self._placeholder_worker(job)
+            result = source_all_images(job)
 
             job.result = result
             job.status = JobStatus.COMPLETED
@@ -173,27 +173,3 @@ class JobManager:
                     )
             # Release the request to free memory
             job.request = None
-
-    def _placeholder_worker(self, job: Job) -> dict:
-        """Phase 1 placeholder: return dummy results echoing image_ids structure."""
-        assert job.request is not None
-        image_ids: dict[str, dict[str, dict]] = {}
-
-        completed = 0
-        for benchmark, userenvs in sorted(job.request.image_ids.items()):
-            image_ids[benchmark] = {}
-            for userenv in sorted(userenvs.keys()):
-                job.progress = JobProgress(
-                    current_benchmark=benchmark,
-                    completed_items=completed,
-                    total_items=job.progress.total_items,
-                )
-                job.append_log(f"Processing {benchmark}/{userenv} (placeholder)")
-                image_ids[benchmark][userenv] = {"image": "placeholder"}
-                completed += 1
-
-        job.progress = JobProgress(
-            completed_items=completed,
-            total_items=job.progress.total_items,
-        )
-        return {"image-ids": image_ids}
