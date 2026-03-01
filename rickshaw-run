@@ -120,7 +120,7 @@ my $roadblock_exit_input = 2;
 my $roadblock_exit_abort_waiting = 6;
 my $abort_via_roadblock = 0;
 my $workshop_force_builds;
-my %quay_refresh_expiration_tokens;
+
 my $cs_conf_file;
 
 my @tests;
@@ -1409,16 +1409,6 @@ sub load_settings_info() {
     if (($rc == 0) && (defined $tmp_settings_value)) {
         $run{'registries'}{'public'}{'quay-refresh-expiration-token-file'} = $tmp_settings_value;
         log_print sprintf "load_settings_info(): loaded public registry quay refresh expiration token file: %s\n", $run{'registries'}{'public'}{'quay-refresh-expiration-token-file'};
-
-        if (open(TOKEN, "<", $run{'registries'}{'public'}{'quay-refresh-expiration-token-file'})) {
-            $quay_refresh_expiration_tokens{'public'} = <TOKEN>;
-            chomp($quay_refresh_expiration_tokens{'public'});
-            close TOKEN;
-            log_print "load_settings_file(): loaded public registry quay refresh expiration token\n";
-        } else {
-            log_print "load_settings_file(): failed to load public registry quay refresh expiration token!\n";
-            exit 1;
-        }
     }
 
     if (exists $run{'registries'}{'private'}) {
@@ -1426,16 +1416,6 @@ sub load_settings_info() {
         if (($rc == 0) && (defined $tmp_settings_value)) {
             $run{'registries'}{'private'}{'quay-refresh-expiration-token-file'} = $tmp_settings_value;
             log_print sprintf "load_settings_info(): loaded private registry quay refresh expiration token file: %s\n", $run{'registries'}{'private'}{'quay-refresh-expiration-token-file'};
-
-            if (open(TOKEN, "<", $run{'registries'}{'private'}{'quay-refresh-expiration-token-file'})) {
-                $quay_refresh_expiration_tokens{'private'} = <TOKEN>;
-                chomp($quay_refresh_expiration_tokens{'private'});
-                close TOKEN;
-                log_print "load_settings_file(): loaded private registry quay refresh expiration token\n";
-            } else {
-                log_print "load_settings_file(): failed to load private registry quay refresh expiration token!\n";
-                exit 1;
-            }
         }
     }
 
@@ -2766,10 +2746,6 @@ debug_log (sprintf "image_ids (before):\n" . Dumper \%image_ids);
         }
     }
     $source_input{'utility-dirs'} = \%utility_dirs;
-    # Pass quay refresh expiration tokens if available
-    if (%quay_refresh_expiration_tokens) {
-        $source_input{'quay-refresh-expiration-tokens'} = \%quay_refresh_expiration_tokens;
-    }
 
     my $source_input_file = $config_dir . "/image-source-input.json";
     my $source_output_file = $config_dir . "/image-source-output.json";

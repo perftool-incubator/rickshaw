@@ -1064,9 +1064,20 @@ foreach my $utility (@utilities) {
     }
 }
 
-# Reconstruct quay refresh expiration tokens
-if (exists $$input_ref{'quay-refresh-expiration-tokens'}) {
-    %quay_refresh_expiration_tokens = %{$$input_ref{'quay-refresh-expiration-tokens'}};
+# Load quay refresh expiration tokens from files referenced in registries
+for my $registry_type ('public', 'private') {
+    if (exists $run{'registries'}{$registry_type}{'quay-refresh-expiration-token-file'}) {
+        my $token_file = $run{'registries'}{$registry_type}{'quay-refresh-expiration-token-file'};
+        if (open(my $fh, "<", $token_file)) {
+            $quay_refresh_expiration_tokens{$registry_type} = <$fh>;
+            chomp($quay_refresh_expiration_tokens{$registry_type});
+            close $fh;
+            log_print sprintf "Loaded %s registry quay refresh expiration token from %s\n", $registry_type, $token_file;
+        } else {
+            log_print sprintf "Failed to load %s registry quay refresh expiration token from %s\n", $registry_type, $token_file;
+            exit 1;
+        }
+    }
 }
 
 # Process image-ids
