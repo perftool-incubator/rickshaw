@@ -286,7 +286,7 @@ def _source_container_image(
                 skip_update = "false"
         else:
             req_arg = requirements.pop(0)
-            skip_update = "false"
+            skip_update = "true"
 
         # Write cs-conf.json without quay label (for MD5 calculation)
         _write_cs_conf(cs_conf_file)
