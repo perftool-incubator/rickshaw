@@ -95,6 +95,8 @@ def materialize_workspace(
     file_count += 1
     _decode_and_write(ws.workshop / "schema.json", request.workshop.schema_content)
     file_count += 1
+    _decode_and_write(ws.workshop / "registries-schema.json", request.workshop.registries_schema_content)
+    file_count += 1
 
     # Toolbox directory
     for f in request.toolbox_dir.files:

@@ -60,6 +60,10 @@ class WorkshopConfig(BaseModel):
         alias="schema-content",
         description="Base64-encoded workshop schema JSON",
     )
+    registries_schema_content: str = Field(
+        alias="registries-schema-content",
+        description="Base64-encoded workshop registries-schema.json",
+    )
     force_builds: bool = Field(default=False, alias="force-builds")
 
     model_config = {"populate_by_name": True}

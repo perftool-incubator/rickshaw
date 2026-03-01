@@ -291,9 +291,16 @@ def _build_api_request(input_data):
     else:
         raise SystemExit("ERROR: workshop schema.json not found: %s" % schema_path)
 
+    registries_schema_path = os.path.join(workshop_dir, "registries-schema.json") if workshop_dir else ""
+    if registries_schema_path and os.path.isfile(registries_schema_path):
+        registries_schema_content = _b64_encode_file(registries_schema_path)
+    else:
+        raise SystemExit("ERROR: workshop registries-schema.json not found: %s" % registries_schema_path)
+
     api_req["workshop"] = {
         "workshop-pl-content": workshop_pl_content,
         "schema-content": schema_content,
+        "registries-schema-content": registries_schema_content,
         "force-builds": bool(input_data.get("workshop", {}).get("force-builds", False)),
     }
 
