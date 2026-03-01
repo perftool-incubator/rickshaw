@@ -858,7 +858,7 @@ sub process_cmdline() {
         } elsif ($arg =~ /^base-run-dir$|^workshop-dir$|^packrat-dir$|^bench-dir$|^roadblock-dir$|^roadblock-password$|^tools-dir$|^engine-dir$/ or
                  $arg =~ /^run-id$|^id$|^bench-params$|^tool-params$|^bench-params$/ or
                  $arg =~ /^test-order$|^tool-group$|^num-samples$|^max-sample-failures$|^name$|^bench-ids$/ or
-                 $arg =~ /^registries-json$|^external-userenvs-dir$/ or
+                 $arg =~ /^registries-json$|^external-userenvs-dir$|^source-images-service-url$/ or
                  $arg =~ /^email$|^desc$/) {
             debug_log(sprintf "argument: [%s]\n", $arg);
             $run{$arg} = $val;
@@ -2757,10 +2757,19 @@ debug_log (sprintf "image_ids (before):\n" . Dumper \%image_ids);
     if ($toolbox::logging::debug) {
         $log_level_arg = " --log-level debug";
     }
-    my $source_images_cmd = $rickshaw_project_dir . "/rickshaw-source-images"
-                          . " --input " . $source_input_file
-                          . " --output " . $source_output_file
-                          . $log_level_arg;
+    my $source_images_cmd;
+    if (exists $run{'source-images-service-url'}) {
+        $source_images_cmd = $rickshaw_project_dir . "/rickshaw-source-images-client"
+                            . " --input " . $source_input_file
+                            . " --output " . $source_output_file
+                            . " --service-url " . $run{'source-images-service-url'}
+                            . $log_level_arg;
+    } else {
+        $source_images_cmd = $rickshaw_project_dir . "/rickshaw-source-images"
+                            . " --input " . $source_input_file
+                            . " --output " . $source_output_file
+                            . $log_level_arg;
+    }
     log_print sprintf "Running: %s\n", $source_images_cmd;
     my $source_images_rc = system($source_images_cmd);
     $source_images_rc = $source_images_rc >> 8;

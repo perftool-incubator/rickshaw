@@ -1,0 +1,550 @@
+#!/usr/bin/env python3
+"""Client script for the rickshaw source-images web service.
+
+Bridges rickshaw-run to the remote source-images-service by translating
+the local file-path-based input JSON into a base64-encoded API request,
+submitting the job, polling for completion with log streaming, and
+writing the output JSON.
+
+Same --input / --output interface as rickshaw-source-images.
+"""
+
+import argparse
+import base64
+import json
+import logging
+import os
+import sys
+import time
+import urllib.request
+import urllib.error
+
+# ---------------------------------------------------------------------------
+# Logging
+# ---------------------------------------------------------------------------
+
+LOG_FORMAT = "%(asctime)s %(levelname)s %(message)s"
+logger = logging.getLogger("rickshaw-source-images-client")
+
+# ---------------------------------------------------------------------------
+# Filesystem helpers
+# ---------------------------------------------------------------------------
+
+# Directories and extensions to skip (matches the service's find_files())
+_SKIP_DIRS = {".git", "docs", ".github", "__pycache__"}
+_SKIP_EXTENSIONS = {".md"}
+
+
+def _b64_encode_file(path):
+    """Read a file and return its contents as a base64-encoded string."""
+    with open(path, "rb") as fh:
+        return base64.b64encode(fh.read()).decode("ascii")
+
+
+def _collect_directory(dir_path):
+    """Recursively collect files under *dir_path* into a Base64Directory dict.
+
+    Returns ``{"name": dir_basename, "files": [{"filename": relpath, "content_base64": ...}, ...]}``
+
+    Skips directories and file extensions matching the service's find_files() logic.
+    """
+    dir_path = os.path.abspath(dir_path)
+    base_name = os.path.basename(dir_path)
+    files = []
+
+    if not os.path.isdir(dir_path):
+        return {"name": base_name, "files": files}
+
+    for root, dirs, filenames in os.walk(dir_path, followlinks=True):
+        # Prune skipped directories in-place
+        dirs[:] = [d for d in dirs if d not in _SKIP_DIRS]
+        for fname in sorted(filenames):
+            _, ext = os.path.splitext(fname)
+            if ext in _SKIP_EXTENSIONS:
+                continue
+            full_path = os.path.join(root, fname)
+            rel_path = os.path.relpath(full_path, dir_path)
+            try:
+                files.append({
+                    "filename": rel_path,
+                    "content_base64": _b64_encode_file(full_path),
+                })
+            except (OSError, PermissionError) as exc:
+                logger.warning("Skipping file %s: %s", full_path, exc)
+
+    files.sort(key=lambda f: f["filename"])
+    return {"name": base_name, "files": files}
+
+
+# ---------------------------------------------------------------------------
+# HTTP helpers (stdlib only — no external deps)
+# ---------------------------------------------------------------------------
+
+def _http_request(url, method="GET", json_body=None, timeout=30):
+    """Perform an HTTP request and return (status_code, parsed_json | None).
+
+    Uses only the standard library so the client has no pip dependencies.
+    """
+    headers = {"Accept": "application/json"}
+    data = None
+    if json_body is not None:
+        data = json.dumps(json_body).encode("utf-8")
+        headers["Content-Type"] = "application/json"
+
+    req = urllib.request.Request(url, data=data, headers=headers, method=method)
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            body = resp.read().decode("utf-8")
+            return resp.status, json.loads(body) if body else None
+    except urllib.error.HTTPError as exc:
+        body = exc.read().decode("utf-8", errors="replace") if exc.fp else ""
+        try:
+            parsed = json.loads(body)
+        except (json.JSONDecodeError, ValueError):
+            parsed = {"detail": body}
+        return exc.code, parsed
+    except urllib.error.URLError as exc:
+        raise SystemExit(
+            "ERROR: Cannot reach source-images service at %s: %s" % (url, exc.reason)
+        )
+
+
+# ---------------------------------------------------------------------------
+# Input JSON → API request translation
+# ---------------------------------------------------------------------------
+
+def _discover_userenv_files(input_data, rickshaw_dir):
+    """Find and base64-encode all userenv JSON files needed by the job.
+
+    Looks in:
+      1. external-userenvs-dir (if provided) — walk subdirectories
+      2. <rickshaw_dir>/userenvs/
+    """
+    userenvs = {}
+    image_ids = input_data.get("image-ids", {})
+
+    # Collect the set of userenv names referenced in image-ids
+    needed = set()
+    for bench_data in image_ids.values():
+        for userenv_name in bench_data:
+            needed.add(userenv_name)
+
+    if not needed:
+        return userenvs
+
+    external_dir = input_data.get("external-userenvs-dir")
+    internal_dir = os.path.join(rickshaw_dir, "userenvs") if rickshaw_dir else None
+
+    for userenv in sorted(needed):
+        found_path = None
+
+        # Check external userenvs directory first
+        if external_dir and os.path.isdir(external_dir):
+            for entry in os.listdir(external_dir):
+                subdir = os.path.join(external_dir, entry)
+                if os.path.isdir(subdir):
+                    candidate = os.path.join(subdir, userenv + ".json")
+                    if os.path.isfile(candidate):
+                        found_path = candidate
+                        break
+
+        # Fall back to internal rickshaw userenvs
+        if not found_path and internal_dir:
+            candidate = os.path.join(internal_dir, userenv + ".json")
+            if os.path.isfile(candidate):
+                found_path = candidate
+
+        if found_path:
+            logger.debug("Userenv %s found at %s", userenv, found_path)
+            userenvs[userenv] = _b64_encode_file(found_path)
+        else:
+            logger.warning("Could not locate userenv file for: %s", userenv)
+
+    return userenvs
+
+
+def _build_api_request(input_data):
+    """Translate the file-path-based input JSON into the API request body."""
+    rickshaw_dir = input_data.get("dirs", {}).get("rickshaw", "")
+    workshop_dir = input_data.get("workshop", {}).get("dir", "")
+    roadblock_dir = input_data.get("roadblock-dir", "")
+    toolbox_home = os.environ.get("TOOLBOX_HOME", input_data.get("dirs", {}).get("toolbox", ""))
+
+    api_req = {}
+
+    # --- Direct pass-through fields ---
+    api_req["arch"] = input_data.get("arch", "x86_64")
+    api_req["image-ids"] = input_data.get("image-ids", {})
+    api_req["utilities"] = input_data.get("utilities", [])
+    api_req["use-workshop"] = bool(input_data.get("use-workshop", False))
+
+    # --- Registries (pass through, fix tls-verify string→bool) ---
+    registries = input_data.get("registries", {})
+    api_registries = {}
+    push_tokens = {}
+    pull_tokens = {}
+
+    for reg_type, reg_data in registries.items():
+        reg_copy = {}
+
+        # url-details pass through
+        if "url-details" in reg_data:
+            reg_copy["url-details"] = reg_data["url-details"]
+
+        # tls-verify: convert string "true"/"false" to bool
+        tls_val = reg_data.get("tls-verify", True)
+        if isinstance(tls_val, str):
+            reg_copy["tls-verify"] = tls_val.lower() == "true"
+        else:
+            reg_copy["tls-verify"] = bool(tls_val)
+
+        # Quay fields pass through
+        for key in ("quay-expiration-length",
+                     "quay-refresh-expiration-api-url",
+                     "quay-refresh-expiration-require-success"):
+            if key in reg_data:
+                reg_copy[key] = reg_data[key]
+
+        api_registries[reg_type] = reg_copy
+
+        # Collect push/pull token file contents
+        if "push-token" in reg_data:
+            token_path = reg_data["push-token"]
+            if os.path.isfile(token_path):
+                logger.info("Reading push token file for registry type: %s", reg_type)
+                push_tokens[reg_type] = _b64_encode_file(token_path)
+            else:
+                logger.warning("Push token file not found for %s: path not accessible", reg_type)
+
+        if "pull-token" in reg_data:
+            token_path = reg_data["pull-token"]
+            if os.path.isfile(token_path):
+                logger.info("Reading pull token file for registry type: %s", reg_type)
+                pull_tokens[reg_type] = _b64_encode_file(token_path)
+            else:
+                logger.warning("Pull token file not found for %s: path not accessible", reg_type)
+
+    api_req["registries"] = api_registries
+    if push_tokens:
+        api_req["push-token-content"] = push_tokens
+    if pull_tokens:
+        api_req["pull-token-content"] = pull_tokens
+
+    # --- registries-json file ---
+    registries_json_path = input_data.get("registries-json", "")
+    if registries_json_path and os.path.isfile(registries_json_path):
+        api_req["registries-json-content"] = _b64_encode_file(registries_json_path)
+    else:
+        raise SystemExit("ERROR: registries-json file not found: %s" % registries_json_path)
+
+    # --- Bench directories ---
+    bench_dirs_input = input_data.get("bench-dirs", {})
+    api_bench_dirs = {}
+    for bench_name, bench_path in bench_dirs_input.items():
+        if os.path.isdir(bench_path):
+            api_bench_dirs[bench_name] = _collect_directory(bench_path)
+            logger.info("Collected bench dir '%s': %d files",
+                        bench_name, len(api_bench_dirs[bench_name]["files"]))
+        else:
+            logger.warning("Bench directory not found: %s", bench_path)
+    api_req["bench-dirs"] = api_bench_dirs
+
+    # --- Utility directories ---
+    utility_dirs_input = input_data.get("utility-dirs", {})
+    if utility_dirs_input:
+        api_utility_dirs = {}
+        for util_name, util_path in utility_dirs_input.items():
+            if os.path.isdir(util_path):
+                api_utility_dirs[util_name] = _collect_directory(util_path)
+                logger.info("Collected utility dir '%s': %d files",
+                            util_name, len(api_utility_dirs[util_name]["files"]))
+        if api_utility_dirs:
+            api_req["utility-dirs"] = api_utility_dirs
+
+    # --- Userenv files ---
+    api_req["userenv-files"] = _discover_userenv_files(input_data, rickshaw_dir)
+
+    # --- Workshop ---
+    workshop_pl_path = os.path.join(workshop_dir, "workshop.pl") if workshop_dir else ""
+    schema_path = os.path.join(workshop_dir, "schema.json") if workshop_dir else ""
+
+    if workshop_pl_path and os.path.isfile(workshop_pl_path):
+        workshop_pl_content = _b64_encode_file(workshop_pl_path)
+    else:
+        raise SystemExit("ERROR: workshop.pl not found: %s" % workshop_pl_path)
+
+    if schema_path and os.path.isfile(schema_path):
+        schema_content = _b64_encode_file(schema_path)
+    else:
+        raise SystemExit("ERROR: workshop schema.json not found: %s" % schema_path)
+
+    api_req["workshop"] = {
+        "workshop-pl-content": workshop_pl_content,
+        "schema-content": schema_content,
+        "force-builds": bool(input_data.get("workshop", {}).get("force-builds", False)),
+    }
+
+    # --- Rickshaw files (engine/ + userenvs/) ---
+    rickshaw_files = {"name": "rickshaw", "files": []}
+    if rickshaw_dir:
+        for subdir in ("engine", "userenvs"):
+            subdir_path = os.path.join(rickshaw_dir, subdir)
+            if os.path.isdir(subdir_path):
+                for root, dirs, filenames in os.walk(subdir_path, followlinks=True):
+                    dirs[:] = [d for d in dirs if d not in _SKIP_DIRS]
+                    for fname in sorted(filenames):
+                        _, ext = os.path.splitext(fname)
+                        if ext in _SKIP_EXTENSIONS:
+                            continue
+                        full_path = os.path.join(root, fname)
+                        rel_path = os.path.relpath(full_path, rickshaw_dir)
+                        try:
+                            rickshaw_files["files"].append({
+                                "filename": rel_path,
+                                "content_base64": _b64_encode_file(full_path),
+                            })
+                        except (OSError, PermissionError) as exc:
+                            logger.warning("Skipping rickshaw file %s: %s", full_path, exc)
+        rickshaw_files["files"].sort(key=lambda f: f["filename"])
+        logger.info("Collected %d rickshaw files", len(rickshaw_files["files"]))
+    api_req["rickshaw-files"] = rickshaw_files
+
+    # --- Roadblock workshop.json ---
+    roadblock_workshop = os.path.join(roadblock_dir, "workshop.json") if roadblock_dir else ""
+    if roadblock_workshop and os.path.isfile(roadblock_workshop):
+        api_req["roadblock-workshop-json"] = _b64_encode_file(roadblock_workshop)
+    else:
+        raise SystemExit("ERROR: roadblock workshop.json not found: %s" % roadblock_workshop)
+
+    # --- Toolbox directory ---
+    if toolbox_home and os.path.isdir(toolbox_home):
+        api_req["toolbox-dir"] = _collect_directory(toolbox_home)
+        logger.info("Collected toolbox dir: %d files", len(api_req["toolbox-dir"]["files"]))
+    else:
+        raise SystemExit(
+            "ERROR: TOOLBOX_HOME directory not found. "
+            "Set TOOLBOX_HOME or ensure dirs.toolbox is in the input JSON."
+        )
+
+    # --- Toolbox workshop.json ---
+    toolbox_workshop = os.path.join(toolbox_home, "workshop.json")
+    if os.path.isfile(toolbox_workshop):
+        api_req["toolbox-workshop-json"] = _b64_encode_file(toolbox_workshop)
+    else:
+        raise SystemExit("ERROR: toolbox workshop.json not found: %s" % toolbox_workshop)
+
+    # --- Quay refresh expiration tokens ---
+    quay_tokens = input_data.get("quay-refresh-expiration-tokens")
+    if quay_tokens:
+        # These are already plain string values (not file paths) in the input JSON
+        api_req["quay-refresh-expiration-tokens"] = quay_tokens
+
+    return api_req
+
+
+# ---------------------------------------------------------------------------
+# API interaction
+# ---------------------------------------------------------------------------
+
+def _health_check(service_url):
+    """Check service health; raise SystemExit if unreachable."""
+    url = service_url.rstrip("/") + "/api/v1/health"
+    logger.info("Health check: %s", url)
+    status, body = _http_request(url, timeout=10)
+    if status != 200:
+        raise SystemExit(
+            "ERROR: Source-images service health check failed (HTTP %d): %s"
+            % (status, body)
+        )
+    logger.info("Service healthy — version=%s, active-jobs=%s, pending-jobs=%s",
+                body.get("version", "?"),
+                body.get("active-jobs", "?"),
+                body.get("pending-jobs", "?"))
+
+
+def _submit_job(service_url, api_request):
+    """Submit a source-images job; return the job ID."""
+    url = service_url.rstrip("/") + "/api/v1/source-images"
+
+    # Log payload size but never the content
+    payload_json = json.dumps(api_request)
+    payload_mb = len(payload_json) / (1024 * 1024)
+    logger.info("Submitting job — payload size: %.2f MB", payload_mb)
+
+    status, body = _http_request(url, method="POST", json_body=api_request, timeout=120)
+    if status not in (200, 201, 202):
+        detail = body.get("detail", body) if isinstance(body, dict) else body
+        raise SystemExit(
+            "ERROR: Failed to submit source-images job (HTTP %d): %s" % (status, detail)
+        )
+
+    job_id = body.get("job-id", "")
+    if not job_id:
+        raise SystemExit("ERROR: No job-id returned in submit response: %s" % body)
+
+    logger.info("Job submitted — job-id: %s, status: %s", job_id, body.get("status", "?"))
+    return job_id
+
+
+def _get_poll_interval(elapsed):
+    """Return adaptive poll interval in seconds based on elapsed time."""
+    if elapsed < 30:
+        return 2
+    elif elapsed < 300:  # 5 minutes
+        return 5
+    elif elapsed < 1800:  # 30 minutes
+        return 10
+    else:
+        return 15
+
+
+def _poll_job(service_url, job_id):
+    """Poll job status with log streaming. Returns the job result dict on success."""
+    base_url = service_url.rstrip("/")
+    log_offset = 0
+    poll_count = 0
+    start_time = time.monotonic()
+
+    while True:
+        elapsed = time.monotonic() - start_time
+        interval = _get_poll_interval(elapsed)
+        time.sleep(interval)
+        poll_count += 1
+
+        # --- Fetch and stream new log output ---
+        try:
+            log_url = "%s/api/v1/jobs/%s/log?offset=%d" % (base_url, job_id, log_offset)
+            log_status, log_body = _http_request(log_url, timeout=30)
+            if log_status == 200 and log_body:
+                new_log = log_body.get("log", "")
+                if new_log:
+                    for line in new_log.splitlines():
+                        print("[source-images-service] %s" % line, flush=True)
+                    log_offset = log_body.get("total-length", log_offset + len(new_log))
+        except SystemExit:
+            # Log fetch failure is non-fatal during polling
+            logger.warning("Failed to fetch logs at poll #%d (non-fatal)", poll_count)
+
+        # --- Check job status ---
+        status_url = "%s/api/v1/jobs/%s" % (base_url, job_id)
+        status_code, status_body = _http_request(status_url, timeout=30)
+
+        if status_code != 200:
+            logger.warning("Job status check returned HTTP %d at poll #%d", status_code, poll_count)
+            continue
+
+        job_status = status_body.get("status", "unknown")
+        progress = status_body.get("progress")
+
+        if progress:
+            logger.info("Poll #%d [%.0fs] — status=%s, progress=%s/%s (%s)",
+                        poll_count, elapsed, job_status,
+                        progress.get("completed-items", "?"),
+                        progress.get("total-items", "?"),
+                        progress.get("current-benchmark", "?"))
+        else:
+            logger.info("Poll #%d [%.0fs] — status=%s", poll_count, elapsed, job_status)
+
+        if job_status == "completed":
+            # Drain remaining logs
+            try:
+                log_url = "%s/api/v1/jobs/%s/log?offset=%d" % (base_url, job_id, log_offset)
+                log_status, log_body = _http_request(log_url, timeout=30)
+                if log_status == 200 and log_body:
+                    remaining = log_body.get("log", "")
+                    if remaining:
+                        for line in remaining.splitlines():
+                            print("[source-images-service] %s" % line, flush=True)
+            except SystemExit:
+                pass
+
+            result = status_body.get("result")
+            if result is None:
+                raise SystemExit("ERROR: Job completed but no result returned")
+
+            total_elapsed = time.monotonic() - start_time
+            logger.info("Job completed successfully in %.0f seconds (%d polls)",
+                        total_elapsed, poll_count)
+            return result
+
+        elif job_status == "failed":
+            # Drain remaining logs
+            try:
+                log_url = "%s/api/v1/jobs/%s/log?offset=%d" % (base_url, job_id, log_offset)
+                log_status, log_body = _http_request(log_url, timeout=30)
+                if log_status == 200 and log_body:
+                    remaining = log_body.get("log", "")
+                    if remaining:
+                        for line in remaining.splitlines():
+                            print("[source-images-service] %s" % line, flush=True)
+            except SystemExit:
+                pass
+
+            error_msg = status_body.get("error", "Unknown error")
+            total_elapsed = time.monotonic() - start_time
+            logger.error("Job FAILED after %.0f seconds: %s", total_elapsed, error_msg)
+            raise SystemExit("ERROR: Source-images job failed: %s" % error_msg)
+
+
+# ---------------------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------------------
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Client for the rickshaw source-images web service"
+    )
+    parser.add_argument("--input", required=True,
+                        help="Path to input JSON (same format as rickshaw-source-images)")
+    parser.add_argument("--output", required=True,
+                        help="Path to write output JSON")
+    parser.add_argument("--service-url", required=True,
+                        help="Base URL of the source-images service")
+    parser.add_argument("--log-level", default="info",
+                        choices=["debug", "info", "warning", "error"],
+                        help="Logging level (default: info)")
+    args = parser.parse_args()
+
+    # Configure logging
+    level = getattr(logging, args.log_level.upper(), logging.INFO)
+    logging.basicConfig(level=level, format=LOG_FORMAT, stream=sys.stderr)
+
+    # 1. Read input JSON
+    logger.info("Reading input JSON: %s", args.input)
+    try:
+        with open(args.input, "r") as fh:
+            input_data = json.load(fh)
+    except (OSError, json.JSONDecodeError) as exc:
+        raise SystemExit("ERROR: Failed to read input JSON: %s" % exc)
+
+    # 2. Health check
+    _health_check(args.service_url)
+
+    # 3. Build API request (translate paths → base64 content)
+    logger.info("Building API request from input JSON")
+    api_request = _build_api_request(input_data)
+
+    # Pass through the log level to the service
+    api_request["log-level"] = args.log_level
+
+    # 4. Submit job
+    job_id = _submit_job(args.service_url, api_request)
+
+    # 5. Poll with log streaming
+    result = _poll_job(args.service_url, job_id)
+
+    # 6. Write output JSON
+    output_data = {"image-ids": result.get("image-ids", {})}
+    logger.info("Writing output JSON: %s", args.output)
+    try:
+        with open(args.output, "w") as fh:
+            json.dump(output_data, fh, indent=2)
+            fh.write("\n")
+    except OSError as exc:
+        raise SystemExit("ERROR: Failed to write output JSON: %s" % exc)
+
+    logger.info("Done — image sourcing complete")
+
+
+if __name__ == "__main__":
+    main()
