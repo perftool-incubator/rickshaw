@@ -712,7 +712,7 @@ sub source_container_image {
             }
         } else {
             $req_arg = shift(@requirements);
-            $skip_update = "false";
+            $skip_update = "true";
         }
 
         # keep separate cs_conf_file contents before and after md5
