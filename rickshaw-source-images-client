@@ -13,6 +13,7 @@ import argparse
 import base64
 import json
 import logging
+import lzma
 import os
 import sys
 import time
@@ -33,6 +34,18 @@ logger = logging.getLogger("rickshaw-source-images-client")
 # Directories and extensions to skip (matches the service's find_files())
 _SKIP_DIRS = {".git", "docs", ".github", "__pycache__"}
 _SKIP_EXTENSIONS = {".md"}
+
+
+def _resolve_json_path(path):
+    """Resolve a JSON file path, transparently handling .xz compression.
+
+    If *path* exists as-is, return it unchanged.  Otherwise, append ``.xz``
+    and return that.  This matches the toolbox library convention where JSON
+    files are stored with xz compression and a ``.xz`` extension.
+    """
+    if os.path.exists(path):
+        return path
+    return path + ".xz"
 
 
 def _b64_encode_file(path):
@@ -510,11 +523,16 @@ def main():
     logging.basicConfig(level=level, format=LOG_FORMAT, stream=sys.stderr)
 
     # 1. Read input JSON
-    logger.info("Reading input JSON: %s", args.input)
+    input_path = _resolve_json_path(args.input)
+    logger.info("Reading input JSON: %s", input_path)
     try:
-        with open(args.input, "r") as fh:
-            input_data = json.load(fh)
-    except (OSError, json.JSONDecodeError) as exc:
+        if input_path.endswith(".xz"):
+            with lzma.open(input_path, "rt") as fh:
+                input_data = json.load(fh)
+        else:
+            with open(input_path, "r") as fh:
+                input_data = json.load(fh)
+    except (OSError, lzma.LZMAError, json.JSONDecodeError) as exc:
         raise SystemExit("ERROR: Failed to read input JSON: %s" % exc)
 
     # 2. Health check
@@ -534,13 +552,19 @@ def main():
     result = _poll_job(args.service_url, job_id)
 
     # 6. Write output JSON
+    output_path = _resolve_json_path(args.output)
     output_data = {"image-ids": result.get("image-ids", {})}
-    logger.info("Writing output JSON: %s", args.output)
+    logger.info("Writing output JSON: %s", output_path)
     try:
-        with open(args.output, "w") as fh:
-            json.dump(output_data, fh, indent=2)
-            fh.write("\n")
-    except OSError as exc:
+        if output_path.endswith(".xz"):
+            with lzma.open(output_path, "wt") as fh:
+                json.dump(output_data, fh, indent=2)
+                fh.write("\n")
+        else:
+            with open(output_path, "w") as fh:
+                json.dump(output_data, fh, indent=2)
+                fh.write("\n")
+    except (OSError, lzma.LZMAError) as exc:
         raise SystemExit("ERROR: Failed to write output JSON: %s" % exc)
 
     logger.info("Done — image sourcing complete")
