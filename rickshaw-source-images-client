@@ -36,6 +36,13 @@ _SKIP_DIRS = {".git", "docs", ".github", "__pycache__"}
 _SKIP_EXTENSIONS = {".md"}
 
 
+def _str_to_bool(val):
+    """Convert a value to bool, handling Perl-style string 'true'/'false'."""
+    if isinstance(val, str):
+        return val.lower() == "true"
+    return bool(val)
+
+
 def _resolve_json_path(path):
     """Resolve a JSON file path, transparently handling .xz compression.
 
@@ -301,7 +308,7 @@ def _build_api_request(input_data):
         "workshop-pl-content": workshop_pl_content,
         "schema-content": schema_content,
         "registries-schema-content": registries_schema_content,
-        "force-builds": bool(input_data.get("workshop", {}).get("force-builds", False)),
+        "force-builds": _str_to_bool(input_data.get("workshop", {}).get("force-builds", False)),
     }
 
     # --- Rickshaw files (engine/ + userenvs/) ---
