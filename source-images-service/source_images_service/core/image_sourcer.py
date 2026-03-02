@@ -165,7 +165,7 @@ def _refresh_quay_expiration(
                 json=refresh_body,
                 timeout=30,
             )
-            if resp.status_code == 200 and resp.text.strip('"') == "Updated":
+            if resp.status_code in (200, 201) and resp.text.strip().strip('"') == "Updated":
                 ts_str = datetime.fromtimestamp(
                     current_expiration, tz=timezone.utc
                 ).strftime("%c")
@@ -173,6 +173,14 @@ def _refresh_quay_expiration(
                     f"\tRefreshed expiration (was {current_expiration} / {ts_str})"
                 )
                 return
+            elif resp.status_code not in (200, 201):
+                job.append_log(
+                    f"\tQuay refresh PUT failed (status={resp.status_code}): {resp.text}"
+                )
+            else:
+                job.append_log(
+                    f"\tQuay refresh PUT returned {resp.status_code} but unexpected body: {resp.text!r}"
+                )
         except Exception as exc:
             job.append_log(f"\tQuay refresh exception: {exc}")
 
