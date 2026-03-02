@@ -10,6 +10,7 @@ class Base64File(BaseModel):
 
     filename: str = Field(description="Relative path within its logical directory")
     content_base64: str = Field(description="Base64-encoded file content")
+    mode: int | None = Field(default=None, description="File permission bits (e.g. 0o755)")
 
 
 class Base64Directory(BaseModel):

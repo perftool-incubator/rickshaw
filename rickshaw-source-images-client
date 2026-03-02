@@ -88,6 +88,7 @@ def _collect_directory(dir_path):
                 files.append({
                     "filename": rel_path,
                     "content_base64": _b64_encode_file(full_path),
+                    "mode": os.stat(full_path).st_mode & 0o7777,
                 })
             except (OSError, PermissionError) as exc:
                 logger.warning("Skipping file %s: %s", full_path, exc)
@@ -329,6 +330,7 @@ def _build_api_request(input_data):
                             rickshaw_files["files"].append({
                                 "filename": rel_path,
                                 "content_base64": _b64_encode_file(full_path),
+                                "mode": os.stat(full_path).st_mode & 0o7777,
                             })
                         except (OSError, PermissionError) as exc:
                             logger.warning("Skipping rickshaw file %s: %s", full_path, exc)

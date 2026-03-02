@@ -57,6 +57,8 @@ def _write_file(base_dir: Path, b64file: Base64File) -> None:
     """Write a single Base64File into the base directory."""
     target = base_dir / b64file.filename
     _decode_and_write(target, b64file.content_base64)
+    if b64file.mode is not None:
+        target.chmod(b64file.mode)
 
 
 def _write_directory(base_dir: Path, b64dir: Base64Directory) -> None:
