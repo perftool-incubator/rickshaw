@@ -42,7 +42,8 @@ def run_cmd(
     cmd:
         The shell command string to execute.
     job:
-        If provided, command and output are appended to the job log.
+        If provided, command and output are appended to the job log when
+        the job's log level is ``debug``.  Timeout errors are always logged.
     timeout:
         Optional timeout in seconds.
     check:
@@ -52,7 +53,7 @@ def run_cmd(
     """
     logger.debug("run_cmd: %s", cmd)
     if job is not None:
-        job.append_log(f"run_cmd: {cmd}")
+        job.append_debug_log(f"run_cmd: {cmd}")
 
     try:
         result = subprocess.run(
@@ -78,9 +79,9 @@ def run_cmd(
     )
 
     if job is not None:
-        job.append_log(f"rc={run_result.return_code}")
+        job.append_debug_log(f"rc={run_result.return_code}")
         if run_result.output:
-            job.append_log(run_result.output)
+            job.append_debug_log(run_result.output)
 
     if check and run_result.return_code != 0:
         raise SubprocessError(

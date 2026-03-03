@@ -33,6 +33,7 @@ class Job:
     result: dict[str, Any] | None = None
     error: str | None = None
     log_buffer: str = ""
+    log_level: str = "info"
     created_at: float = field(default_factory=time.time)
     started_at: float | None = None
     completed_at: float | None = None
@@ -43,6 +44,11 @@ class Job:
     def append_log(self, message: str) -> None:
         with self._lock:
             self.log_buffer += message + "\n"
+
+    def append_debug_log(self, message: str) -> None:
+        """Append to log buffer only when the job's log level is 'debug'."""
+        if self.log_level == "debug":
+            self.append_log(message)
 
 
 class JobManager:
@@ -63,7 +69,7 @@ class JobManager:
     def submit_job(self, request: SourceImagesRequest) -> Job:
         """Create a new job and submit it for execution. Returns the Job."""
         job_id = str(uuid.uuid4())
-        job = Job(id=job_id, request=request)
+        job = Job(id=job_id, request=request, log_level=request.log_level)
 
         # Count total items for progress tracking
         total = sum(
@@ -138,7 +144,7 @@ class JobManager:
         """Execute the job worker. Called in a thread pool thread."""
         job.status = JobStatus.RUNNING
         job.started_at = time.time()
-        job.append_log(f"Job {job.id} started")
+        job.append_debug_log(f"Job {job.id} started")
 
         try:
             assert job.request is not None
@@ -146,13 +152,12 @@ class JobManager:
                 job.request, self._config.temp_dir
             )
             job.workspace = workspace
-            job.append_log(f"Workspace materialized at {workspace.root}")
+            job.append_debug_log(f"Workspace materialized at {workspace.root}")
 
             result = source_all_images(job)
 
             job.result = result
             job.status = JobStatus.COMPLETED
-            job.append_log("Job completed successfully")
             logger.info("Job %s completed", job.id)
 
         except Exception as exc:
