@@ -233,7 +233,7 @@ def _build_api_request(input_data):
         if "push-token" in reg_data:
             token_path = reg_data["push-token"]
             if os.path.isfile(token_path):
-                logger.info("Reading push token file for registry type: %s", reg_type)
+                logger.debug("Reading push token file for registry type: %s", reg_type)
                 push_tokens[reg_type] = _b64_encode_file(token_path)
             else:
                 logger.warning("Push token file not found for %s: path not accessible", reg_type)
@@ -241,7 +241,7 @@ def _build_api_request(input_data):
         if "pull-token" in reg_data:
             token_path = reg_data["pull-token"]
             if os.path.isfile(token_path):
-                logger.info("Reading pull token file for registry type: %s", reg_type)
+                logger.debug("Reading pull token file for registry type: %s", reg_type)
                 pull_tokens[reg_type] = _b64_encode_file(token_path)
             else:
                 logger.warning("Pull token file not found for %s: path not accessible", reg_type)
@@ -249,7 +249,7 @@ def _build_api_request(input_data):
         if "quay-refresh-expiration-token-file" in reg_data:
             token_path = reg_data["quay-refresh-expiration-token-file"]
             if os.path.isfile(token_path):
-                logger.info("Reading quay refresh expiration token file for registry type: %s", reg_type)
+                logger.debug("Reading quay refresh expiration token file for registry type: %s", reg_type)
                 with open(token_path, "r") as fh:
                     quay_refresh_tokens[reg_type] = fh.read().strip()
             else:
@@ -276,7 +276,7 @@ def _build_api_request(input_data):
     for bench_name, bench_path in bench_dirs_input.items():
         if os.path.isdir(bench_path):
             api_bench_dirs[bench_name] = _collect_directory(bench_path)
-            logger.info("Collected bench dir '%s': %d files",
+            logger.debug("Collected bench dir '%s': %d files",
                         bench_name, len(api_bench_dirs[bench_name]["files"]))
         else:
             logger.warning("Bench directory not found: %s", bench_path)
@@ -289,7 +289,7 @@ def _build_api_request(input_data):
         for util_name, util_path in utility_dirs_input.items():
             if os.path.isdir(util_path):
                 api_utility_dirs[util_name] = _collect_directory(util_path)
-                logger.info("Collected utility dir '%s': %d files",
+                logger.debug("Collected utility dir '%s': %d files",
                             util_name, len(api_utility_dirs[util_name]["files"]))
         if api_utility_dirs:
             api_req["utility-dirs"] = api_utility_dirs
@@ -347,7 +347,7 @@ def _build_api_request(input_data):
                         except (OSError, PermissionError) as exc:
                             logger.warning("Skipping rickshaw file %s: %s", full_path, exc)
         rickshaw_files["files"].sort(key=lambda f: f["filename"])
-        logger.info("Collected %d rickshaw files", len(rickshaw_files["files"]))
+        logger.debug("Collected %d rickshaw files", len(rickshaw_files["files"]))
     api_req["rickshaw-files"] = rickshaw_files
 
     # --- Roadblock workshop.json ---
@@ -360,7 +360,7 @@ def _build_api_request(input_data):
     # --- Toolbox directory ---
     if toolbox_home and os.path.isdir(toolbox_home):
         api_req["toolbox-dir"] = _collect_directory(toolbox_home)
-        logger.info("Collected toolbox dir: %d files", len(api_req["toolbox-dir"]["files"]))
+        logger.debug("Collected toolbox dir: %d files", len(api_req["toolbox-dir"]["files"]))
     else:
         raise SystemExit(
             "ERROR: TOOLBOX_HOME directory not found. "
@@ -418,7 +418,7 @@ def _write_result_files(result, input_data):
                 content = base64.b64decode(content_b64)
                 with lzma.open(dest_path, "wb") as fh:
                     fh.write(content)
-                logger.info("Wrote result file: %s", dest_path)
+                logger.debug("Wrote result file: %s", dest_path)
             except (OSError, ValueError, lzma.LZMAError) as exc:
                 logger.warning("Failed to write result file %s: %s", dest_path, exc)
 
@@ -430,14 +430,14 @@ def _write_result_files(result, input_data):
 def _health_check(service_url):
     """Check service health; raise SystemExit if unreachable."""
     url = service_url.rstrip("/") + "/api/v1/health"
-    logger.info("Health check: %s", url)
+    logger.debug("Health check: %s", url)
     status, body = _http_request(url, timeout=10)
     if status != 200:
         raise SystemExit(
             "ERROR: Source-images service health check failed (HTTP %d): %s"
             % (status, body)
         )
-    logger.info("Service healthy — version=%s, active-jobs=%s, pending-jobs=%s",
+    logger.debug("Service healthy — version=%s, active-jobs=%s, pending-jobs=%s",
                 body.get("version", "?"),
                 body.get("active-jobs", "?"),
                 body.get("pending-jobs", "?"))
@@ -450,7 +450,7 @@ def _submit_job(service_url, api_request):
     # Log payload size but never the content
     payload_json = json.dumps(api_request)
     payload_mb = len(payload_json) / (1024 * 1024)
-    logger.info("Submitting job — payload size: %.2f MB", payload_mb)
+    logger.debug("Submitting job — payload size: %.2f MB", payload_mb)
 
     status, body = _http_request(url, method="POST", json_body=api_request, timeout=120)
     if status not in (200, 201, 202):
@@ -525,13 +525,13 @@ def _poll_job(service_url, job_id):
         progress = status_body.get("progress")
 
         if progress:
-            logger.info("Poll #%d [%.0fs] — status=%s, progress=%s/%s (%s)",
+            logger.debug("Poll #%d [%.0fs] — status=%s, progress=%s/%s (%s)",
                         poll_count, elapsed, job_status,
                         progress.get("completed-items", "?"),
                         progress.get("total-items", "?"),
                         progress.get("current-benchmark", "?"))
         else:
-            logger.info("Poll #%d [%.0fs] — status=%s", poll_count, elapsed, job_status)
+            logger.debug("Poll #%d [%.0fs] — status=%s", poll_count, elapsed, job_status)
 
         if job_status == "completed":
             # Drain remaining logs
@@ -599,7 +599,7 @@ def main():
 
     # 1. Read input JSON
     input_path = _resolve_json_path(args.input)
-    logger.info("Reading input JSON: %s", input_path)
+    logger.debug("Reading input JSON: %s", input_path)
     try:
         if input_path.endswith(".xz"):
             with lzma.open(input_path, "rt") as fh:
@@ -614,7 +614,7 @@ def main():
     _health_check(args.service_url)
 
     # 3. Build API request (translate paths → base64 content)
-    logger.info("Building API request from input JSON")
+    logger.debug("Building API request from input JSON")
     api_request = _build_api_request(input_data)
 
     # Pass through the log level to the service
@@ -632,7 +632,7 @@ def main():
     # 7. Write output JSON
     output_path = _resolve_json_path(args.output)
     output_data = {"image-ids": result.get("image-ids", {})}
-    logger.info("Writing output JSON: %s", output_path)
+    logger.debug("Writing output JSON: %s", output_path)
     try:
         if output_path.endswith(".xz"):
             with lzma.open(output_path, "wt") as fh:
