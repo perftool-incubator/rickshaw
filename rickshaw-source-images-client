@@ -204,6 +204,7 @@ def _build_api_request(input_data):
     api_registries = {}
     push_tokens = {}
     pull_tokens = {}
+    quay_refresh_tokens = {}
 
     for reg_type, reg_data in registries.items():
         reg_copy = {}
@@ -245,11 +246,22 @@ def _build_api_request(input_data):
             else:
                 logger.warning("Pull token file not found for %s: path not accessible", reg_type)
 
+        if "quay-refresh-expiration-token-file" in reg_data:
+            token_path = reg_data["quay-refresh-expiration-token-file"]
+            if os.path.isfile(token_path):
+                logger.info("Reading quay refresh expiration token file for registry type: %s", reg_type)
+                with open(token_path, "r") as fh:
+                    quay_refresh_tokens[reg_type] = fh.read().strip()
+            else:
+                logger.warning("Quay refresh expiration token file not found for %s: %s", reg_type, token_path)
+
     api_req["registries"] = api_registries
     if push_tokens:
         api_req["push-token-content"] = push_tokens
     if pull_tokens:
         api_req["pull-token-content"] = pull_tokens
+    if quay_refresh_tokens:
+        api_req["quay-refresh-expiration-tokens"] = quay_refresh_tokens
 
     # --- registries-json file ---
     registries_json_path = input_data.get("registries-json", "")
@@ -361,12 +373,6 @@ def _build_api_request(input_data):
         api_req["toolbox-workshop-json"] = _b64_encode_file(toolbox_workshop)
     else:
         raise SystemExit("ERROR: toolbox workshop.json not found: %s" % toolbox_workshop)
-
-    # --- Quay refresh expiration tokens ---
-    quay_tokens = input_data.get("quay-refresh-expiration-tokens")
-    if quay_tokens:
-        # These are already plain string values (not file paths) in the input JSON
-        api_req["quay-refresh-expiration-tokens"] = quay_tokens
 
     return api_req
 
