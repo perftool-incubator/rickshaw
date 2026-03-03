@@ -749,7 +749,7 @@ def source_all_images(job: Job, build_coordinator: BuildCoordinator) -> dict[str
     workshop_built_tags: dict[str, int] = {}
     completed = 0
 
-    job.append_log("rickshaw-source-images: starting image sourcing")
+    job.append_log("source-images-service: starting image sourcing")
     logger.info("[%s] Starting image sourcing", job.id[:8])
 
     for benchmark in sorted(request.image_ids.keys()):
@@ -786,7 +786,7 @@ def source_all_images(job: Job, build_coordinator: BuildCoordinator) -> dict[str
         total_items=job.progress.total_items,
     )
 
-    job.append_log("rickshaw-source-images: image sourcing complete")
+    job.append_log("source-images-service: image sourcing complete")
     logger.info("[%s] Image sourcing complete", job.id[:8])
 
     original_userenvs = set(request.userenv_files.keys())
