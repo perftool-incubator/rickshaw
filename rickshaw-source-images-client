@@ -507,7 +507,10 @@ def _poll_job(service_url, job_id):
                 new_log = log_body.get("log", "")
                 if new_log:
                     for line in new_log.splitlines():
-                        print("[source-images-service] %s" % line, flush=True)
+                        if logger.isEnabledFor(logging.DEBUG):
+                            print("[source-images-service] %s" % line, flush=True)
+                        else:
+                            print(line, flush=True)
                     log_offset = log_body.get("total-length", log_offset + len(new_log))
         except SystemExit:
             # Log fetch failure is non-fatal during polling
@@ -542,7 +545,10 @@ def _poll_job(service_url, job_id):
                     remaining = log_body.get("log", "")
                     if remaining:
                         for line in remaining.splitlines():
-                            print("[source-images-service] %s" % line, flush=True)
+                            if logger.isEnabledFor(logging.DEBUG):
+                                print("[source-images-service] %s" % line, flush=True)
+                            else:
+                                print(line, flush=True)
             except SystemExit:
                 pass
 
@@ -564,7 +570,10 @@ def _poll_job(service_url, job_id):
                     remaining = log_body.get("log", "")
                     if remaining:
                         for line in remaining.splitlines():
-                            print("[source-images-service] %s" % line, flush=True)
+                            if logger.isEnabledFor(logging.DEBUG):
+                                print("[source-images-service] %s" % line, flush=True)
+                            else:
+                                print(line, flush=True)
             except SystemExit:
                 pass
 
@@ -595,7 +604,11 @@ def main():
 
     # Configure logging
     level = getattr(logging, args.log_level.upper(), logging.INFO)
-    logging.basicConfig(level=level, format=LOG_FORMAT, stream=sys.stderr)
+    if level == logging.DEBUG:
+        log_format = LOG_FORMAT
+    else:
+        log_format = "%(message)s"
+    logging.basicConfig(level=level, format=log_format, stream=sys.stderr)
 
     # 1. Read input JSON
     input_path = _resolve_json_path(args.input)
