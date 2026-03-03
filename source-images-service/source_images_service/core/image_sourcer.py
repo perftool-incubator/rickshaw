@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import json
 import logging
 import re
@@ -618,6 +619,56 @@ def _source_container_image(
     return image
 
 
+def _collect_result_files(
+    workspace: WorkspacePaths,
+    original_userenvs: set[str],
+) -> dict[str, list[dict[str, str]]]:
+    """Collect build artifact files from the workspace for return to the client.
+
+    Gathers:
+    - All files from workspace.build/ (tag-calc-data and build stdout files)
+    - Intermediate userenv-*.json files from workspace.config/ that were
+      generated during multi-stage builds (excludes original userenvs)
+
+    Each file's content is base64-encoded for transport over JSON.
+    """
+    result: dict[str, list[dict[str, str]]] = {"config": [], "workshop": []}
+
+    # Collect build artifacts (tag-calc-data, stdout files)
+    if workspace.build.is_dir():
+        for fpath in sorted(workspace.build.iterdir()):
+            if fpath.is_file():
+                result["workshop"].append({
+                    "filename": fpath.name,
+                    "content_base64": base64.b64encode(
+                        fpath.read_bytes()
+                    ).decode("ascii"),
+                })
+
+    # Collect intermediate userenv JSON files
+    if workspace.config.is_dir():
+        for fpath in sorted(workspace.config.glob("userenv-*.json")):
+            # Extract the tag from "userenv-<tag>.json"
+            stem = fpath.stem  # "userenv-<tag>"
+            tag = stem[len("userenv-"):]
+            if tag not in original_userenvs:
+                result["config"].append({
+                    "filename": fpath.name,
+                    "content_base64": base64.b64encode(
+                        fpath.read_bytes()
+                    ).decode("ascii"),
+                })
+
+    config_count = len(result["config"])
+    workshop_count = len(result["workshop"])
+    logger.debug(
+        "Collected %d config and %d workshop result files",
+        config_count, workshop_count,
+    )
+
+    return result
+
+
 def source_all_images(job: Job) -> dict[str, Any]:
     """Top-level entry point — port of Perl main loop (L1078-1089).
 
@@ -670,4 +721,8 @@ def source_all_images(job: Job) -> dict[str, Any]:
     )
 
     job.append_log("rickshaw-source-images: image sourcing complete")
-    return {"image-ids": image_ids}
+
+    original_userenvs = set(request.userenv_files.keys())
+    result_files = _collect_result_files(workspace, original_userenvs)
+
+    return {"image-ids": image_ids, "result-files": result_files}
