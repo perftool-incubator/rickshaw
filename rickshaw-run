@@ -2788,6 +2788,15 @@ debug_log (sprintf "image_ids (before):\n" . Dumper \%image_ids);
             $image_ids{$bench_or_tool}{$userenv}{'image'} = $$output_ref{'image-ids'}{$bench_or_tool}{$userenv}{'image'};
         }
     }
+    log_print "Userenv image summary:\n";
+    foreach my $bench_or_tool (sort keys %image_ids) {
+        foreach my $userenv (sort keys %{$image_ids{$bench_or_tool}}) {
+            my $image = $image_ids{$bench_or_tool}{$userenv}{'image'};
+            $image =~ s/::.*//;  # strip private registry pull-token suffix
+            log_print sprintf "  %s / %s: %s\n",
+                $bench_or_tool, $userenv, $image;
+        }
+    }
 }
 debug_log(sprintf "image_ids(after):\n" . Dumper \%image_ids);
 
