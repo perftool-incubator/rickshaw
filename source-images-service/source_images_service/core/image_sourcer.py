@@ -603,6 +603,8 @@ def _source_container_image(
                 acquired = True
 
         try:
+            job.append_log(f"\tBuilding stage {i + 1} ({tag})")
+            logger.info("[%s] Building stage %d (%s)", job.id[:8], i + 1, tag)
             begin = time.time()
             workshop_build_image(
                 userenv,
