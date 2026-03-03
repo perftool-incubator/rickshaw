@@ -159,9 +159,17 @@ def calc_image_md5(
     # --- Step 4: compute MD5 ---
     md5 = hashlib.md5()
 
+    # The workspace root is a random temp directory (mkdtemp) that changes
+    # every run.  Replace it with a fixed placeholder before feeding data
+    # into the hash so that identical inputs always produce the same tag.
+    workspace_root_bytes = str(workspace_paths.root).encode()
+    canonical_root_bytes = b"/RICKSHAW_WORKSPACE"
+
     # Hash config output first
     config_text = "".join(config_data)
-    md5.update(config_text.encode())
+    config_bytes = config_text.encode()
+    config_bytes = config_bytes.replace(workspace_root_bytes, canonical_root_bytes)
+    md5.update(config_bytes)
 
     # Write audit file
     build_dir = workspace_paths.build
@@ -192,8 +200,8 @@ def calc_image_md5(
                         audit.write("<binary data>\n")
                     audit.write("\n")
 
-                    # Hash binary content
-                    md5.update(data)
+                    # Hash binary content (with workspace path normalized)
+                    md5.update(data.replace(workspace_root_bytes, canonical_root_bytes))
             except OSError as exc:
                 raise HashCalculationError(
                     f"Cannot read file for hashing: {filepath}"
