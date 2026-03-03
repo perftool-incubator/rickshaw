@@ -272,6 +272,8 @@ def _source_container_image(
         f"Sourcing container image for userenv '{userenv}' ({registry_type}) "
         f"and benchmark/tool '{benchmark}'; this may take a few minutes"
     )
+    logger.info("[%s] Sourcing image: userenv=%s benchmark=%s (%s)",
+                job.id[:8], userenv, benchmark, registry_type)
 
     # Build ordered requirements list
     requirements = build_reqs(
@@ -394,15 +396,19 @@ def _source_container_image(
 
         if i == -1:
             job.append_log("Did not find any existing stages")
+            logger.info("[%s] No existing stages found, building all %d", job.id[:8], num_images)
         elif i < num_images - 1:
             job.append_log(
                 f"Found stage number {i + 1} (of {num_images}), "
                 f"need to build {num_images - 1 - i} stage(s)"
             )
+            logger.info("[%s] Found stage %d of %d, building %d remaining",
+                        job.id[:8], i + 1, num_images, num_images - 1 - i)
         elif i == num_images - 1:
             job.append_log(
                 f"Found most complete stage (number {i + 1})"
             )
+            logger.info("[%s] All %d stages found, no build needed", job.id[:8], num_images)
         else:
             raise SourceImagesError(
                 f"Something went wrong, stage number: {i + 1}, "
@@ -562,6 +568,7 @@ def _source_container_image(
         )
         end = time.time()
         job.append_log(f"\tBuilding took {int(end - begin)} seconds")
+        logger.info("[%s] Built stage %d in %ds", job.id[:8], i + 1, int(end - begin))
 
         # Check for race condition — skip push if image now exists remotely
         if remote_image_found(
@@ -585,6 +592,7 @@ def _source_container_image(
             )
             end = time.time()
             job.append_log(f"\tPushing took {int(end - begin)} seconds")
+            logger.info("[%s] Pushed stage %d in %ds", job.id[:8], i + 1, int(end - begin))
 
         workshop_built_tags[workshop_args[i]["tag"]] = 1
         local_images.append(workshop_args[i]["tag"])
@@ -687,9 +695,11 @@ def source_all_images(job: Job) -> dict[str, Any]:
     completed = 0
 
     job.append_log("rickshaw-source-images: starting image sourcing")
+    logger.info("[%s] Starting image sourcing", job.id[:8])
 
     for benchmark in sorted(request.image_ids.keys()):
         job.append_log(f"Working on {benchmark} benchmark or tool")
+        logger.info("[%s] Working on %s", job.id[:8], benchmark)
         image_ids[benchmark] = {}
 
         for userenv in sorted(request.image_ids[benchmark].keys()):
@@ -721,6 +731,7 @@ def source_all_images(job: Job) -> dict[str, Any]:
     )
 
     job.append_log("rickshaw-source-images: image sourcing complete")
+    logger.info("[%s] Image sourcing complete", job.id[:8])
 
     original_userenvs = set(request.userenv_files.keys())
     result_files = _collect_result_files(workspace, original_userenvs)
