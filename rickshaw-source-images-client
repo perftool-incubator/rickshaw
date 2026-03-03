@@ -464,6 +464,13 @@ def _submit_job(service_url, api_request):
         raise SystemExit("ERROR: No job-id returned in submit response: %s" % body)
 
     logger.info("Job submitted — job-id: %s, status: %s", job_id, body.get("status", "?"))
+
+    summary_lines = []
+    for benchmark, userenvs in sorted(api_request.get("image-ids", {}).items()):
+        summary_lines.append("  %s: %s" % (benchmark, ", ".join(sorted(userenvs.keys()))))
+    if summary_lines:
+        logger.info("Job request summary:\n%s", "\n".join(summary_lines))
+
     return job_id
 
 
