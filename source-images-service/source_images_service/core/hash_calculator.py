@@ -1,4 +1,4 @@
-"""MD5 image tag calculation — port of Perl calc_image_md5() (L96-261)."""
+"""SHA256 image tag calculation — port of Perl calc_image_md5() (L96-261)."""
 
 from __future__ import annotations
 
@@ -37,12 +37,12 @@ def _extract_after_marker(lines: list[str], marker: str) -> list[str]:
 def _download_remote_file(url: str, *, job: Job | None = None) -> str:
     """Download *url* to a deterministic temp path and return that path.
 
-    The temp filename is ``/tmp/rickshaw-run.<md5(url)>`` so that the same
+    The temp filename is ``/tmp/rickshaw-run.<sha256(url)>`` so that the same
     URL always maps to the same local file.
 
     Raises HashCalculationError on download failure.
     """
-    url_hash = hashlib.md5(url.encode()).hexdigest()
+    url_hash = hashlib.sha256(url.encode()).hexdigest()
     dest = f"/tmp/rickshaw-run.{url_hash}"
 
     curl_cmd = (
@@ -70,7 +70,7 @@ def _download_remote_file(url: str, *, job: Job | None = None) -> str:
     return dest
 
 
-def calc_image_md5(
+def calc_image_hash(
     workshop_base_cmd: str,
     userenv_arg: str,
     req_args: str | None,
@@ -82,17 +82,17 @@ def calc_image_md5(
     *,
     job: Job | None = None,
 ) -> str:
-    """Calculate an MD5-based image tag for a workshop build.
+    """Calculate a SHA256-based image tag for a workshop build.
 
     The tag encodes both the workshop config output **and** the binary
     content of every file that workshop identifies as part of the image.
 
-    Returns ``<md5hex>_<arch_suffix>``.
+    Returns ``<sha256hex>_<arch_suffix>``.
 
     Raises HashCalculationError or SubprocessError on failure.
     """
     logger.debug(
-        "calc_image_md5: userenv=%s benchmark_tool=%s stage=%d",
+        "calc_image_hash: userenv=%s benchmark_tool=%s stage=%d",
         userenv, benchmark_tool, stage,
     )
 
@@ -156,8 +156,8 @@ def calc_image_md5(
             logger.debug("Entry is a directory, expanding: %s", dumped_file)
             files.extend(find_files(dumped_file))
 
-    # --- Step 4: compute MD5 ---
-    md5 = hashlib.md5()
+    # --- Step 4: compute SHA256 ---
+    sha256 = hashlib.sha256()
 
     # The workspace root is a random temp directory (mkdtemp) that changes
     # every run.  Replace it with a fixed placeholder before feeding data
@@ -169,7 +169,7 @@ def calc_image_md5(
     config_text = "".join(config_data)
     config_bytes = config_text.encode()
     config_bytes = config_bytes.replace(workspace_root_bytes, canonical_root_bytes)
-    md5.update(config_bytes)
+    sha256.update(config_bytes)
 
     # Write audit file
     build_dir = workspace_paths.build
@@ -201,14 +201,14 @@ def calc_image_md5(
                     audit.write("\n")
 
                     # Hash binary content (with workspace path normalized)
-                    md5.update(data.replace(workspace_root_bytes, canonical_root_bytes))
+                    sha256.update(data.replace(workspace_root_bytes, canonical_root_bytes))
             except OSError as exc:
                 raise HashCalculationError(
                     f"Cannot read file for hashing: {filepath}"
                 ) from exc
 
-        full_hash = f"{md5.hexdigest()}_{arch_suffix}"
+        full_hash = f"{sha256.hexdigest()}_{arch_suffix}"
         audit.write(f"{item_header}Hash: {full_hash}\n")
 
-    logger.debug("calc_image_md5: returning %s", full_hash)
+    logger.debug("calc_image_hash: returning %s", full_hash)
     return full_hash

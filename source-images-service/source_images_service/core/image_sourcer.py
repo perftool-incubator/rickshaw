@@ -17,7 +17,7 @@ from source_images_service.core.exceptions import (
     RegistryError,
     SourceImagesError,
 )
-from source_images_service.core.hash_calculator import calc_image_md5
+from source_images_service.core.hash_calculator import calc_image_hash
 from source_images_service.core.registry_ops import (
     delete_local_image,
     local_image_found,
@@ -39,7 +39,7 @@ logger = logging.getLogger(__name__)
 def _write_cs_conf(path: Path, quay_label: str | None = None) -> None:
     """Write the container-spec config JSON.
 
-    Called twice per stage: once without quay label (for MD5 calculation),
+    Called twice per stage: once without quay label (for hash calculation),
     once with (for the actual build).
     """
     cs_conf: dict[str, Any] = {
@@ -297,10 +297,10 @@ def _source_container_image(
             req_arg = requirements.pop(0)
             skip_update = "true"
 
-        # Write cs-conf.json without quay label (for MD5 calculation)
+        # Write cs-conf.json without quay label (for hash calculation)
         _write_cs_conf(cs_conf_file)
 
-        tag = calc_image_md5(
+        tag = calc_image_hash(
             workshop_base_cmd,
             userenv_arg,
             req_arg if req_arg else None,
