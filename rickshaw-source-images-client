@@ -372,6 +372,52 @@ def _build_api_request(input_data):
 
 
 # ---------------------------------------------------------------------------
+# Result file extraction
+# ---------------------------------------------------------------------------
+
+def _write_result_files(result, input_data):
+    """Write build artifact files returned by the service to local directories.
+
+    The service returns base64-encoded diagnostic/audit files in
+    ``result["result-files"]`` with two categories:
+
+    - ``config``: intermediate userenv JSON files → written to dirs.config
+    - ``workshop``: tag-calc-data and build stdout → written to dirs.workshop-build
+    """
+    result_files = result.get("result-files")
+    if not result_files:
+        return
+
+    dirs = input_data.get("dirs", {})
+    dir_map = {
+        "config": dirs.get("config", ""),
+        "workshop": dirs.get("workshop-build", ""),
+    }
+
+    for category, target_dir in dir_map.items():
+        files = result_files.get(category, [])
+        if not files or not target_dir:
+            continue
+
+        os.makedirs(target_dir, exist_ok=True)
+
+        for entry in files:
+            filename = entry.get("filename", "")
+            content_b64 = entry.get("content_base64", "")
+            if not filename or not content_b64:
+                continue
+
+            dest_path = os.path.join(target_dir, filename + ".xz")
+            try:
+                content = base64.b64decode(content_b64)
+                with lzma.open(dest_path, "wb") as fh:
+                    fh.write(content)
+                logger.info("Wrote result file: %s", dest_path)
+            except (OSError, ValueError, lzma.LZMAError) as exc:
+                logger.warning("Failed to write result file %s: %s", dest_path, exc)
+
+
+# ---------------------------------------------------------------------------
 # API interaction
 # ---------------------------------------------------------------------------
 
@@ -567,7 +613,10 @@ def main():
     # 5. Poll with log streaming
     result = _poll_job(args.service_url, job_id)
 
-    # 6. Write output JSON
+    # 6. Write build artifact files to result directories
+    _write_result_files(result, input_data)
+
+    # 7. Write output JSON
     output_path = _resolve_json_path(args.output)
     output_data = {"image-ids": result.get("image-ids", {})}
     logger.info("Writing output JSON: %s", output_path)
