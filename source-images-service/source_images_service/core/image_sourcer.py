@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, Any
 
 import httpx
 
+from source_images_service.core.build_coordinator import BuildCoordinator
 from source_images_service.core.exceptions import (
     RegistryError,
     SourceImagesError,
@@ -214,6 +215,7 @@ def _source_container_image(
     workspace: WorkspacePaths,
     job: Job,
     workshop_built_tags: dict[str, int],
+    build_coordinator: BuildCoordinator,
 ) -> str:
     """Source a single container image — port of Perl source_container_image() (L592-1009).
 
@@ -548,57 +550,108 @@ def _source_container_image(
 
     # Build missing stages
     while i <= num_images - 1:
+        tag = workshop_args[i]["tag"]
         job.append_log(
-            f"Processing stage {i + 1} ({workshop_args[i]['tag']})..."
+            f"Processing stage {i + 1} ({tag})..."
         )
-        begin = time.time()
-        workshop_build_image(
-            userenv,
-            registry_type,
-            benchmark,
-            workshop_base_cmd,
-            i + 1,
-            workshop_args[i]["userenv"],
-            workshop_args[i]["reqs"] if workshop_args[i]["reqs"] else None,
-            workshop_args[i]["tag"],
-            workshop_args[i]["skip-update"],
-            request.registries,
-            workspace,
-            job=job,
-        )
-        end = time.time()
-        job.append_log(f"\tBuilding took {int(end - begin)} seconds")
-        logger.info("[%s] Built stage %d in %ds", job.id[:8], i + 1, int(end - begin))
 
-        # Check for race condition — skip push if image now exists remotely
-        if remote_image_found(
-            workshop_args[i]["tag"],
-            registry_type,
-            request.registries,
-            workspace,
-            job=job,
-        ):
-            job.append_log(
-                "\tSkipping push because image now exists remotely"
-            )
-        else:
+        acquired = False
+
+        # Non-force-builds: coordinate with other jobs building the same tag
+        if not force_builds:
+            wait_event = build_coordinator.try_acquire(tag)
+            if wait_event is not None:
+                job.append_log(
+                    f"\tAnother job is already building tag {tag}, waiting..."
+                )
+                logger.info("[%s] Waiting for another builder of tag %s",
+                            job.id[:8], tag)
+                wait_start = time.time()
+                wait_event.wait()
+                wait_duration = int(time.time() - wait_start)
+                job.append_log(
+                    f"\tOther builder finished (waited {wait_duration}s)"
+                )
+                logger.info("[%s] Wait for tag %s finished (%ds)",
+                            job.id[:8], tag, wait_duration)
+
+                # Check registry — if image landed, skip build+push
+                if remote_image_found(
+                    tag,
+                    registry_type,
+                    request.registries,
+                    workspace,
+                    job=job,
+                ):
+                    job.append_log(
+                        "\tImage found in registry after wait, skipping build"
+                    )
+                    logger.info("[%s] Skipping build of tag %s (found after wait)",
+                                job.id[:8], tag)
+                    workshop_built_tags[tag] = 1
+                    image = f"{reg.url_details.dest_image_url}:{tag}"
+                    i += 1
+                    continue
+                else:
+                    job.append_log(
+                        "\tImage NOT found after wait, building it ourselves"
+                    )
+                    logger.warning("[%s] Tag %s not found after wait, building",
+                                   job.id[:8], tag)
+                    # Fall through to build without re-acquiring
+            else:
+                acquired = True
+
+        try:
             begin = time.time()
-            push_local_image(
-                workshop_args[i]["tag"],
+            workshop_build_image(
+                userenv,
                 registry_type,
+                benchmark,
+                workshop_base_cmd,
+                i + 1,
+                workshop_args[i]["userenv"],
+                workshop_args[i]["reqs"] if workshop_args[i]["reqs"] else None,
+                tag,
+                workshop_args[i]["skip-update"],
                 request.registries,
                 workspace,
                 job=job,
             )
             end = time.time()
-            job.append_log(f"\tPushing took {int(end - begin)} seconds")
-            logger.info("[%s] Pushed stage %d in %ds", job.id[:8], i + 1, int(end - begin))
+            job.append_log(f"\tBuilding took {int(end - begin)} seconds")
+            logger.info("[%s] Built stage %d in %ds", job.id[:8], i + 1, int(end - begin))
 
-        workshop_built_tags[workshop_args[i]["tag"]] = 1
-        local_images.append(workshop_args[i]["tag"])
-        image = (
-            f"{reg.url_details.dest_image_url}:{workshop_args[i]['tag']}"
-        )
+            # Check for race condition — skip push if image now exists remotely
+            if remote_image_found(
+                tag,
+                registry_type,
+                request.registries,
+                workspace,
+                job=job,
+            ):
+                job.append_log(
+                    "\tSkipping push because image now exists remotely"
+                )
+            else:
+                begin = time.time()
+                push_local_image(
+                    tag,
+                    registry_type,
+                    request.registries,
+                    workspace,
+                    job=job,
+                )
+                end = time.time()
+                job.append_log(f"\tPushing took {int(end - begin)} seconds")
+                logger.info("[%s] Pushed stage %d in %ds", job.id[:8], i + 1, int(end - begin))
+        finally:
+            if acquired:
+                build_coordinator.release(tag)
+
+        workshop_built_tags[tag] = 1
+        local_images.append(tag)
+        image = f"{reg.url_details.dest_image_url}:{tag}"
         i += 1
 
     # Delete all local images (including the initial userenv base image)
@@ -677,7 +730,7 @@ def _collect_result_files(
     return result
 
 
-def source_all_images(job: Job) -> dict[str, Any]:
+def source_all_images(job: Job, build_coordinator: BuildCoordinator) -> dict[str, Any]:
     """Top-level entry point — port of Perl main loop (L1078-1089).
 
     Iterates sorted benchmarks x sorted userenvs, calls
@@ -719,6 +772,7 @@ def source_all_images(job: Job) -> dict[str, Any]:
                 workspace,
                 job,
                 workshop_built_tags,
+                build_coordinator,
             )
 
             job.append_log(f"Image is: {image}")

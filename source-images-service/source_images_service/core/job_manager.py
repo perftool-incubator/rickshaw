@@ -11,6 +11,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from source_images_service.config import ServiceConfig
+from source_images_service.core.build_coordinator import BuildCoordinator
 from source_images_service.core.image_sourcer import source_all_images
 from source_images_service.core.workspace import (
     WorkspacePaths,
@@ -58,6 +59,7 @@ class JobManager:
         self._config = config
         self._jobs: dict[str, Job] = {}
         self._lock = threading.Lock()
+        self._build_coordinator = BuildCoordinator()
         self._executor = ThreadPoolExecutor(
             max_workers=config.worker_pool_size,
             thread_name_prefix="source-images-worker",
@@ -154,7 +156,7 @@ class JobManager:
             job.workspace = workspace
             job.append_debug_log(f"Workspace materialized at {workspace.root}")
 
-            result = source_all_images(job)
+            result = source_all_images(job, self._build_coordinator)
 
             job.result = result
             job.status = JobStatus.COMPLETED
