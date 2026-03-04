@@ -348,6 +348,7 @@ def _source_container_image(
 
     num_images = len(workshop_args)
     force_builds = request.workshop.force_builds
+    existing_stages: set[int] = set()
 
     if not force_builds:
         # Search for existing stages, most-complete first
@@ -448,12 +449,45 @@ def _source_container_image(
             job.append_log(
                 f"Found most complete stage (number {i + 1})"
             )
-            logger.info("[%s] All %d stages found, no build needed", job.id[:8], num_images)
+            logger.info("[%s] Found most complete stage (%d of %d), no build needed",
+                        job.id[:8], i + 1, num_images)
         else:
             raise SourceImagesError(
                 f"Something went wrong, stage number: {i + 1}, "
                 f"num_images: {num_images}"
             )
+
+        # The found stage is confirmed to exist by the search phase
+        existing_stages.add(i)
+
+        # Verify which earlier stages actually exist in the registry
+        if i >= 1:
+            job.append_log(
+                f"Checking which earlier stages (1 to {i}) still exist "
+                "in the registry..."
+            )
+            for x in range(i):
+                if remote_image_found(
+                    workshop_args[x]["tag"],
+                    registry_type,
+                    request.registries,
+                    workspace,
+                    job=job,
+                ):
+                    existing_stages.add(x)
+            if existing_stages:
+                stage_list = ", ".join(str(s + 1) for s in sorted(existing_stages))
+                job.append_log(f"\tStages present: {stage_list}")
+                logger.info("[%s] Stages present in registry: %s (of %d)",
+                            job.id[:8], stage_list, num_images)
+            else:
+                job.append_log("\tNo earlier stages found in registry")
+                logger.info("[%s] No earlier stages found in registry", job.id[:8])
+            missing = set(range(i)) - existing_stages
+            if missing:
+                stage_list = ", ".join(str(s + 1) for s in sorted(missing))
+                job.append_log(f"\tStages expired/missing: {stage_list}")
+                logger.info("[%s] Stages expired/missing: %s", job.id[:8], stage_list)
     else:
         # Force-builds mode: check workshop_built_tags cache
         job.append_log(
@@ -560,29 +594,20 @@ def _source_container_image(
     # Refresh expirations on already-existing stages
     x = 0
     while x < i:
+        if x not in existing_stages:
+            x += 1
+            continue
         job.append_log(
             f"Processing stage {x + 1} ({workshop_args[x]['tag']})..."
         )
         if has_quay_refresh:
-            if remote_image_found(
+            _refresh_quay_expiration(
                 workshop_args[x]["tag"],
                 registry_type,
                 request.registries,
-                workspace,
-                job=job,
-            ):
-                _refresh_quay_expiration(
-                    workshop_args[x]["tag"],
-                    registry_type,
-                    request.registries,
-                    quay_tokens,
-                    job,
-                )
-            else:
-                job.append_log(
-                    "\tskipping expiration refresh because remote "
-                    "image does not exist (!!)"
-                )
+                quay_tokens,
+                job,
+            )
         job.append_log("\tReady")
         x += 1
 
