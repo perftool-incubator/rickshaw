@@ -376,22 +376,60 @@ def _source_container_image(
                     i -= 1
                     continue
                 else:
-                    job.append_log(
-                        "\tCould not find image remotely but found it "
-                        "locally so pushing it..."
-                    )
-                    begin = time.time()
-                    push_local_image(
-                        workshop_args[i]["tag"],
-                        registry_type,
-                        request.registries,
-                        workspace,
-                        job=job,
-                    )
-                    end = time.time()
-                    job.append_log(
-                        f"\t\tPushing took {int(end - begin)} seconds"
-                    )
+                    tag = workshop_args[i]["tag"]
+                    push_acquired = False
+                    wait_event = build_coordinator.try_acquire(tag)
+                    if wait_event is not None:
+                        job.append_log(
+                            f"\tFound image locally; another job is "
+                            f"already pushing tag {tag}, waiting..."
+                        )
+                        logger.info(
+                            "[%s] Waiting for another pusher of tag %s",
+                            job.id[:8], tag,
+                        )
+                        wait_event.wait()
+                        if remote_image_found(
+                            tag,
+                            registry_type,
+                            request.registries,
+                            workspace,
+                            job=job,
+                        ):
+                            job.append_log(
+                                "\tImage found in registry after wait, "
+                                "skipping push"
+                            )
+                            break
+                        job.append_log(
+                            "\tImage NOT found after wait, "
+                            "pushing it ourselves"
+                        )
+                    else:
+                        push_acquired = True
+
+                    try:
+                        job.append_log(
+                            "\tCould not find image remotely but found "
+                            "it locally so pushing it..."
+                        )
+                        logger.info("[%s] Pushing locally found image %s", job.id[:8], tag)
+                        begin = time.time()
+                        push_local_image(
+                            tag,
+                            registry_type,
+                            request.registries,
+                            workspace,
+                            job=job,
+                        )
+                        end = time.time()
+                        job.append_log(
+                            f"\t\tPushing took {int(end - begin)} seconds"
+                        )
+                        logger.info("[%s] Pushed locally found image in %ds", job.id[:8], int(end - begin))
+                    finally:
+                        if push_acquired:
+                            build_coordinator.release(tag)
                     break
             else:
                 break
