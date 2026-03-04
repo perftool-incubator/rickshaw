@@ -1,0 +1,30 @@
+{
+    "workshop": {
+        "schema": {
+            "version": "2025.07.25"
+        }
+    },
+    "userenvs": [
+	{
+	    "name": "fedora",
+	    "requirements": [
+		"source-images-service-distro"
+	    ]
+	}
+    ],
+    "requirements": [
+	{
+	    "name": "source-images-service-distro",
+	    "type": "distro",
+	    "distro_info": {
+		"packages": [
+		    "python3-fastapi",
+		    "python3-uvicorn+standard",
+		    "python3-pydantic",
+		    "python3-pydantic-settings",
+		    "python3-httpx"
+		]
+	    }
+	}
+    ]
+}
