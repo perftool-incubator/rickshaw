@@ -428,6 +428,7 @@ def _source_container_image(
                             f"\t\tPushing took {int(end - begin)} seconds"
                         )
                         logger.info("[%s] Pushed locally found image in %ds", job.id[:8], int(end - begin))
+                        local_images.append(tag)
                     finally:
                         if push_acquired:
                             build_coordinator.release(tag)
