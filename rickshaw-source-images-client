@@ -19,6 +19,21 @@ import sys
 import time
 import urllib.request
 import urllib.error
+from pathlib import Path
+
+TOOLBOX_HOME = os.environ.get('TOOLBOX_HOME')
+if TOOLBOX_HOME is None:
+    print("This script requires libraries that are provided by the toolbox project.")
+    print("Toolbox can be acquired from https://github.com/perftool-incubator/toolbox and")
+    print("then use 'export TOOLBOX_HOME=/path/to/toolbox' so that it can be located.")
+    exit(1)
+else:
+    p = Path(TOOLBOX_HOME) / 'python'
+    if not p.exists() or not p.is_dir():
+        print("ERROR: <TOOLBOX_HOME>/python ('%s') does not exist!" % (p))
+        exit(2)
+    sys.path.append(str(p))
+from toolbox.json import validate_schema
 
 # ---------------------------------------------------------------------------
 # Logging
@@ -623,6 +638,12 @@ def main():
     except (OSError, lzma.LZMAError, json.JSONDecodeError) as exc:
         raise SystemExit("ERROR: Failed to read input JSON: %s" % exc)
 
+    rickshaw_dir = os.path.dirname(os.path.abspath(__file__))
+    input_schema = os.path.join(rickshaw_dir, "schema", "source-images-input.json")
+    valid, err = validate_schema(input_data, input_schema)
+    if not valid:
+        raise SystemExit("ERROR: Input JSON schema validation failed: %s" % err)
+
     # 2. Health check
     _health_check(args.service_url)
 
@@ -645,6 +666,10 @@ def main():
     # 7. Write output JSON
     output_path = _resolve_json_path(args.output)
     output_data = {"image-ids": result.get("image-ids", {})}
+    output_schema = os.path.join(rickshaw_dir, "schema", "source-images-output.json")
+    valid, err = validate_schema(output_data, output_schema)
+    if not valid:
+        raise SystemExit("ERROR: Output JSON schema validation failed: %s" % err)
     logger.debug("Writing output JSON: %s", output_path)
     try:
         if output_path.endswith(".xz"):

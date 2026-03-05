@@ -1,0 +1,36 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "title": "rickshaw source-images output",
+    "description": "Schema for image-source-output.json, written by rickshaw-source-images (Perl) or rickshaw-source-images-client (Python) and read by rickshaw-run. Contains the same image-ids structure as the input but with populated image URLs.",
+    "type": "object",
+    "required": ["image-ids"],
+    "additionalProperties": false,
+    "properties": {
+        "image-ids": {
+            "description": "Map of benchmark/tool names to userenv maps, each containing a populated image URL.",
+            "type": "object",
+            "patternProperties": {
+                "^.+$": {
+                    "type": "object",
+                    "description": "Map of userenv names to image info.",
+                    "patternProperties": {
+                        "^.+$": {
+                            "type": "object",
+                            "required": ["image"],
+                            "properties": {
+                                "image": {
+                                    "type": "string",
+                                    "description": "Fully-qualified container image URL with a sha256 tag (e.g. 'quay.io/org/label:sha256-abc123.img'). For private registries, a '::pull-token-path' suffix is appended (e.g. 'registry/org/label:tag::/path/to/pull-token'). rickshaw-run strips this suffix after '::' for display.",
+                                    "minLength": 1
+                                }
+                            },
+                            "additionalProperties": false
+                        }
+                    },
+                    "additionalProperties": false
+                }
+            },
+            "additionalProperties": false
+        }
+    }
+}
