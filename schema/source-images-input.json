@@ -1,0 +1,239 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "title": "rickshaw source-images input",
+    "description": "Schema for image-source-input.json, written by rickshaw-run and read by rickshaw-source-images (Perl) and rickshaw-source-images-client (Python).",
+    "type": "object",
+    "required": [
+        "image-ids",
+        "registries",
+        "registries-json",
+        "arch",
+        "bench-dirs",
+        "utilities",
+        "utility-dirs",
+        "dirs",
+        "workshop",
+        "roadblock-dir",
+        "cs-conf-file",
+        "use-workshop"
+    ],
+    "additionalProperties": false,
+    "properties": {
+        "image-ids": {
+            "description": "Map of benchmark/tool names to userenv maps. Each userenv entry contains an 'image' key that is empty on input and populated on output.",
+            "type": "object",
+            "patternProperties": {
+                "^.+$": {
+                    "type": "object",
+                    "description": "Map of userenv names to image info.",
+                    "patternProperties": {
+                        "^.+$": {
+                            "type": "object",
+                            "required": ["image"],
+                            "properties": {
+                                "image": {
+                                    "type": "string",
+                                    "description": "Empty string on input; populated by rickshaw-source-images on output."
+                                }
+                            }
+                        }
+                    },
+                    "additionalProperties": false
+                }
+            },
+            "additionalProperties": false
+        },
+        "registries": {
+            "description": "Container registries used for image storage. 'public' is always present; 'private' is optional.",
+            "type": "object",
+            "required": ["public"],
+            "properties": {
+                "public": { "$ref": "#/$defs/registry" },
+                "private": { "$ref": "#/$defs/registry" }
+            },
+            "additionalProperties": false
+        },
+        "registries-json": {
+            "description": "File path to the registries JSON configuration file.",
+            "type": "string"
+        },
+        "arch": {
+            "description": "CPU architecture for container image builds.",
+            "type": "string",
+            "enum": ["x86_64", "aarch64"]
+        },
+        "bench-dirs": {
+            "description": "Map of benchmark names to their directory paths.",
+            "type": "object",
+            "patternProperties": {
+                "^.+$": { "type": "string" }
+            },
+            "additionalProperties": false
+        },
+        "utilities": {
+            "description": "List of utility tool names (e.g. 'mpstat', 'sar').",
+            "type": "array",
+            "items": { "type": "string" }
+        },
+        "utility-dirs": {
+            "description": "Map of utility names to their directory paths.",
+            "type": "object",
+            "patternProperties": {
+                "^.+$": { "type": "string" }
+            },
+            "additionalProperties": false
+        },
+        "dirs": {
+            "description": "Key directory paths used during image sourcing.",
+            "type": "object",
+            "required": ["rickshaw", "config", "workshop-build"],
+            "properties": {
+                "rickshaw": {
+                    "type": "string",
+                    "description": "Path to the rickshaw project directory."
+                },
+                "config": {
+                    "type": "string",
+                    "description": "Path to the run configuration directory."
+                },
+                "workshop-build": {
+                    "type": "string",
+                    "description": "Path to the workshop build directory."
+                }
+            },
+            "additionalProperties": false
+        },
+        "workshop": {
+            "description": "Workshop configuration for container image builds.",
+            "type": "object",
+            "required": ["dir", "force-builds"],
+            "properties": {
+                "dir": {
+                    "type": "string",
+                    "description": "Path to the workshop directory."
+                },
+                "force-builds": {
+                    "type": "string",
+                    "description": "Whether to force container image rebuilds. String 'true' or 'false' (not boolean).",
+                    "enum": ["true", "false"]
+                }
+            },
+            "additionalProperties": false
+        },
+        "roadblock-dir": {
+            "description": "Path to the roadblock directory.",
+            "type": "string"
+        },
+        "cs-conf-file": {
+            "description": "Path to the crucible-svc configuration JSON file.",
+            "type": "string"
+        },
+        "use-workshop": {
+            "description": "Whether to use workshop for image builds. Integer 0 or 1 (not boolean, not string).",
+            "type": "integer",
+            "enum": [0, 1]
+        },
+        "external-userenvs-dir": {
+            "description": "Optional path to a directory containing external userenv definitions.",
+            "type": "string"
+        }
+    },
+    "$defs": {
+        "registry": {
+            "description": "Container registry configuration.",
+            "type": "object",
+            "required": [
+                "repo",
+                "tls-verify",
+                "push-token",
+                "quay-expiration-length",
+                "quay-refresh-expiration-require-success",
+                "url-details"
+            ],
+            "properties": {
+                "repo": {
+                    "type": "string",
+                    "description": "Registry repository path (e.g. 'quay.io/org/label')."
+                },
+                "tls-verify": {
+                    "type": "string",
+                    "description": "Whether to verify TLS certificates. String 'true' or 'false'.",
+                    "enum": ["true", "false"]
+                },
+                "push-token": {
+                    "type": "string",
+                    "description": "File path to the push authentication token."
+                },
+                "pull-token": {
+                    "type": "string",
+                    "description": "File path to the pull authentication token (typically used for private registries)."
+                },
+                "quay-expiration-length": {
+                    "type": "string",
+                    "description": "Quay image tag expiration length (e.g. '2w' for two weeks)."
+                },
+                "quay-refresh-expiration-token-file": {
+                    "type": "string",
+                    "description": "File path containing the Quay API token used to refresh tag expirations."
+                },
+                "quay-refresh-expiration-api-url": {
+                    "type": "string",
+                    "description": "Quay API URL endpoint for refreshing tag expirations."
+                },
+                "quay-refresh-expiration-require-success": {
+                    "type": "string",
+                    "description": "Whether refresh-expiration API calls must succeed. String 'true' or 'false'.",
+                    "enum": ["true", "false"]
+                },
+                "url-details": {
+                    "$ref": "#/$defs/url-details"
+                }
+            },
+            "additionalProperties": false
+        },
+        "url-details": {
+            "description": "Parsed URL components of the registry repo, computed by rickshaw-run's decode_repo_urls().",
+            "type": "object",
+            "required": [
+                "protocol",
+                "host",
+                "host-port",
+                "project",
+                "label",
+                "source-image-url",
+                "dest-image-url"
+            ],
+            "properties": {
+                "protocol": {
+                    "type": "string",
+                    "description": "URL scheme (e.g. 'https://')."
+                },
+                "host": {
+                    "type": "string",
+                    "description": "Registry hostname (e.g. 'quay.io')."
+                },
+                "host-port": {
+                    "type": "string",
+                    "description": "Port suffix if present (e.g. ':5000'), or empty string."
+                },
+                "project": {
+                    "type": "string",
+                    "description": "Project/namespace path within the registry."
+                },
+                "label": {
+                    "type": "string",
+                    "description": "Image repository name (label) within the project."
+                },
+                "source-image-url": {
+                    "type": "string",
+                    "description": "Full source image URL (host/project/label)."
+                },
+                "dest-image-url": {
+                    "type": "string",
+                    "description": "Full destination image URL (with protocol and port if applicable)."
+                }
+            },
+            "additionalProperties": false
+        }
+    }
+}

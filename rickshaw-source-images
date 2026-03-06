@@ -912,49 +912,59 @@ sub source_container_image {
                     if ($failed_attempt) {
                         if ($refresh_attempts > $max_refresh_attempts) {
                             log_print sprintf "\tFailed to query for tag information on %d attempts\n", $max_refresh_attempts;
-                            exit 1;
+
+                            if ($run{'registries'}{$registry_type}{'quay-refresh-expiration-require-success'} eq "true") {
+                                log_print "\tExpiration refresh success is required, exiting\n";
+                                exit 1;
+                            } else {
+                                log_print "\tExpiration refresh success is not required, continuing\n";
+                            }
                         } else {
                             sleep 1;
                         }
                     }
                 }
 
-                my $time_buffer_days = 1;
-                #                  days                   hours/day   min/hour   seconds/min
-                my $time_buffer = ($time_buffer_days    * 24        * 60       * 60);
-                if ($current_expiration >= $refresh_expiration) {
-                    log_print sprintf "\tThe current expiration (%d / %s) is greater than or equal to the refresh expiration so not refreshing\n", $current_expiration, quay_image_refresh_formatted_timestamp($current_expiration);
-                } elsif (($refresh_expiration - $current_expiration) <= $time_buffer) {
-                    log_print sprintf "\tSkipping expiration refresh because the current expiration (%d / %s) is less than %d day(s) (%d seconds) older than the new expiration\n", $current_expiration, quay_image_refresh_formatted_timestamp($current_expiration), $time_buffer_days, $time_buffer;
+                if (!defined $current_expiration) {
+                    log_print "\tSkipping expiration refresh because tag query failed\n";
                 } else {
-                    my $refresh_cmd = 'curl --silent' .
-                                      ' -X PUT -H "Authorization: Bearer ' . $quay_refresh_expiration_tokens{$registry_type} . '"' .
-                                      ' -H "Content-type: application/json" -d \'{ "expiration": ' . $refresh_expiration . ' }\'' .
-                                      ' ' . $run{'registries'}{$registry_type}{'quay-refresh-expiration-api-url'} . '/tag/' . $workshop_args[$x]{'tag'};
+                    my $time_buffer_days = 1;
+                    #                  days                   hours/day   min/hour   seconds/min
+                    my $time_buffer = ($time_buffer_days    * 24        * 60       * 60);
+                    if ($current_expiration >= $refresh_expiration) {
+                        log_print sprintf "\tThe current expiration (%d / %s) is greater than or equal to the refresh expiration so not refreshing\n", $current_expiration, quay_image_refresh_formatted_timestamp($current_expiration);
+                    } elsif (($refresh_expiration - $current_expiration) <= $time_buffer) {
+                        log_print sprintf "\tSkipping expiration refresh because the current expiration (%d / %s) is less than %d day(s) (%d seconds) older than the new expiration\n", $current_expiration, quay_image_refresh_formatted_timestamp($current_expiration), $time_buffer_days, $time_buffer;
+                    } else {
+                        my $refresh_cmd = 'curl --silent' .
+                                          ' -X PUT -H "Authorization: Bearer ' . $quay_refresh_expiration_tokens{$registry_type} . '"' .
+                                          ' -H "Content-type: application/json" -d \'{ "expiration": ' . $refresh_expiration . ' }\'' .
+                                          ' ' . $run{'registries'}{$registry_type}{'quay-refresh-expiration-api-url'} . '/tag/' . $workshop_args[$x]{'tag'};
 
-                    $refresh_attempts = 1;
-                    while ($refresh_attempts <= $max_refresh_attempts) {
-                        $refresh_attempts += 1;
+                        $refresh_attempts = 1;
+                        while ($refresh_attempts <= $max_refresh_attempts) {
+                            $refresh_attempts += 1;
 
-                        debug_log(sprintf "executing quay API call: %s\n", $refresh_cmd);
-                        ($refresh_cmd, my $refresh_status, my $refresh_rc) = run_cmd($refresh_cmd);
-                        chomp($refresh_status);
+                            debug_log(sprintf "executing quay API call: %s\n", $refresh_cmd);
+                            ($refresh_cmd, my $refresh_status, my $refresh_rc) = run_cmd($refresh_cmd);
+                            chomp($refresh_status);
 
-                        if (($refresh_rc == 0) && ($refresh_status eq "\"Updated\"")) {
-                            log_print sprintf "\tRefreshed expiration (was %d / %s)\n", $current_expiration, quay_image_refresh_formatted_timestamp($current_expiration);
-                            last;
-                        } else {
-                            if ($refresh_attempts > $max_refresh_attempts) {
-                                log_print sprintf "\tFailed to refresh expiration on %d attempts (currently %d / %s)\n", $max_refresh_attempts, $current_expiration, quay_image_refresh_formatted_timestamp($current_expiration);
-
-                                if ($run{'registries'}{$registry_type}{'quay-refresh-expiration-require-success'} eq "true") {
-                                    log_print "\tExpiration refresh success is required, exiting\n";
-                                    exit 1;
-                                } else {
-                                    log_print "\tExpiration refresh success is not required, continuing\n";
-                                }
+                            if (($refresh_rc == 0) && ($refresh_status eq "\"Updated\"")) {
+                                log_print sprintf "\tRefreshed expiration (was %d / %s)\n", $current_expiration, quay_image_refresh_formatted_timestamp($current_expiration);
+                                last;
                             } else {
-                                sleep 1;
+                                if ($refresh_attempts > $max_refresh_attempts) {
+                                    log_print sprintf "\tFailed to refresh expiration on %d attempts (currently %d / %s)\n", $max_refresh_attempts, $current_expiration, quay_image_refresh_formatted_timestamp($current_expiration);
+
+                                    if ($run{'registries'}{$registry_type}{'quay-refresh-expiration-require-success'} eq "true") {
+                                        log_print "\tExpiration refresh success is required, exiting\n";
+                                        exit 1;
+                                    } else {
+                                        log_print "\tExpiration refresh success is not required, continuing\n";
+                                    }
+                                } else {
+                                    sleep 1;
+                                }
                             }
                         }
                     }
@@ -1035,6 +1045,7 @@ if (defined $log_level && $log_level eq "debug") {
 if ($rc != 0 || !defined $input_ref) {
     die "Failed to read input JSON file: $input_file\n";
 }
+# Note: input schema validation is deferred until $rickshaw_project_dir is known (below)
 
 # Reconstruct global state from input JSON
 %run = ();
@@ -1047,6 +1058,13 @@ if (exists $$input_ref{'external-userenvs-dir'}) {
 }
 
 $rickshaw_project_dir = $$input_ref{'dirs'}{'rickshaw'};
+my $source_images_input_schema_file = $rickshaw_project_dir . "/schema/source-images-input.json";
+my $source_images_output_schema_file = $rickshaw_project_dir . "/schema/source-images-output.json";
+# Validate input now that we know the schema path
+($rc, undef) = get_json_file($input_file, $source_images_input_schema_file);
+if ($rc != 0) {
+    die "Input JSON failed schema validation: $input_file\n";
+}
 $config_dir = $$input_ref{'dirs'}{'config'};
 $workshop_build_dir = $$input_ref{'dirs'}{'workshop-build'};
 $arch = $$input_ref{'arch'};
@@ -1103,7 +1121,7 @@ debug_log(sprintf "image_ids (after):\n" . Dumper \%image_ids);
 
 # Write output JSON with populated image URLs
 my %output = ( 'image-ids' => \%image_ids );
-if (put_json_file($output_file, \%output) > 0) {
+if (put_json_file($output_file, \%output, $source_images_output_schema_file) > 0) {
     die "Failed to write output JSON file: $output_file\n";
 }
 

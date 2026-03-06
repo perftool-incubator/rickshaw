@@ -113,6 +113,8 @@ my $utility_schema_file = $rickshaw_project_dir . "/schema/utility.json";
 my $bench_params_schema_file = $rickshaw_project_dir . "/schema/bench-params.json";
 my $tool_params_schema_file = $rickshaw_project_dir . "/schema/tool-params.json";
 my $rickshaw_settings_schema_file = $rickshaw_project_dir . "/schema/rickshaw-settings.json";
+my $source_images_input_schema_file = $rickshaw_project_dir . "/schema/source-images-input.json";
+my $source_images_output_schema_file = $rickshaw_project_dir . "/schema/source-images-output.json";
 my $roadblock_exit_success = 0;
 my $roadblock_exit_timeout = 3;
 my $roadblock_exit_abort = 4;
@@ -858,7 +860,7 @@ sub process_cmdline() {
         } elsif ($arg =~ /^base-run-dir$|^workshop-dir$|^packrat-dir$|^bench-dir$|^roadblock-dir$|^roadblock-password$|^tools-dir$|^engine-dir$/ or
                  $arg =~ /^run-id$|^id$|^bench-params$|^tool-params$|^bench-params$/ or
                  $arg =~ /^test-order$|^tool-group$|^num-samples$|^max-sample-failures$|^name$|^bench-ids$/ or
-                 $arg =~ /^registries-json$|^external-userenvs-dir$/ or
+                 $arg =~ /^registries-json$|^external-userenvs-dir$|^source-images-service-url$/ or
                  $arg =~ /^email$|^desc$/) {
             debug_log(sprintf "argument: [%s]\n", $arg);
             $run{$arg} = $val;
@@ -2749,7 +2751,7 @@ debug_log (sprintf "image_ids (before):\n" . Dumper \%image_ids);
 
     my $source_input_file = $config_dir . "/image-source-input.json";
     my $source_output_file = $config_dir . "/image-source-output.json";
-    if (put_json_file($source_input_file, \%source_input) > 0) {
+    if (put_json_file($source_input_file, \%source_input, $source_images_input_schema_file) > 0) {
         die "Failed to write image source input JSON: $source_input_file\n";
     }
 
@@ -2757,10 +2759,19 @@ debug_log (sprintf "image_ids (before):\n" . Dumper \%image_ids);
     if ($toolbox::logging::debug) {
         $log_level_arg = " --log-level debug";
     }
-    my $source_images_cmd = $rickshaw_project_dir . "/rickshaw-source-images"
-                          . " --input " . $source_input_file
-                          . " --output " . $source_output_file
-                          . $log_level_arg;
+    my $source_images_cmd;
+    if (exists $run{'source-images-service-url'}) {
+        $source_images_cmd = $rickshaw_project_dir . "/rickshaw-source-images-client"
+                            . " --input " . $source_input_file
+                            . " --output " . $source_output_file
+                            . " --service-url " . $run{'source-images-service-url'}
+                            . $log_level_arg;
+    } else {
+        $source_images_cmd = $rickshaw_project_dir . "/rickshaw-source-images"
+                            . " --input " . $source_input_file
+                            . " --output " . $source_output_file
+                            . $log_level_arg;
+    }
     log_print sprintf "Running: %s\n", $source_images_cmd;
     my $source_images_rc = system($source_images_cmd);
     $source_images_rc = $source_images_rc >> 8;
@@ -2770,13 +2781,22 @@ debug_log (sprintf "image_ids (before):\n" . Dumper \%image_ids);
     }
 
     # Read output JSON and populate %image_ids
-    (my $rc, my $output_ref) = get_json_file($source_output_file);
+    (my $rc, my $output_ref) = get_json_file($source_output_file, $source_images_output_schema_file);
     if ($rc != 0 || !defined $output_ref) {
         die "Failed to read image source output JSON: $source_output_file\n";
     }
     foreach my $bench_or_tool (keys %{$$output_ref{'image-ids'}}) {
         foreach my $userenv (keys %{$$output_ref{'image-ids'}{$bench_or_tool}}) {
             $image_ids{$bench_or_tool}{$userenv}{'image'} = $$output_ref{'image-ids'}{$bench_or_tool}{$userenv}{'image'};
+        }
+    }
+    log_print "Userenv image summary:\n";
+    foreach my $bench_or_tool (sort keys %image_ids) {
+        foreach my $userenv (sort keys %{$image_ids{$bench_or_tool}}) {
+            my $image = $image_ids{$bench_or_tool}{$userenv}{'image'};
+            $image =~ s/::.*//;  # strip private registry pull-token suffix
+            log_print sprintf "  %s / %s: %s\n",
+                $bench_or_tool, $userenv, $image;
         }
     }
 }

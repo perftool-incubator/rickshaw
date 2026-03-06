@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "source-images-service"
+version = "0.1.0"
+description = "FastAPI service for sourcing container images for benchmarks and tools"
+requires-python = ">=3.10"
+dependencies = [
+    "fastapi>=0.100.0",
+    "uvicorn[standard]>=0.20.0",
+    "pydantic>=2.0",
+    "pydantic-settings>=2.0",
+    "httpx>=0.24.0",
+]
+
+[project.scripts]
+source-images-service = "source_images_service.main:run"
+
+[tool.setuptools.packages.find]
+where = ["."]

@@ -22,6 +22,10 @@
         }
       }
     },
+    "source-images-service-url": {
+      "type": "string",
+      "minLength": 1
+    },
     "base-run-dir": {
       "type": "string",
       "pattern": "^.+$"
