@@ -438,6 +438,28 @@ def _write_result_files(result, input_data):
                 logger.warning("Failed to write result file %s: %s", dest_path, exc)
 
 
+def _fix_pull_token_paths(image_ids, input_data):
+    """Replace service workspace pull-token paths with the caller's original paths.
+
+    The service appends '::workspace-pull-token-path' to images from private
+    registries, but that path is on the service machine.  Swap it for the
+    caller's original pull-token path from the input JSON.
+    """
+    original_path = (input_data
+                     .get("registries", {})
+                     .get("private", {})
+                     .get("pull-token", ""))
+    if not original_path:
+        return
+    for bench_or_tool in image_ids:
+        for userenv in image_ids[bench_or_tool]:
+            image = image_ids[bench_or_tool][userenv].get("image", "")
+            if "::" not in image:
+                continue
+            image_url = image.split("::", 1)[0]
+            image_ids[bench_or_tool][userenv]["image"] = image_url + "::" + original_path
+
+
 # ---------------------------------------------------------------------------
 # API interaction
 # ---------------------------------------------------------------------------
@@ -663,9 +685,13 @@ def main():
     # 6. Write build artifact files to result directories
     _write_result_files(result, input_data)
 
-    # 7. Write output JSON
+    # 7. Fix pull-token paths: replace service workspace paths with caller's original paths
+    image_ids = result.get("image-ids", {})
+    _fix_pull_token_paths(image_ids, input_data)
+
+    # 8. Write output JSON
     output_path = _resolve_json_path(args.output)
-    output_data = {"image-ids": result.get("image-ids", {})}
+    output_data = {"image-ids": image_ids}
     output_schema = os.path.join(rickshaw_dir, "schema", "source-images-output.json")
     valid, err = validate_schema(output_data, output_schema)
     if not valid:
