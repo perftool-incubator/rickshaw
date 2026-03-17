@@ -152,14 +152,23 @@ def build_runner_labels(logger, runner_type, runner_tags, runner_pool):
     """
     labels = []
 
-    if runner_type == "self-hosted":
+    # If runner_pool is specified, always use self-hosted runners with that pool
+    # This allows scenarios configured as "github" type to run on self-hosted pools
+    # when runner_pool is provided, maintaining backward compatibility
+    if runner_pool:
         labels.append("self-hosted")
+        labels.append(runner_pool)
+        logger.debug("Using self-hosted runner with pool '%s'" % (runner_pool))
 
-        # Add pool identifier if specified (e.g., 'kmr-cloud-1', 'aws-cloud-1')
-        # This is optional for backward compatibility
-        if runner_pool:
-            labels.append(runner_pool)
-            logger.debug("Adding runner pool label '%s'" % (runner_pool))
+        # Add scenario tags (works for both github-type and self-hosted-type scenarios)
+        for tag in runner_tags:
+            if tag:
+                labels.append(tag)
+                logger.debug("Adding runner tag '%s'" % (tag))
+
+    elif runner_type == "self-hosted":
+        # Traditional self-hosted without pool (backward compatibility)
+        labels.append("self-hosted")
 
         # Add other runner tags (e.g., 'cpu-partitioning', 'remotehosts')
         # Filter out empty strings that might come from split
@@ -168,7 +177,7 @@ def build_runner_labels(logger, runner_type, runner_tags, runner_pool):
                 labels.append(tag)
                 logger.debug("Adding runner tag '%s'" % (tag))
     else:
-        # For GitHub-hosted runners, use ubuntu-latest
+        # Default: GitHub-hosted runners (backward compatibility)
         labels.append("ubuntu-latest")
 
     logger.debug("Built runner labels: %s" % (str(labels)))
@@ -236,10 +245,13 @@ def get_jobs(logger):
                                 if add_scenario:
                                     logger.info("Adding jobs for benchmark '%s' and runner type '%s'" % (benchmark["name"], scenario["runners"]["type"]))
                                     # Build runner labels for this scenario
+                                    # When runner_pool is specified, pass scenario tags regardless of runner_type
+                                    # to enable proper label matching on self-hosted pools
+                                    scenario_tags = scenario["runners"].get("tags", []) if (args.runner_type == "self-hosted" or args.runner_pool) else []
                                     runner_labels = build_runner_labels(
                                         logger,
                                         scenario["runners"]["type"],
-                                        scenario["runners"].get("tags", []) if args.runner_type == "self-hosted" else [],
+                                        scenario_tags,
                                         args.runner_pool
                                     )
                                     for endpoint in scenario["endpoints"]:
