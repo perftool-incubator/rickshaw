@@ -169,7 +169,7 @@ This is the big function. For a single (benchmark, userenv) pair, it:
 **Stage 6 — Build missing stages** (lines 615-721):
 - For each missing stage:
   - **Coordination**: Calls `build_coordinator.try_acquire(tag)`. If another job is already building this tag, waits on a `threading.Event` and then checks if the image landed in the registry
-  - **Build**: Calls `workshop_build_image()` which runs `workshop.pl` as a subprocess
+  - **Build**: Calls `workshop_build_image()` which runs the workshop script as a subprocess
   - **Push**: Calls `push_local_image()` (buildah push, with up to 5 retries and post-push verification polling)
   - **Release**: Calls `build_coordinator.release(tag)` to wake any waiting threads
 
