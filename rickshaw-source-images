@@ -50,6 +50,7 @@ my $use_workshop;
 my $workshop_force_builds;
 my $cs_conf_file;
 my %cs_conf;
+my $workshop_script;
 my $workshop_base_cmd;
 my %workshop_built_tags;
 my %quay_refresh_expiration_tokens;
@@ -135,7 +136,7 @@ sub calc_image_md5 {
     # The second part of the hash input is the *content* of certain files
     # Start with workshop code and schema, which when changed will
     # trigger new builds.
-    my @files = ($run{'workshop-dir'} . "/workshop.pl", $run{'workshop-dir'} . "/schema.json");
+    my @files = ($run{'workshop-dir'} . "/$workshop_script", $run{'workshop-dir'} . "/schema.json");
 
     # Add to the file list all the files that workshop identifies
     # as being copied into the userenv
@@ -677,7 +678,7 @@ sub source_container_image {
     }
 
     $workshop_base_cmd =
-    $run{'workshop-dir'} . "/workshop.pl" .
+    $run{'workshop-dir'} . "/$workshop_script" .
     " --log-level verbose " .
     " --config " . $cs_conf_file .
     " --param %bench-dir%=" . $bench_dirs{$benchmark} .
@@ -1073,6 +1074,7 @@ $arch = $$input_ref{'arch'};
 @utilities = @{$$input_ref{'utilities'}};
 $use_workshop = $$input_ref{'use-workshop'};
 $workshop_force_builds = $$input_ref{'workshop'}{'force-builds'};
+$workshop_script = $ENV{'WORKSHOP_SCRIPT'} // $$input_ref{'workshop'}{'script'} // "workshop.pl";
 $cs_conf_file = $$input_ref{'cs-conf-file'};
 
 # Reconstruct utility dirs into %run

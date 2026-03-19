@@ -106,7 +106,7 @@
         "workshop": {
             "description": "Workshop configuration for container image builds.",
             "type": "object",
-            "required": ["dir", "force-builds"],
+            "required": ["dir", "force-builds", "script"],
             "properties": {
                 "dir": {
                     "type": "string",
@@ -116,6 +116,11 @@
                     "type": "string",
                     "description": "Whether to force container image rebuilds. String 'true' or 'false' (not boolean).",
                     "enum": ["true", "false"]
+                },
+                "script": {
+                    "type": "string",
+                    "description": "Workshop script filename to use for image builds.",
+                    "enum": ["workshop.pl", "workshop.py"]
                 }
             },
             "additionalProperties": false

@@ -53,9 +53,14 @@ class RegistryConfig(BaseModel):
 class WorkshopConfig(BaseModel):
     """Workshop build tool configuration."""
 
-    workshop_pl_content: str = Field(
-        alias="workshop-pl-content",
-        description="Base64-encoded workshop.pl script",
+    workshop_script_content: str = Field(
+        alias="workshop-script-content",
+        description="Base64-encoded workshop script",
+    )
+    workshop_script: str = Field(
+        default="workshop.pl",
+        alias="workshop-script",
+        description="Workshop script filename: workshop.pl or workshop.py",
     )
     schema_content: str = Field(
         alias="schema-content",

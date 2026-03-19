@@ -55,6 +55,7 @@ my @utilities = ( "packrat" );
 my $jsonsettings;
 my $registries_settings;
 my $use_workshop = 0;
+my $workshop_script = "workshop.pl";
 my %bench_configs;
 my %bench_dirs;
 my %benchmark_to_ids;
@@ -161,6 +162,7 @@ sub usage {
     log_print "--json-validator         Path to json schema validation utility\n";
     log_print "--engine-dir             Directory where the engine project exists\n";
     log_print "--workshop-dir           Directory where workshop project exists\n";
+    log_print "--workshop-script        Workshop script filename (workshop.pl or workshop.py, default: workshop.pl)\n";
     log_print "--packrat-dir            Directory where the packrat project exists\n";
     log_print "--roadblock-dir          Directory where workshop project exists\n";
     log_print "--roadblock-password     Password to use to access the valkey instance\n";
@@ -857,7 +859,7 @@ sub process_cmdline() {
         } elsif ($arg =~ /^help$/) {
             usage;
             exit 0;
-        } elsif ($arg =~ /^base-run-dir$|^workshop-dir$|^packrat-dir$|^bench-dir$|^roadblock-dir$|^roadblock-password$|^tools-dir$|^engine-dir$/ or
+        } elsif ($arg =~ /^base-run-dir$|^workshop-dir$|^workshop-script$|^packrat-dir$|^bench-dir$|^roadblock-dir$|^roadblock-password$|^tools-dir$|^engine-dir$/ or
                  $arg =~ /^run-id$|^id$|^bench-params$|^tool-params$|^bench-params$/ or
                  $arg =~ /^test-order$|^tool-group$|^num-samples$|^max-sample-failures$|^name$|^bench-ids$/ or
                  $arg =~ /^registries-json$|^external-userenvs-dir$|^source-images-service-url$/ or
@@ -901,7 +903,8 @@ sub validate_controller_env() {
         log_print "ERROR, roadblock project directory not defined or roadblocker.py not found";
         exit 1;
     }
-    if (defined $run{'workshop-dir'} and -e $run{'workshop-dir'} . "/workshop.pl") {
+    $workshop_script = $run{'workshop-script'} // $ENV{'WORKSHOP_SCRIPT'} // "workshop.pl";
+    if (defined $run{'workshop-dir'} and -e $run{'workshop-dir'} . "/$workshop_script") {
         $use_workshop = 1;
         if ( ! exists $run{'registries'}{'public'}{'repo'} ) {
             die "You must define a container repository (\$run{'registries'}{'public'}{'repo'} = \"<fqdn>/<project>/<repo>\") to use rickshaw with workshop"
@@ -2732,6 +2735,7 @@ debug_log (sprintf "image_ids (before):\n" . Dumper \%image_ids);
         'workshop' => {
             'dir'          => $run{'workshop-dir'},
             'force-builds' => $workshop_force_builds,
+            'script'       => $workshop_script,
         },
         'roadblock-dir' => $run{'roadblock-dir'},
         'cs-conf-file'  => $cs_conf_file,

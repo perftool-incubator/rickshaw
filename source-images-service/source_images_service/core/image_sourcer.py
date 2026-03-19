@@ -259,7 +259,7 @@ def _source_container_image(
 
     # Build workshop base command
     workshop_base_cmd = (
-        f"{workspace.workshop}/workshop.pl"
+        f"{workspace.workshop}/{workspace.workshop_script}"
         f" --log-level verbose"
         f" --config {cs_conf_file}"
         f" --param %bench-dir%={workspace.bench_dirs}/{benchmark}"

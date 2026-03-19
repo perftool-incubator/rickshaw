@@ -1,4 +1,4 @@
-"""Image building via workshop.pl — port of Perl workshop_build_image() (L323-378)."""
+"""Image building via workshop script — port of Perl workshop_build_image() (L323-378)."""
 
 from __future__ import annotations
 
@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 
 def _parse_json_from_output(output_lines: list[str]) -> list[dict]:
-    """Extract JSON array from the end of workshop.pl output.
+    """Extract JSON array from the end of workshop script output.
 
     Workshop emits a JSON array at the very end of its stdout, possibly
     preceded by many lines of non-JSON debug/info text.  We scan backwards
@@ -61,7 +61,7 @@ def workshop_build_image(
     *,
     job: Job | None = None,
 ) -> str:
-    """Run workshop.pl to build a container image and return the image ID.
+    """Run workshop script to build a container image and return the image ID.
 
     Raises WorkshopBuildError on build failure or if the image ID cannot
     be parsed from the output.
