@@ -576,6 +576,11 @@ def get_k8s_config():
                 settings["misc"]["k8s"]["nodes"]["endpoint"]["masters"].append(name)
                 settings["misc"]["k8s"]["nodes"]["endpoint"]["workers"].append(name)
 
+            # k3s - single-node like microk8s
+            if "node-role.kubernetes.io/control-plane" in node["metadata"]["labels"]:
+                settings["misc"]["k8s"]["nodes"]["endpoint"]["masters"].append(name)
+                settings["misc"]["k8s"]["nodes"]["endpoint"]["workers"].append(name)
+
         node_count_fault = False
         log.info("Found %d masters: %s" % (len(settings["misc"]["k8s"]["nodes"]["endpoint"]["masters"]), settings["misc"]["k8s"]["nodes"]["endpoint"]["masters"]))
         if len(settings["misc"]["k8s"]["nodes"]["endpoint"]["masters"]) == 0:
