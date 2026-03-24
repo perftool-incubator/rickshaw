@@ -11,7 +11,7 @@ concurrency:
 
 jobs:
   changes:
-    runs-on: [ self-hosted, workflow-overhead ]
+    runs-on: ubuntu-latest
     outputs:
       only-docs: ${{ steps.filter.outputs.only_changed }}
     steps:
@@ -53,6 +53,6 @@ jobs:
   crucible-ci-complete:
     needs: [ call-real-core-crucible-ci, call-faux-core-crucible-ci ]
     if: always()
-    runs-on: [ self-hosted, workflow-overhead ]
+    runs-on: ubuntu-latest
     steps:
       - run: echo "crucible-ci complete"
