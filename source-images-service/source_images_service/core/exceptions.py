@@ -33,4 +33,4 @@ class HashCalculationError(SourceImagesError):
 
 
 class WorkshopBuildError(SourceImagesError):
-    """workshop.pl build or output parsing failed."""
+    """Workshop build or output parsing failed."""

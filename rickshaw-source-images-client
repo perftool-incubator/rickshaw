@@ -313,13 +313,17 @@ def _build_api_request(input_data):
     api_req["userenv-files"] = _discover_userenv_files(input_data, rickshaw_dir)
 
     # --- Workshop ---
-    workshop_pl_path = os.path.join(workshop_dir, "workshop.pl") if workshop_dir else ""
+    workshop_script = os.environ.get(
+        "WORKSHOP_SCRIPT",
+        input_data.get("workshop", {}).get("script", "workshop.pl"),
+    )
+    workshop_script_path = os.path.join(workshop_dir, workshop_script) if workshop_dir else ""
     schema_path = os.path.join(workshop_dir, "schema.json") if workshop_dir else ""
 
-    if workshop_pl_path and os.path.isfile(workshop_pl_path):
-        workshop_pl_content = _b64_encode_file(workshop_pl_path)
+    if workshop_script_path and os.path.isfile(workshop_script_path):
+        workshop_script_content = _b64_encode_file(workshop_script_path)
     else:
-        raise SystemExit("ERROR: workshop.pl not found: %s" % workshop_pl_path)
+        raise SystemExit("ERROR: %s not found: %s" % (workshop_script, workshop_script_path))
 
     if schema_path and os.path.isfile(schema_path):
         schema_content = _b64_encode_file(schema_path)
@@ -333,7 +337,8 @@ def _build_api_request(input_data):
         raise SystemExit("ERROR: workshop registries-schema.json not found: %s" % registries_schema_path)
 
     api_req["workshop"] = {
-        "workshop-pl-content": workshop_pl_content,
+        "workshop-script-content": workshop_script_content,
+        "workshop-script": workshop_script,
         "schema-content": schema_content,
         "registries-schema-content": registries_schema_content,
         "force-builds": _str_to_bool(input_data.get("workshop", {}).get("force-builds", False)),

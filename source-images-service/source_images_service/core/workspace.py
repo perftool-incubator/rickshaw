@@ -32,6 +32,7 @@ class WorkspacePaths:
     config: Path = field(init=False)
     registries: Path = field(init=False)
     build: Path = field(init=False)
+    workshop_script: str = "workshop.pl"
 
     def __post_init__(self) -> None:
         self.workshop = self.root / "workshop"
@@ -88,10 +89,12 @@ def materialize_workspace(
 
     file_count = 0
 
-    # Workshop: workshop.pl + schema
+    # Workshop script + schema
+    workshop_script = os.environ.get("WORKSHOP_SCRIPT", request.workshop.workshop_script)
+    ws.workshop_script = workshop_script
     _decode_and_write(
-        ws.workshop / "workshop.pl",
-        request.workshop.workshop_pl_content,
+        ws.workshop / workshop_script,
+        request.workshop.workshop_script_content,
         executable=True,
     )
     file_count += 1

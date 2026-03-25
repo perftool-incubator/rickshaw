@@ -22,6 +22,10 @@
         }
       }
     },
+    "workshop-script": {
+      "type": "string",
+      "minLength": 1
+    },
     "source-images-service-url": {
       "type": "string",
       "minLength": 1

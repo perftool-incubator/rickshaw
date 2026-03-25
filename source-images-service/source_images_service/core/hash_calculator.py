@@ -128,7 +128,7 @@ def calc_image_hash(
 
     # --- Step 3: build file list ---
     files: list[str] = [
-        str(workspace_paths.workshop / "workshop.pl"),
+        str(workspace_paths.workshop / workspace_paths.workshop_script),
         str(workspace_paths.workshop / "schema.json"),
     ]
 

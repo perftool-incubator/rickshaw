@@ -59,7 +59,7 @@ def build_reqs(
     utilities: list[str],
     use_workshop: bool,
 ) -> list[str]:
-    """Build an ordered list of ``--requirement`` arguments for workshop.pl.
+    """Build an ordered list of ``--requirement`` arguments for workshop script.
 
     The ordering ensures that the most commonly shared, least-frequently-changed
     requirements come first so that incremental image builds can reuse earlier
