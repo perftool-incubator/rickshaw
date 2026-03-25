@@ -746,26 +746,30 @@ def get_k8s_config():
             logger.error("Did not find any nodes")
             return 1
 
-        settings["misc"]["k8s"]["nodes"]["endpoint"]["masters"] = []
-        settings["misc"]["k8s"]["nodes"]["endpoint"]["workers"] = []
+        masters = set()
+        workers = set()
         for node in settings["misc"]["k8s"]["nodes"]["cluster"]["items"]:
             name = node["metadata"]["name"]
+            labels = node["metadata"]["labels"]
 
             # OCP
-            if "node-role.kubernetes.io/worker" in node["metadata"]["labels"]:
-                settings["misc"]["k8s"]["nodes"]["endpoint"]["masters"].append(name)
-            if "node-role.kubernetes.io/master" in node["metadata"]["labels"]:
-                settings["misc"]["k8s"]["nodes"]["endpoint"]["workers"].append(name)
+            if "node-role.kubernetes.io/master" in labels:
+                masters.add(name)
+            if "node-role.kubernetes.io/worker" in labels:
+                workers.add(name)
 
-            # microk8s
-            if "node.kubernetes.io/microk8s-controlplane" in node["metadata"]["labels"]:
-                settings["misc"]["k8s"]["nodes"]["endpoint"]["masters"].append(name)
-                settings["misc"]["k8s"]["nodes"]["endpoint"]["workers"].append(name)
+            # microk8s - single-node, acts as both master and worker
+            if "node.kubernetes.io/microk8s-controlplane" in labels:
+                masters.add(name)
+                workers.add(name)
 
             # k3s - single-node like microk8s
-            if "node-role.kubernetes.io/control-plane" in node["metadata"]["labels"]:
-                settings["misc"]["k8s"]["nodes"]["endpoint"]["masters"].append(name)
-                settings["misc"]["k8s"]["nodes"]["endpoint"]["workers"].append(name)
+            if "node-role.kubernetes.io/control-plane" in labels:
+                masters.add(name)
+                workers.add(name)
+
+        settings["misc"]["k8s"]["nodes"]["endpoint"]["masters"] = sorted(masters)
+        settings["misc"]["k8s"]["nodes"]["endpoint"]["workers"] = sorted(workers)
 
         node_count_fault = False
         logger.info("Found %d masters: %s" % (len(settings["misc"]["k8s"]["nodes"]["endpoint"]["masters"]), settings["misc"]["k8s"]["nodes"]["endpoint"]["masters"]))
