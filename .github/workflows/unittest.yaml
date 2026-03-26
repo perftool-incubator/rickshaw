@@ -71,4 +71,9 @@ jobs:
     needs: [ blockbreaker, faux-unittest ]
     if: always()
     steps:
+      - name: Check Results
+        if: >-
+          contains(needs.*.result, 'failure') ||
+          contains(needs.*.result, 'cancelled')
+        run: exit 1
       - run: echo "unittest-complete"
