@@ -15,7 +15,7 @@
 # was also running a benchmark client or server (common for localhost and remotehost
 # endpoints), then the name of the collector is "client" or "server".  If it was
 # not running a benchmark client or server, the collector name will be dependent
-# on what the endpoint uses, for example the k8s endpoint has collectors named
+# on what the endpoint uses, for example the kube endpoint has collectors named
 # "master" and "worker".
 #
 # The tool data is organized under the $base_run_dir/run/tool-data, which collector

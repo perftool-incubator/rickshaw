@@ -10,7 +10,6 @@
                 {
                     "enabled": true,
                     "endpoints": [
-                        "k8s",
                         "kube"
                     ],
                     "runners": {
@@ -39,7 +38,6 @@
                 {
                     "enabled": true,
                     "endpoints": [
-                        "k8s",
                         "kube",
                         "remotehosts"
                     ],
@@ -56,7 +54,6 @@
                 {
                     "enabled": true,
                     "endpoints": [
-                        "k8s",
                         "kube"
                     ],
                     "runners": {
@@ -85,7 +82,6 @@
                 {
                     "enabled": true,
                     "endpoints": [
-                        "k8s",
                         "kube",
                         "remotehosts"
                     ],
@@ -102,7 +98,6 @@
                 {
                     "enabled": true,
                     "endpoints": [
-                        "k8s",
                         "kube",
                         "remotehosts"
                     ],
@@ -119,7 +114,6 @@
                 {
                     "enabled": true,
                     "endpoints": [
-                        "k8s",
                         "kube"
                     ],
                     "runners": {
@@ -148,7 +142,6 @@
                 {
                     "enabled": true,
                     "endpoints": [
-                        "k8s",
                         "kube",
                         "remotehosts"
                     ],
@@ -165,7 +158,6 @@
                 {
                     "enabled": true,
                     "endpoints": [
-                        "k8s",
                         "kube",
                         "remotehosts"
                     ],

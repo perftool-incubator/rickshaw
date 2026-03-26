@@ -57,7 +57,7 @@ def process_options():
                         dest = "endpoint",
                         help = "The endpoint to return a run-file for",
                         required = True,
-                        choices = [ "k8s", "remotehosts", "kube" ],
+                        choices = [ "remotehosts", "kube" ],
                         type = str)
 
     parser.add_argument("--endpoint-sub-type",
@@ -165,22 +165,6 @@ def update_endpoint_sub_type():
                 raise ValueError(msg)
             else:
                 log.info("No endpoint sub-type work necessary for endpoint type %s" % (args.endpoint))
-        case "k8s":
-            for endpoint_idx,endpoint in enumerate(run_file["endpoints"]):
-                if "kubeconfig" in endpoint:
-                    log.info("Updating existing kubconfig value for k8s endpoint %d" % (endpoint_idx))
-                else:
-                    log.info("Creating kubeconfig value for k8s endpoint %d" % (endpoint_idx))
-
-                match args.endpoint_sub_type:
-                    case "GENERIC"|"MICROK8S":
-                        endpoint["kubeconfig"] = 0
-                    case "NONE":
-                        msg = "k8s endpoint expected sub-type of either 'GENERIC', 'MICROK8S', or 'OCP' (not 'NONE')"
-                        log.error(msg)
-                        raise ValueError(msg)
-                    case "OCP":
-                        endpoint["kubeconfig"] = 1
         case "kube":
             if args.endpoint_sub_type == "NONE":
                 msg = "%s endpoint expected sub-type of either 'GENERIC', 'MICROK8S', or 'OCP' (not 'NONE')"
@@ -211,21 +195,6 @@ def update_userenvs():
     run_file["tags"]["userenv"] = args.userenv
 
     match args.endpoint:
-        case "k8s":
-            for endpoint_idx,endpoint in enumerate(run_file["endpoints"]):
-                if "userenv" in endpoint:
-                    if args.userenv == "default":
-                        log.info("Found existing %s userenv for endpoint %d but since requested userenv is default it is being removed" % (args.endpoint, endpoint_idx))
-                        del endpoint["userenv"]
-                    else:
-                        log.info("Updating existing %s userenv for endpoint %d" % (args.endpoint, endpoint_idx))
-                        endpoint["userenv"] = args.userenv
-                else:
-                    if args.userenv == "default":
-                        log.info("No %s userenv to update for endpoint %d since requested userenv is default" % (args.endpoint, endpoint_idx))
-                    else:
-                        log.info("Creating %s userenv for endpoint %d since requested userenv is not default" % (args.endpoint, endpoint_idx))
-                        endpoint["userenv"] = args.userenv
         case "kube":
             for endpoint_idx,endpoint in enumerate(run_file["endpoints"]):
                 if "config" in endpoint:
@@ -319,13 +288,6 @@ def update_controller_ip():
     run_file["tags"]["controller-ip"] = args.controller_ip
 
     match args.endpoint:
-        case "k8s":
-            for endpoint_idx,endpoint in enumerate(run_file["endpoints"]):
-                if "controller-ip" in endpoint:
-                    log.info("Updating existing %s controller-ip for endpoint %d" % (args.endpoint, endpoint_idx))
-                    endpoint["controller-ip"] = args.controller_ip
-                else:
-                    log.debug("No controller-ip to update for %s endpoint %d" % (args.endpoint, endpoint_idx))
         case "kube":
             for endpoint_idx,endpoint in enumerate(run_file["endpoints"]):
                 if "controller-ip-address" in endpoint:
@@ -376,7 +338,7 @@ def update_host():
     run_file["tags"]["host"] = args.host
 
     match args.endpoint:
-        case "k8s" | "kube":
+        case "kube":
             for endpoint_idx,endpoint in enumerate(run_file["endpoints"]):
                 if "host" in endpoint:
                     log.info("Updating existing %s host for endpoint %d" % (args.endpoint, endpoint_idx))
@@ -417,7 +379,7 @@ def update_user():
     run_file["tags"]["user"] = args.user
 
     match args.endpoint:
-        case "k8s" | "kube":
+        case "kube":
             for endpoint_idx,endpoint in enumerate(run_file["endpoints"]):
                 if "user" in endpoint:
                     log.info("Updating existing %s user for endpoint %d" % (args.endpoint, endpoint_idx))
