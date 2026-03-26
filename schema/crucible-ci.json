@@ -53,7 +53,6 @@
                                     "items": {
                                         "type": "string",
                                         "enum": [
-                                            "k8s",
                                             "kube",
                                             "remotehosts"
                                         ]

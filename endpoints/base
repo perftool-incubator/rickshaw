@@ -473,9 +473,9 @@ function do_ssh() {
     if [ -z "$host" ]; then
         exit_error "do_ssh: host was blank: $user_host"
     fi
-    # the k8s & osp endpoints are the only endpoints (as of now) that doesn't
+    # the osp endpoint is the only endpoint (as of now) that doesn't
     # force the user to have root privileges.
-    if [ "${endpoint_name}" != "k8s" -a "${endpoint_name}" != "osp" -a "${user}" != "root" ]; then
+    if [ "${endpoint_name}" != "osp" -a "${user}" != "root" ]; then
         ssh_cmd="ssh $ssh_opts $user_host sudo bash -c \"$@\""
     else
         ssh_cmd="ssh $ssh_opts $user_host bash -c \"$@\""
@@ -502,7 +502,7 @@ function do_scp() {
         dst_sudo_cmd=""
         dst_user=`echo $dst_userhost | awk -F@ '{print $1}'`
         #if [ "$dst_user" != "root" ]; then
-        if [ "${endpoint_name}" != "k8s" -a "${endpoint_name}" != "osp" -a "${dst_user}" != "root" ]; then
+        if [ "${endpoint_name}" != "osp" -a "${dst_user}" != "root" ]; then
             local dst_sudo_cmd="sudo"
         fi
         dst_host=`echo $dst_userhost | awk -F@ '{print $2}'`
