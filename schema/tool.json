@@ -78,7 +78,6 @@
                 "enum": [
                   "osp",
                   "remotehosts",
-                  "k8s",
                   "kube"
                 ]
               },
@@ -115,7 +114,6 @@
                 "enum": [
                   "osp",
                   "remotehosts",
-                  "k8s",
                   "kube"
                 ]
               },

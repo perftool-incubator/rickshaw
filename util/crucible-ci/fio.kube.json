@@ -46,6 +46,9 @@
                     "val": "turbostat"
                 }
             ]
+        },
+        {
+            "tool": "forkstat"
         }
     ],
     "tags": {
