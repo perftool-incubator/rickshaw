@@ -43,6 +43,12 @@ def process_options():
                         default = "all",
                         type = str)
 
+    parser.add_argument("--endpoint",
+                        dest = "endpoint",
+                        help = "Filter jobs to a specific endpoint (e.g., 'kube' or 'remotehosts')",
+                        default = "all",
+                        type = str)
+
     parser.add_argument("--job-size",
                         dest = "job_size",
                         help = "What size of job should be constructed",
@@ -261,6 +267,9 @@ def get_jobs(logger):
                                         args.runner_pool
                                     )
                                     for endpoint in scenario["endpoints"]:
+                                        if args.endpoint != "all" and args.endpoint != endpoint:
+                                            logger.debug("Skipping endpoint '%s' because it does not match requested endpoint '%s'" % (endpoint, args.endpoint))
+                                            continue
                                         job = {
                                             "benchmark": benchmark["name"],
                                             "enabled": True,
