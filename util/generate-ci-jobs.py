@@ -43,6 +43,18 @@ def process_options():
                         default = "all",
                         type = str)
 
+    parser.add_argument("--endpoint",
+                        dest = "endpoint",
+                        help = "Filter jobs to a specific endpoint (e.g., 'kube' or 'remotehosts')",
+                        default = "all",
+                        type = str)
+
+    parser.add_argument("--job-size",
+                        dest = "job_size",
+                        help = "What size of job should be constructed",
+                        default = "small",
+                        choices = [ "small", "big" ])
+
     parser.add_argument("--log-level",
                         dest = "log_level",
                         help = "Control how much logging output should be generated",
@@ -255,6 +267,9 @@ def get_jobs(logger):
                                         args.runner_pool
                                     )
                                     for endpoint in scenario["endpoints"]:
+                                        if args.endpoint != "all" and args.endpoint != endpoint:
+                                            logger.debug("Skipping endpoint '%s' because it does not match requested endpoint '%s'" % (endpoint, args.endpoint))
+                                            continue
                                         job = {
                                             "benchmark": benchmark["name"],
                                             "enabled": True,
@@ -424,6 +439,15 @@ def get_userenvs(logger):
             # satisify testing requirements
             logger.info("Adding 'default' userenv since no other userenvs were added")
             final_userenvs.append("default")
+
+    if args.job_size == "small":
+        # nothing to do here, the userenvs as indidvidual elements is
+        # what we want
+        pass
+    elif args.job_size == "big":
+        # collapse the userenvs into a comma separated list so that
+        # one job will process all userenvs
+        final_userenvs = [ ",".join(final_userenvs) ]
 
     return final_userenvs
 
