@@ -32,6 +32,8 @@ jobs:
             engine/engine-script-library.py
             engine/engine-script.py
             userenvs/rhel-ai-*.json
+      - name: Display changes
+        run: echo '${{ toJSON(steps.filter.outputs) }}' | jq .
 
   blockbreaker:
     runs-on: ubuntu-latest
