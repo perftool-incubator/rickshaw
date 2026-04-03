@@ -315,6 +315,30 @@ def get_jobs(logger):
 
     return raw_jobs
 
+def references_file(obj, target_path):
+    """
+    Recursively search a JSON object for any 'src' field whose value
+    contains the target path (e.g., 'userenvs/requirement-sources/alma10.repo')
+
+    Args:
+        obj: A parsed JSON object (dict, list, or scalar)
+        target_path: The relative path to search for in 'src' fields
+
+    Returns:
+        bool: True if any 'src' field references the target path
+    """
+    if isinstance(obj, dict):
+        for key, value in obj.items():
+            if key == "src" and isinstance(value, str) and target_path in value:
+                return True
+            if references_file(value, target_path):
+                return True
+    elif isinstance(obj, list):
+        for item in obj:
+            if references_file(item, target_path):
+                return True
+    return False
+
 def get_userenvs(logger):
     """
     Inspect the rickshaw directory and generate a list of userenvs based on user input
@@ -385,6 +409,18 @@ def get_userenvs(logger):
             if file in testable_userenvs:
                 logger.info("Found userenv '%s' in the testable list" % (file))
                 userenvs.append(file)
+            elif file.startswith("userenvs/requirement-sources/"):
+                logger.info("Found requirement-source change '%s', searching for referencing userenvs" % (file))
+                for testable_userenv in testable_userenvs:
+                    testable_userenv_path = rickshaw_dir + "/" + testable_userenv
+                    try:
+                        userenv_json, err = load_json_file(testable_userenv_path)
+                        if userenv_json is not None and references_file(userenv_json, file):
+                            if testable_userenv not in userenvs:
+                                logger.info("Userenv '%s' references '%s', adding to test list" % (testable_userenv, file))
+                                userenvs.append(testable_userenv)
+                    except Exception as e:
+                        logger.warning("Could not process '%s': %s" % (testable_userenv, str(e)))
     else:
         for file in testable_userenvs:
             logger.info("Found userenv '%s' in the testable list" % (file))
