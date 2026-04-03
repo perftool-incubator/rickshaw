@@ -54,7 +54,19 @@
 			"r",
 			"random"
 		    ]
+		},
+		"name": {
+		    "type": "string",
+		    "minLength": 1
+		},
+		"email": {
+		    "type": "string",
+		    "minLength": 1
 		}
+	    },
+	    "dependentRequired": {
+		"name": ["email"],
+		"email": ["name"]
 	    },
 	    "additionalProperties": false,
 	    "required": []

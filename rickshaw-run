@@ -837,19 +837,17 @@ sub process_cmdline() {
             }
 
             ### run-params
-            $blockbreaker_cmd = "python3 " . $rickshaw_project_dir . "/util/blockbreaker.py --json " . $run{'run-file'} . " --config run-params";
-            debug_log(sprintf "about to run: %s\n", $blockbreaker_cmd);
-            ($cmd, $cmd_output, $cmd_rc) = run_cmd($blockbreaker_cmd);
-            if ($cmd_rc != 0) {
-                log_print sprintf "[ERROR blockbreaker failed to run with rc=%d for command=[%s]:\n%s\n", $cmd_rc, $cmd, $cmd_output;
+            (my $run_file_rc, my $run_file_json) = get_json_file($run{'run-file'});
+            if ($run_file_rc > 0 or ! defined $run_file_json) {
+                log_print sprintf "[ERROR] Could not load run-file: %s\n", $run{'run-file'};
                 exit 1;
             }
-            chomp($cmd_output);
-            $cmd_output =~ s/^\s+//;
-            $cmd_output =~ s/\s+$//;
-            foreach my $arg (split(/ /, $cmd_output)) {
-                debug_log(sprintf "appending arg [%s] extracted from from-file to \@ARGV\n", $arg);
-                push @ARGV, $arg;
+            if (exists $$run_file_json{'run-params'}) {
+                foreach my $key (keys %{ $$run_file_json{'run-params'} }) {
+                    my $val = $$run_file_json{'run-params'}{$key};
+                    debug_log(sprintf "appending arg [--%s] with value [%s] extracted from run-file run-params\n", $key, $val);
+                    push @ARGV, "--" . $key, $val;
+                }
             }
         } elsif ($arg eq "endpoint") {
             $val =~ /^(\w+),(.*)$/;
