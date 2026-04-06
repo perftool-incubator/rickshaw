@@ -33,7 +33,7 @@ def validate(filename):
 
     for json_blk in input_json["endpoints"]:
         endpoint_type = json_blk["type"]
-        if not validate_schema(json_blk, "schema-" + endpoint_type + ".json"):
+        if not validate_schema(json_blk, endpoint_type + ".json"):
             err_msg=(
                 f"Failed to validate the 'endpoints' block from "
                 f" the JSON run-file { filename } against the "

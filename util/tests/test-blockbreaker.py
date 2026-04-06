@@ -57,7 +57,7 @@ class TestBlockBreaker:
                              [ "input-oslat-osp.json" ], indirect=True)
     def test_validate_schema_endpoint_osp(self, load_json_file):
         validated_json = blockbreaker.validate_schema(
-                             load_json_file["endpoints"][0], "schema-osp.json")
+                             load_json_file["endpoints"][0], "osp.json")
         assert validated_json is True
 
     """Test validate_schema using kvm schema and returns True"""
@@ -65,7 +65,7 @@ class TestBlockBreaker:
                              [ "input-oslat-kvm.json" ], indirect=True)
     def test_validate_schema_endpoint_kvm(self, load_json_file):
         validated_json = blockbreaker.validate_schema(
-                             load_json_file["endpoints"][0], "schema-kvm.json")
+                             load_json_file["endpoints"][0], "kvm.json")
         assert validated_json is True
 
     """Test validate_schema using invalid schema and returns False"""
@@ -73,7 +73,7 @@ class TestBlockBreaker:
                              [ "input-oslat-invalid.json" ], indirect=True)
     def test_validate_schema_endpoint_invalid(self, load_json_file):
         validated_json = blockbreaker.validate_schema(
-                             load_json_file["endpoints"][0], "schema-invalid.json")
+                             load_json_file["endpoints"][0], "invalid.json")
         assert validated_json is False
 
     """Test validate_schema w/ missing endpoint type and returns False"""
@@ -81,6 +81,6 @@ class TestBlockBreaker:
                              [ "input-oslat-notype.json" ], indirect=True)
     def test_validate_schema_endpoint_notype(self, load_json_file):
         validated_json = blockbreaker.validate_schema(
-                             load_json_file["endpoints"][0], "schema-null.json")
+                             load_json_file["endpoints"][0], "null.json")
         assert validated_json is False
 

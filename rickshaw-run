@@ -109,7 +109,7 @@ my $default_tool_userenv;
 }
 my $bench_schema_file = $rickshaw_project_dir . "/schema/benchmark.json";
 my $tool_schema_file = $rickshaw_project_dir . "/schema/tool.json";
-my $run_schema_file = $rickshaw_project_dir . "/schema/run.json";
+my $run_schema_file = $rickshaw_project_dir . "/schema/rickshaw-run.json";
 my $utility_schema_file = $rickshaw_project_dir . "/schema/utility.json";
 my $bench_params_schema_file = $rickshaw_project_dir . "/schema/bench-params.json";
 my $tool_params_schema_file = $rickshaw_project_dir . "/schema/tool-params.json";

@@ -1965,7 +1965,7 @@ def load_settings(settings, endpoint_name = None, run_file = None, rickshaw_dir 
     else:
         logger.info("Loaded run-file from %s" % (run_file))
 
-    valid, err = validate_schema(settings["run-file"], rickshaw_dir + "/util/JSON/schema.json")
+    valid, err = validate_schema(settings["run-file"], rickshaw_dir + "/schema/run-file.json")
     if not valid:
         logger.error("JSON validation failed for run-file")
         return None
