@@ -333,7 +333,7 @@ def validate():
         return 1
     endpoints.validate_comment("run-file: %s" % (json))
 
-    valid, err = validate_schema(json, args.rickshaw_dir + "/util/JSON/schema.json")
+    valid, err = validate_schema(json, args.rickshaw_dir + "/schema/run-file.json")
     if not valid:
         endpoints.validate_error(err)
         return 1

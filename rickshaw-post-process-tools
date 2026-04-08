@@ -102,8 +102,8 @@ my $rickshaw_project_dir;
     $rickshaw_project_dir = getcwd();
 }
 my $tool_schema_file = $rickshaw_project_dir . "/schema/tool.json";
-my $run_schema_file = $rickshaw_project_dir . "/schema/run.json";
-my $result_schema_file = $rickshaw_project_dir . "/schema/result.json";
+my $run_schema_file = $rickshaw_project_dir . "/schema/rickshaw-run.json";
+my $result_schema_file = $rickshaw_project_dir . "/schema/rickshaw-run.json";
 my %bench_config;
 
 # Process the cmdline params

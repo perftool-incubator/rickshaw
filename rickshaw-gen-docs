@@ -606,7 +606,7 @@ my $config_dir = $base_run_dir . "/config";
 my $run_dir = $base_run_dir . "/run";
 my $iter_subdir = "iterations";
 my $tool_dir = $run_dir . "/tool-data";
-$result_schema_file = $rickshaw_project_dir . "/schema/run.json";
+$result_schema_file = $rickshaw_project_dir . "/schema/rickshaw-run.json";
 $bench_metric_schema_file = $rickshaw_project_dir . "/schema/bench-metric.json";
 $sample_persistent_ids_schema_file = $rickshaw_project_dir . "/schema/sample-persistent-ids.json";
 

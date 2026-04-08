@@ -123,7 +123,7 @@ my $rickshaw_project_dir;
 }
 my $bench_schema_file = $rickshaw_project_dir . "/schema/benchmark.json";
 my $bench_metric_schema_file = $rickshaw_project_dir . "/schema/bench-metric.json";
-my $run_schema_file = $rickshaw_project_dir . "/schema/run.json";
+my $run_schema_file = $rickshaw_project_dir . "/schema/rickshaw-run.json";
 my %bench_configs;
 
 # Process the cmdline params

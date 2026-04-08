@@ -128,7 +128,7 @@ def json_to_stream(json_obj, cfg, idx):
         if cfg == 'endpoints' and isinstance(json_obj[cfg], list):
             json_blk = json_obj[cfg][idx]
             endpoint_type = json_blk["type"]
-            if not validate_schema(json_blk, "schema-" + endpoint_type + ".json"):
+            if not validate_schema(json_blk, endpoint_type + ".json"):
                 return None
             match endpoint_type:
                 case "kube" | "remotehosts":
@@ -232,8 +232,8 @@ def validate_schema(input_json, schema_file = None):
     """Validate json with schema file"""
     err_msg = None
     # schema_file defaults to general schema.json for the full run-file
-    schema_path = "%s/JSON/" % (os.path.dirname(os.path.abspath(__file__)))
-    schema_default = "schema.json"
+    schema_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "schema") + "/"
+    schema_default = "run-file.json"
 
     try:
         # use block sub-schema if schema_file is specified
