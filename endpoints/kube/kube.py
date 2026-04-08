@@ -828,6 +828,7 @@ def compile_object_configs():
     settings["engines"]["endpoint"]["classes"]["cpu-partitioning"] = dict()
     settings["engines"]["endpoint"]["classes"]["cpu-partitioning"]["with"] = []
     settings["engines"]["endpoint"]["classes"]["cpu-partitioning"]["without"] = []
+    settings["engines"]["endpoint"]["classes"]["profiled-nodes"] = []
     for pod_group in endpoint["pods"]:
         # Use the first engine's settings to determine cpu-partitioning
         # (already validated that all engines in the group agree)
@@ -1797,7 +1798,6 @@ def create_tools_pods(abort_event):
 
     logger.info("Creating node profiling pods")
 
-    settings["engines"]["endpoint"]["classes"]["profiled-nodes"] = []
     tools_pod_id = 1
     for node in profiled_nodes:
         pod = {
