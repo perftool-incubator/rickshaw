@@ -316,7 +316,55 @@
                     "targets",
                     "settings"
                 ]
-            }            
+            }
+        },
+        "pods": {
+            "description": "Optional grouping of engines into pods.  Each entry defines one pod containing the listed engines as separate containers.  If omitted, each engine gets its own pod.  Engines not listed in any pod group automatically get their own solo pod.",
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": {
+                "type": "object",
+                "properties": {
+                    "name": {
+                        "description": "Optional user-defined name for this pod.  Must be unique across all pod groups.  If omitted, a name is auto-generated.",
+                        "type": "string",
+                        "minLength": 1,
+                        "pattern": "^[a-z0-9]([a-z0-9-]*[a-z0-9])?$"
+                    },
+                    "engines": {
+                        "description": "The list of engines to group into this pod.  Each entry specifies a role and one or more engine IDs.",
+                        "type": "array",
+                        "minItems": 1,
+                        "uniqueItems": true,
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "role": {
+                                    "type": "string",
+                                    "enum": [
+                                        "client",
+                                        "server"
+                                    ]
+                                },
+                                "ids": {
+                                    "description": "This parameter defines which engines with the specified role belong to this pod.  The 'number-lists' definition below explains what the available formats are.",
+                                    "$ref": "#/definitions/number-lists"
+                                }
+                            },
+                            "additionalProperties": false,
+                            "required": [
+                                "role",
+                                "ids"
+                            ]
+                        }
+                    }
+                },
+                "additionalProperties": false,
+                "required": [
+                    "engines"
+                ]
+            }
         }
     },
     "additionalProperties": false,
