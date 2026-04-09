@@ -5,26 +5,75 @@
         }
     },
     "userenvs": [
-	{
-	    "name": "fedora",
-	    "requirements": [
-		"source-images-service-distro"
-	    ]
-	}
+        {
+            "name": "crucible-controller",
+            "requirements": [
+                "rickshaw-container-tools",
+                "endpoints-distro",
+                "source-images-service-distro",
+                "rickshaw-perl-modules",
+                "rickshaw-python-deps"
+            ]
+        }
     ],
     "requirements": [
-	{
-	    "name": "source-images-service-distro",
-	    "type": "distro",
-	    "distro_info": {
-		"packages": [
-		    "python3-fastapi",
-		    "python3-uvicorn+standard",
-		    "python3-pydantic",
-		    "python3-pydantic-settings",
-		    "python3-httpx"
-		]
-	    }
-	}
+        {
+            "name": "rickshaw-container-tools",
+            "type": "distro",
+            "distro_info": {
+                "packages": [
+                    "buildah",
+                    "skopeo"
+                ]
+            }
+        },
+        {
+            "name": "endpoints-distro",
+            "type": "distro",
+            "distro_info": {
+                "packages": [
+                    "python3-invoke",
+                    "python3-fabric",
+                    "python3-requests"
+                ]
+            }
+        },
+        {
+            "name": "source-images-service-distro",
+            "type": "distro",
+            "distro_info": {
+                "packages": [
+                    "python3-fastapi",
+                    "python3-uvicorn+standard",
+                    "python3-pydantic",
+                    "python3-pydantic-settings",
+                    "python3-httpx"
+                ]
+            }
+        },
+        {
+            "name": "rickshaw-perl-modules",
+            "type": "distro",
+            "distro_info": {
+                "packages": [
+                    "perl-JSON-XS",
+                    "perl-JSON-Validator",
+                    "perl-Data-UUID",
+                    "perl-Data-Dumper",
+                    "perl-REST-Client",
+                    "perl-Digest-MD5",
+                    "perl-Getopt-Long"
+                ]
+            }
+        },
+        {
+            "name": "rickshaw-python-deps",
+            "type": "python3",
+            "python3_info": {
+                "packages": [
+                    "jsonschema"
+                ]
+            }
+        }
     ]
 }
