@@ -14,6 +14,16 @@
                 "rickshaw-perl-modules",
                 "rickshaw-python-deps"
             ]
+        },
+        {
+            "name": "fedora",
+            "requirements": [
+                "rickshaw-container-tools",
+                "endpoints-distro",
+                "source-images-service-distro",
+                "rickshaw-perl-modules",
+                "rickshaw-python-deps"
+            ]
         }
     ],
     "requirements": [
