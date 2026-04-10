@@ -35,10 +35,10 @@ jobs:
       - name: Display changes
         run: echo '${{ toJSON(steps.filter.outputs) }}' | jq .
 
-  call-real-core-crucible-ci:
+  call-real-core-release-crucible-ci:
     needs: changes
     if: ${{ github.event_name == 'workflow_dispatch' || needs.changes.outputs.only-docs != 'true' }}
-    uses: perftool-incubator/crucible-ci/.github/workflows/core-crucible-ci.yaml@main
+    uses: perftool-incubator/crucible-ci/.github/workflows/core-release-crucible-ci.yaml@main
     with:
       ci_target: "rickshaw"
       ci_target_branch: "${{ github.ref }}"
@@ -47,13 +47,13 @@ jobs:
       ci_registry_auth: ${{ secrets.CRUCIBLE_CI_ENGINES_REGISTRY_AUTH }}
       quay_oauth_token: ${{ secrets.CRUCIBLE_QUAYIO_OAUTH_TOKEN }}
 
-  call-faux-core-crucible-ci:
+  call-faux-core-release-crucible-ci:
     needs: changes
     if: ${{ github.event_name != 'workflow_dispatch' && needs.changes.outputs.only-docs == 'true' }}
-    uses: perftool-incubator/crucible-ci/.github/workflows/faux-core-crucible-ci.yaml@main
+    uses: perftool-incubator/crucible-ci/.github/workflows/faux-core-release-crucible-ci.yaml@main
 
   crucible-ci-complete:
-    needs: [ call-real-core-crucible-ci, call-faux-core-crucible-ci ]
+    needs: [ call-real-core-release-crucible-ci, call-faux-core-release-crucible-ci ]
     if: always()
     runs-on: ubuntu-latest
     steps:
