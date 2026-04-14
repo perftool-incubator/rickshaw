@@ -27,6 +27,7 @@ jobs:
             .github/workflows/run-crucible-tracking.yaml
             .github/workflows/crucible-merged.yaml
             .github/workflows/crucible-ci.yaml
+            .github/workflows/controller-build.yaml
             .github/workflows/unittest.yaml
             docs/**
             engine/engine-script-library.py
