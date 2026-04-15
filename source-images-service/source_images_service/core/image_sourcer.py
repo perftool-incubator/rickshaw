@@ -401,7 +401,7 @@ def _source_container_image(
     }
     provenance_req_file = workspace.config / "provenance-requirements.json"
     provenance_req_file.write_text(json.dumps(provenance_req, indent=2) + "\n")
-    requirements.append(f" --requirements {provenance_req_file}")
+    provenance_req_arg = f" --requirements {provenance_req_file}"
 
     job.append_log(f"\tProvenance: {len(prov.repos)} repos tracked")
 
@@ -414,14 +414,14 @@ def _source_container_image(
     while len(requirements) > 0:
         if count == 0:
             userenv_arg = f" --userenv {userenv_file_path}"
-            req_arg = ""
+            req_arg = provenance_req_arg
             update_policy = origin.get("update-policy", "")
             if update_policy == "never":
                 skip_update = "true"
             else:
                 skip_update = "false"
         else:
-            req_arg = requirements.pop(0)
+            req_arg = requirements.pop(0) + provenance_req_arg
             skip_update = "true"
 
         # Write cs-conf.json without quay label (for hash calculation)
@@ -442,11 +442,10 @@ def _source_container_image(
         # Rewrite cs-conf.json with quay label (and annotations on last stage)
         quay_exp = request.registries.get("public", reg)
         exp_length = quay_exp.quay_expiration_length or ""
-        is_last_stage = len(requirements) == 0
         _write_cs_conf(
             cs_conf_file,
             quay_label=f"quay.expires-after={exp_length}",
-            annotations=provenance_annotations if is_last_stage else None,
+            annotations=provenance_annotations,
         )
 
         workshop_args.append({
