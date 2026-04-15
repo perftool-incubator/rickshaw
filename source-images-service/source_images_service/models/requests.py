@@ -75,6 +75,65 @@ class WorkshopConfig(BaseModel):
     model_config = {"populate_by_name": True}
 
 
+class RepoProvenance(BaseModel):
+    """Provenance data for a single contributing repo."""
+
+    commit: str = Field(description="Git commit hash (HEAD)")
+    dirty: str = Field(description="Whether the repo has uncommitted changes ('true' or 'false')")
+    diff_hash: str | None = Field(
+        default=None,
+        alias="diff-hash",
+        description="SHA-256 of git diff output (only when dirty)",
+    )
+    diff: str | None = Field(
+        default=None,
+        description="Full git diff output (only when dirty)",
+    )
+
+    model_config = {"populate_by_name": True}
+
+
+class ProvenanceSource(BaseModel):
+    """Identifying information about the build source controller."""
+
+    hostname: str = Field(description="Hostname of the controller")
+    ip: str = Field(description="IP address of the controller")
+
+
+class RickshawVersion(BaseModel):
+    """Provenance for a rickshaw installation (client or server side)."""
+
+    commit: str = Field(description="Git commit hash (HEAD)")
+    dirty: str = Field(description="Whether the repo has uncommitted changes ('true' or 'false')")
+    diff_hash: str | None = Field(
+        default=None,
+        alias="diff-hash",
+        description="SHA-256 of git diff output (only when dirty)",
+    )
+    diff: str | None = Field(
+        default=None,
+        description="Full git diff output (only when dirty)",
+    )
+
+    model_config = {"populate_by_name": True}
+
+
+class Provenance(BaseModel):
+    """Build provenance tracking information."""
+
+    build_date: str = Field(alias="build-date", description="ISO 8601 build timestamp")
+    source: ProvenanceSource = Field(description="Controller identification")
+    rickshaw_client: RickshawVersion = Field(
+        alias="rickshaw-client",
+        description="Provenance for the controller-side rickshaw",
+    )
+    repos: dict[str, RepoProvenance] = Field(
+        description="Map of repo names to provenance data"
+    )
+
+    model_config = {"populate_by_name": True}
+
+
 class SourceImagesRequest(BaseModel):
     """Top-level request body for POST /api/v1/source-images."""
 
@@ -130,6 +189,9 @@ class SourceImagesRequest(BaseModel):
     use_workshop: bool = Field(alias="use-workshop")
     quay_refresh_expiration_tokens: dict[str, str] | None = Field(
         default=None, alias="quay-refresh-expiration-tokens"
+    )
+    provenance: Provenance = Field(
+        description="Build provenance tracking information"
     )
     log_level: str = Field(default="info", alias="log-level")
 

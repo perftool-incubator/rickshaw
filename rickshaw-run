@@ -2751,6 +2751,92 @@ debug_log (sprintf "image_ids (before):\n" . Dumper \%image_ids);
     }
     $source_input{'utility-dirs'} = \%utility_dirs;
 
+    # Build provenance data for engine image tracking
+    {
+        my %provenance;
+
+        # Build date
+        my $build_date = `date -u +%Y-%m-%dT%H:%M:%SZ`;
+        chomp $build_date;
+        $provenance{'build-date'} = $build_date;
+
+        # Source controller identification
+        my $hostname = `hostname -f 2>/dev/null || hostname`;
+        chomp $hostname;
+        my $ip = `ip -4 route get 1.0.0.0 2>/dev/null | grep -oP 'src \\K\\S+' || echo "unknown"`;
+        chomp $ip;
+        $provenance{'source'} = {
+            'hostname' => $hostname,
+            'ip'       => $ip,
+        };
+
+        # Rickshaw client version (controller-side)
+        my $client_commit = `git -C $rickshaw_project_dir rev-parse HEAD 2>/dev/null`;
+        chomp $client_commit;
+        my %rickshaw_client = (
+            'commit' => $client_commit,
+            'dirty'  => 'false',
+        );
+        my $client_dirty_rc = system("git -C $rickshaw_project_dir diff --quiet 2>/dev/null");
+        if ($client_dirty_rc != 0) {
+            $rickshaw_client{'dirty'} = 'true';
+            my $client_diff_hash = `git -C $rickshaw_project_dir diff 2>/dev/null | sha256sum | awk '{print \$1}'`;
+            chomp $client_diff_hash;
+            $rickshaw_client{'diff-hash'} = $client_diff_hash;
+            my $client_diff = `git -C $rickshaw_project_dir diff 2>/dev/null`;
+            $rickshaw_client{'diff'} = $client_diff;
+        }
+        $provenance{'rickshaw-client'} = \%rickshaw_client;
+
+        # Collect repo provenance (rickshaw excluded — tracked separately as client/server)
+        my %repos_provenance;
+        my %repo_paths = (
+            'toolbox'   => $ENV{'TOOLBOX_HOME'},
+            'roadblock' => $run{'roadblock-dir'},
+            'workshop'  => $run{'workshop-dir'},
+        );
+        # Add benchmark repos
+        foreach my $bench (keys %bench_dirs) {
+            $repo_paths{$bench} = $bench_dirs{$bench};
+        }
+        # Add utility repos
+        foreach my $util (keys %utility_dirs) {
+            $repo_paths{$util} = $utility_dirs{$util};
+        }
+
+        foreach my $name (sort keys %repo_paths) {
+            my $path = $repo_paths{$name};
+            next unless defined $path && -d $path;
+
+            my $commit = `git -C $path rev-parse HEAD 2>/dev/null`;
+            chomp $commit;
+            if ($commit eq '') {
+                log_print "WARNING: Could not get commit hash for '$name' at '$path'\n";
+                next;
+            }
+
+            my %repo_info = (
+                'commit' => $commit,
+                'dirty'  => 'false',
+            );
+
+            my $dirty_rc = system("git -C $path diff --quiet 2>/dev/null");
+            if ($dirty_rc != 0) {
+                $repo_info{'dirty'} = 'true';
+                my $diff_hash = `git -C $path diff 2>/dev/null | sha256sum | awk '{print \$1}'`;
+                chomp $diff_hash;
+                $repo_info{'diff-hash'} = $diff_hash;
+                my $diff = `git -C $path diff 2>/dev/null`;
+                $repo_info{'diff'} = $diff;
+            }
+
+            $repos_provenance{$name} = \%repo_info;
+        }
+
+        $provenance{'repos'} = \%repos_provenance;
+        $source_input{'provenance'} = \%provenance;
+    }
+
     my $source_input_file = $config_dir . "/image-source-input.json";
     my $source_output_file = $config_dir . "/image-source-output.json";
     if (put_json_file($source_input_file, \%source_input, $source_images_input_schema_file) > 0) {
