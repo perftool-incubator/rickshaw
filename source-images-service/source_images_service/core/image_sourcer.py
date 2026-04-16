@@ -37,11 +37,15 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-def _write_cs_conf(path: Path, quay_label: str | None = None) -> None:
+def _write_cs_conf(
+    path: Path,
+    quay_label: str | None = None,
+    annotations: list[str] | None = None,
+) -> None:
     """Write the container-spec config JSON.
 
-    Called twice per stage: once without quay label (for hash calculation),
-    once with (for the actual build).
+    Called twice per stage: once without quay label/annotations (for hash
+    calculation), once with (for the actual build).
     """
     cs_conf: dict[str, Any] = {
         "workshop": {"schema": {"version": "2020.04.30"}},
@@ -52,6 +56,8 @@ def _write_cs_conf(path: Path, quay_label: str | None = None) -> None:
     }
     if quay_label is not None:
         cs_conf["config"]["labels"] = [quay_label]
+    if annotations:
+        cs_conf["config"]["annotations"] = annotations
 
     path.write_text(json.dumps(cs_conf, indent=2) + "\n")
 
@@ -282,6 +288,123 @@ def _source_container_image(
         userenv, benchmark, workspace, request.utilities, request.use_workshop
     )
 
+    # Generate provenance data for embedding in the final image
+    provenance_annotations: list[str] = []
+    provenance_req_file: Path | None = None
+
+    prov = request.provenance
+    provenance_annotations.append(
+        f"crucible.provenance.hostname={prov.source.hostname}"
+    )
+    provenance_annotations.append(
+        f"crucible.provenance.ip={prov.source.ip}"
+    )
+    rickshaw_client_str = prov.rickshaw_client.commit
+    if prov.rickshaw_client.dirty == "true":
+        rickshaw_client_str += f":dirty:{prov.rickshaw_client.diff_hash or 'unknown'}"
+    provenance_annotations.append(
+        f"crucible.provenance.rickshaw-client={rickshaw_client_str}"
+    )
+
+    # Get server-side rickshaw commit and dirty state for provenance
+    # Use the service's own installation path (not the workspace, which is materialized files)
+    server_commit = "unknown"
+    server_dirty = False
+    server_diff_hash = None
+    try:
+        import subprocess
+        service_dir = Path(__file__).resolve().parent.parent.parent.parent
+        result = subprocess.run(
+            ["git", "-C", str(service_dir), "rev-parse", "HEAD"],
+            capture_output=True, text=True
+        )
+        if result.returncode == 0:
+            server_commit = result.stdout.strip()
+            dirty_result = subprocess.run(
+                ["git", "-C", str(service_dir), "diff", "--quiet"],
+                capture_output=True
+            )
+            if dirty_result.returncode != 0:
+                server_dirty = True
+                hash_result = subprocess.run(
+                    ["git", "-C", str(service_dir), "diff"],
+                    capture_output=True
+                )
+                if hash_result.returncode == 0:
+                    import hashlib
+                    server_diff_hash = hashlib.sha256(hash_result.stdout).hexdigest()
+    except Exception:
+        pass
+
+    rickshaw_server_str = server_commit
+    if server_dirty:
+        rickshaw_server_str += f":dirty:{server_diff_hash or 'unknown'}"
+    provenance_annotations.append(
+        f"crucible.provenance.rickshaw-server={rickshaw_server_str}"
+    )
+    for repo_name, repo_info in sorted(prov.repos.items()):
+        value = repo_info.commit
+        if repo_info.dirty == "true":
+            value += f":dirty:{repo_info.diff_hash or 'unknown'}"
+        provenance_annotations.append(
+            f"crucible.provenance.{repo_name}={value}"
+        )
+
+    # Build provenance JSON for embedding as a file in the image
+    provenance_data: dict[str, Any] = {
+        "build-date": prov.build_date,
+        "source": {
+            "hostname": prov.source.hostname,
+            "ip": prov.source.ip,
+        },
+        "rickshaw-client": {
+            "commit": prov.rickshaw_client.commit,
+            "dirty": prov.rickshaw_client.dirty,
+            "diff-hash": prov.rickshaw_client.diff_hash,
+        },
+        "rickshaw-server": {
+            "commit": server_commit,
+            "dirty": "true" if server_dirty else "false",
+            "diff-hash": server_diff_hash,
+        },
+        "repos": {},
+    }
+    for repo_name, repo_info in sorted(prov.repos.items()):
+        entry: dict[str, Any] = {
+            "commit": repo_info.commit,
+            "dirty": repo_info.dirty,
+        }
+        if repo_info.dirty == "true":
+            if repo_info.diff_hash:
+                entry["diff-hash"] = repo_info.diff_hash
+            if repo_info.diff:
+                entry["diff"] = repo_info.diff
+        provenance_data["repos"][repo_name] = entry
+
+    provenance_json_file = workspace.config / "build-provenance.json"
+    provenance_json_file.write_text(json.dumps(provenance_data, indent=2) + "\n")
+
+    # Generate a workshop requirement to copy provenance into the image
+    provenance_req = {
+        "workshop": {"schema": {"version": "2020.03.02"}},
+        "userenvs": [{"name": "default", "requirements": ["build-provenance"]}],
+        "requirements": [{
+            "name": "build-provenance",
+            "type": "files",
+            "files_info": {
+                "files": [{
+                    "src": str(provenance_json_file),
+                    "dst": "/etc/crucible/build-provenance.json",
+                }]
+            },
+        }],
+    }
+    provenance_req_file = workspace.config / "provenance-requirements.json"
+    provenance_req_file.write_text(json.dumps(provenance_req, indent=2) + "\n")
+    provenance_req_arg = f" --requirements {provenance_req_file}"
+
+    job.append_log(f"\tProvenance: {len(prov.repos)} repos tracked")
+
     # Build staged workshop_args list
     workshop_args: list[dict[str, str]] = []
     userenv_arg = ""
@@ -291,14 +414,14 @@ def _source_container_image(
     while len(requirements) > 0:
         if count == 0:
             userenv_arg = f" --userenv {userenv_file_path}"
-            req_arg = ""
+            req_arg = provenance_req_arg
             update_policy = origin.get("update-policy", "")
             if update_policy == "never":
                 skip_update = "true"
             else:
                 skip_update = "false"
         else:
-            req_arg = requirements.pop(0)
+            req_arg = requirements.pop(0) + provenance_req_arg
             skip_update = "true"
 
         # Write cs-conf.json without quay label (for hash calculation)
@@ -316,10 +439,14 @@ def _source_container_image(
             job=job,
         )
 
-        # Rewrite cs-conf.json with quay label
+        # Rewrite cs-conf.json with quay label (and annotations on last stage)
         quay_exp = request.registries.get("public", reg)
         exp_length = quay_exp.quay_expiration_length or ""
-        _write_cs_conf(cs_conf_file, quay_label=f"quay.expires-after={exp_length}")
+        _write_cs_conf(
+            cs_conf_file,
+            quay_label=f"quay.expires-after={exp_length}",
+            annotations=provenance_annotations,
+        )
 
         workshop_args.append({
             "userenv": userenv_arg,

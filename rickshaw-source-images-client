@@ -394,6 +394,10 @@ def _build_api_request(input_data):
     else:
         raise SystemExit("ERROR: toolbox workshop.json not found: %s" % toolbox_workshop)
 
+    # --- Provenance ---
+    if "provenance" in input_data:
+        api_req["provenance"] = input_data["provenance"]
+
     return api_req
 
 
