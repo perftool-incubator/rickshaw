@@ -27,6 +27,7 @@ jobs:
             .github/workflows/run-crucible-tracking.yaml
             .github/workflows/crucible-merged.yaml
             .github/workflows/crucible-ci.yaml
+            .github/workflows/fork-check.yaml
             .github/workflows/controller-build.yaml
             .github/workflows/unittest.yaml
             docs/**
@@ -38,7 +39,7 @@ jobs:
 
   call-real-core-release-crucible-ci:
     needs: changes
-    if: ${{ github.event_name == 'workflow_dispatch' || needs.changes.outputs.only-docs != 'true' }}
+    if: ${{ github.event.pull_request.head.repo.fork != true && (github.event_name == 'workflow_dispatch' || needs.changes.outputs.only-docs != 'true') }}
     uses: perftool-incubator/crucible-ci/.github/workflows/core-release-crucible-ci.yaml@main
     with:
       ci_target: "rickshaw"
@@ -50,7 +51,7 @@ jobs:
 
   call-faux-core-release-crucible-ci:
     needs: changes
-    if: ${{ github.event_name != 'workflow_dispatch' && needs.changes.outputs.only-docs == 'true' }}
+    if: ${{ github.event.pull_request.head.repo.fork != true && github.event_name != 'workflow_dispatch' && needs.changes.outputs.only-docs == 'true' }}
     uses: perftool-incubator/crucible-ci/.github/workflows/faux-core-release-crucible-ci.yaml@main
 
   crucible-ci-complete:
