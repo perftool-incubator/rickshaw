@@ -318,8 +318,9 @@ function validate_core_env() {
     #     ([0-9]+)$ ensures the string ends with a number after the last part
 
     # e.g. profiler-remotehost-1-sysstat-1,
-    #      profiler-remotehost-1-rt-trace-bpf-1 or profiler-k8s-sysstat-1
-    regex1='^profiler-([a-zA-Z0-9]+)-([0-9]+)-([a-zA-Z_-]+)-([0-9]+)$'
+    #      profiler-remotehost-1-rt-trace-bpf-1, profiler-k8s-sysstat-1,
+    #      or profiler-kube-1-sysstat-1sec-1 (multi-instance tool ID with digits)
+    regex1='^profiler-([a-zA-Z0-9]+)-([0-9]+)-([a-zA-Z0-9_-]+)-([0-9]+)$'
 
     # client-1, server-1, or k8s-1
     regex2='^([a-zA-Z0-9]+)-([a-zA-Z0-9]+)$'

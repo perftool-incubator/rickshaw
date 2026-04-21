@@ -11,6 +11,11 @@
         "type": "string",
         "minLength": 1
       },
+      "id": {
+        "type": "string",
+        "minLength": 3,
+        "pattern": "^[a-z0-9]([a-z0-9-]*[a-z0-9])?$"
+      },
       "params": {
         "type": "array",
         "minItems": 1,

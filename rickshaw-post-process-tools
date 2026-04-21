@@ -201,6 +201,17 @@ log_print sprintf "Launching a post-process job for each tool * each collector\n
 my %tools_config;
 my @pids;
 my $tool_dir = "tool-data";
+
+# Load tool-id-map.json to resolve tool IDs to tool names (for multi-instance support)
+my %tool_id_map;
+my $tool_id_map_file = $config_dir . "/tool-id-map.json";
+if (-e $tool_id_map_file or -e $tool_id_map_file . ".xz") {
+    ($file_rc, my $map_ref) = get_json_file($tool_id_map_file);
+    if ($file_rc == 0 and defined $map_ref) {
+        %tool_id_map = %{ $map_ref };
+    }
+}
+
 if (opendir(TOOLDIR, $run_dir . "/" . $tool_dir)) {
     my @collectors = grep(/\w+/, readdir(TOOLDIR));
     for my $collector (@collectors) {
@@ -214,23 +225,25 @@ if (opendir(TOOLDIR, $run_dir . "/" . $tool_dir)) {
                     my @tools = grep(/\w+/, readdir(ENGDIR));
                     log_print sprintf "Working on tool dir %s\n", $engine_dir;
                     for my $tool (@tools) {
-                        if (! exists($tools_config{$tool})) {
-                            # Load a tool configuration for every tool the user is asking for
-                            my $tool_config = $run{'tools-dir'} . "/" . $tool . "/rickshaw.json";
+                        # Resolve tool ID to tool name (supports multi-instance tools)
+                        my $tool_name = exists($tool_id_map{$tool}) ? $tool_id_map{$tool} : $tool;
+
+                        if (! exists($tools_config{$tool_name})) {
+                            my $tool_config = $run{'tools-dir'} . "/" . $tool_name . "/rickshaw.json";
                             ($file_rc, my $json_ref) = get_json_file($tool_config, $tool_schema_file);
                             if ($file_rc > 0 or ! defined $json_ref) {
-                                log_print "Could not open the tool config file\n";
+                                log_print sprintf "Could not open the tool config file: %s\n", $tool_config;
                                 exit 1;
                             }
-                            if (! exists $$json_ref{'tool'} or $$json_ref{'tool'} ne $tool) {
+                            if (! exists $$json_ref{'tool'} or $$json_ref{'tool'} ne $tool_name) {
                                 log_print sprintf "In the following tool config, found in %s, the value for 'tool'", $tool_config;
-                                log_print sprintf "does not match the tool name, '%s'\n", $tool;
+                                log_print sprintf "does not match the tool name, '%s'\n", $tool_name;
                                 log_print "Either correct the tool config, or remove this tool from your test\n";
                                 my $coder = JSON::XS->new->canonical->pretty;
                                 log_print $coder->encode($json_ref);
                                 exit 1;
                             }
-                            $tools_config{$$json_ref{'tool'}} = $json_ref;
+                            $tools_config{$tool_name} = $json_ref;
                         }
                         if (scalar @pids >= $max_forked_jobs) {
                             log_print sprintf "Waiting for %d post-processing jobs to complete before starting more\n", scalar @pids;
@@ -242,8 +255,8 @@ if (opendir(TOOLDIR, $run_dir . "/" . $tool_dir)) {
                             push(@pids, $pid);
                         } else {
                             my $pushd_dir = pushd($run_dir . "/" . $engine_dir . "/" . $tool);
-                            my $pp_cmd = $tools_config{$tool}{'controller'}{'post-script'};
-                            $pp_cmd =~ s/\%tool-dir\%/$run{'tools-dir'}\/$tool\//g;
+                            my $pp_cmd = $tools_config{$tool_name}{'controller'}{'post-script'};
+                            $pp_cmd =~ s/\%tool-dir\%/$run{'tools-dir'}\/$tool_name\//g;
                             $pp_cmd =~ s/\%run-dir\%/$run_dir\//g;
                             $pp_cmd =~ s/\%config-dir\%/$config_dir\//g;
                             if (-e $pp_cmd) {
