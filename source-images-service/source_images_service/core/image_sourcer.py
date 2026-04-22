@@ -25,7 +25,8 @@ from source_images_service.core.registry_ops import (
     push_local_image,
     remote_image_found,
 )
-from source_images_service.core.requirements_builder import build_reqs
+from source_images_service.core.requirements_builder import StageRequirement, build_reqs
+from source_images_service.core.subprocess_runner import run_cmd
 from source_images_service.core.workshop_runner import workshop_build_image
 from source_images_service.models.responses import JobProgress
 
@@ -60,6 +61,122 @@ def _write_cs_conf(
         cs_conf["config"]["annotations"] = annotations
 
     path.write_text(json.dumps(cs_conf, indent=2) + "\n")
+
+
+def _amend_provenance(
+    tag: str,
+    stage_num: int,
+    total_stages: int,
+    parent_tag: str | None,
+    description: str,
+    userenv_name: str,
+    userenv_base_image: str,
+    stage_repos: list[str],
+    provenance_data: dict[str, Any],
+    provenance_annotations: list[str],
+    registry_type: str,
+    registries: dict[str, Any],
+    workspace: WorkspacePaths,
+    *,
+    job: Job | None = None,
+) -> None:
+    """Amend a built image with provenance data as a post-build layer.
+
+    Creates a new layer containing /etc/crucible/build-provenance.json
+    and applies OCI annotations, without affecting the image tag hash.
+    """
+    reg = registries[registry_type]
+    image_ref = f"{reg.url_details.dest_image_url}:{tag}"
+
+    # Build stage-specific provenance (only repos relevant to this stage)
+    stage_info: dict[str, Any] = {
+        "stage": stage_num,
+        "total-stages": total_stages,
+        "description": description,
+    }
+    if parent_tag:
+        stage_info["parent-tag"] = parent_tag
+
+    stage_prov = {
+        "build-date": provenance_data["build-date"],
+        "source": provenance_data["source"],
+        "userenv": {
+            "name": userenv_name,
+            "base-image": userenv_base_image,
+        },
+        "stage-info": stage_info,
+        "rickshaw-client": provenance_data["rickshaw-client"],
+        "rickshaw-server": provenance_data["rickshaw-server"],
+        "repos": {},
+    }
+    for repo_name in stage_repos:
+        if repo_name in provenance_data["repos"]:
+            stage_prov["repos"][repo_name] = provenance_data["repos"][repo_name]
+    # Workshop is always relevant (it's the build tool)
+    if "workshop" in provenance_data["repos"]:
+        stage_prov["repos"]["workshop"] = provenance_data["repos"]["workshop"]
+
+    prov_file = workspace.config / f"build-provenance-{tag[:12]}.json"
+    prov_file.write_text(json.dumps(stage_prov, indent=2) + "\n")
+
+    if job:
+        job.append_log("\tAmending provenance")
+    logger.info("Amending %s with provenance", tag[:12])
+
+    # Create a working container from the built image
+    result = run_cmd(f"buildah from {image_ref}", job=job)
+    if result.return_code != 0:
+        raise SourceImagesError(
+            f"Failed to create container from {image_ref}: {result.output}"
+        )
+    container = result.output.strip().splitlines()[-1]
+
+    try:
+        # Copy provenance file into the container
+        result = run_cmd(
+            f"buildah copy {container} {prov_file} /etc/crucible/build-provenance.json",
+            job=job,
+        )
+        if result.return_code != 0:
+            raise SourceImagesError(
+                f"Failed to copy provenance into container: {result.output}"
+            )
+
+        # Apply OCI annotations — global provenance
+        for annotation in provenance_annotations:
+            result = run_cmd(
+                f"buildah config --annotation '{annotation}' {container}",
+                job=job,
+            )
+            if result.return_code != 0:
+                logger.warning("Failed to apply annotation: %s", annotation)
+
+        # Apply OCI annotations — userenv and stage info
+        stage_annotations = [
+            f"crucible.userenv.name={userenv_name}",
+            f"crucible.userenv.base-image={userenv_base_image}",
+            f"crucible.stage.number={stage_num}",
+            f"crucible.stage.total={total_stages}",
+            f"crucible.stage.description={description}",
+        ]
+        if parent_tag:
+            stage_annotations.append(f"crucible.stage.parent-tag={parent_tag}")
+        for annotation in stage_annotations:
+            result = run_cmd(
+                f"buildah config --annotation '{annotation}' {container}",
+                job=job,
+            )
+            if result.return_code != 0:
+                logger.warning("Failed to apply annotation: %s", annotation)
+
+        # Commit back to the same image reference
+        result = run_cmd(f"buildah commit {container} {image_ref}", job=job)
+        if result.return_code != 0:
+            raise SourceImagesError(
+                f"Failed to commit provenance layer: {result.output}"
+            )
+    finally:
+        run_cmd(f"buildah rm {container}", job=job)
 
 
 def _refresh_quay_expiration(
@@ -288,9 +405,8 @@ def _source_container_image(
         userenv, benchmark, workspace, request.utilities, request.use_workshop
     )
 
-    # Generate provenance data for embedding in the final image
+    # Generate provenance data for post-build amendment
     provenance_annotations: list[str] = []
-    provenance_req_file: Path | None = None
 
     prov = request.provenance
     provenance_annotations.append(
@@ -381,56 +497,75 @@ def _source_container_image(
                 entry["diff"] = repo_info.diff
         provenance_data["repos"][repo_name] = entry
 
-    provenance_json_file = workspace.config / "build-provenance.json"
-    provenance_json_file.write_text(json.dumps(provenance_data, indent=2) + "\n")
-
-    # Generate a workshop requirement to copy provenance into the image
-    provenance_req = {
-        "workshop": {"schema": {"version": "2020.03.02"}},
-        "userenvs": [{"name": "default", "requirements": ["build-provenance"]}],
-        "requirements": [{
-            "name": "build-provenance",
-            "type": "files",
-            "files_info": {
-                "files": [{
-                    "src": str(provenance_json_file),
-                    "dst": "/etc/crucible/build-provenance.json",
-                }]
-            },
-        }],
-    }
-    provenance_req_file = workspace.config / "provenance-requirements.json"
-    provenance_req_file.write_text(json.dumps(provenance_req, indent=2) + "\n")
-    provenance_req_arg = f" --requirements {provenance_req_file}"
-
     job.append_log(f"\tProvenance: {len(prov.repos)} repos tracked")
 
-    # Build staged workshop_args list
-    workshop_args: list[dict[str, str]] = []
+    # Build staged workshop_args list (provenance is NOT included in workshop
+    # builds — it is amended as a post-build layer to avoid affecting the
+    # image tag hash with volatile data like build timestamps)
+    workshop_args: list[dict[str, Any]] = []
     userenv_arg = ""
     count = 0
     userenv_image = f"{origin.get('image', '')}:{origin.get('tag', '')}"
 
-    while len(requirements) > 0:
-        if count == 0:
-            userenv_arg = f" --userenv {userenv_file_path}"
-            req_arg = provenance_req_arg
-            update_policy = origin.get("update-policy", "")
-            if update_policy == "never":
-                skip_update = "true"
-            else:
-                skip_update = "false"
-        else:
-            req_arg = requirements.pop(0) + provenance_req_arg
-            skip_update = "true"
+    # Stage 1: base userenv (no explicit --requirements, uses userenv embedded reqs)
+    userenv_arg = f" --userenv {userenv_file_path}"
+    update_policy = origin.get("update-policy", "")
+    skip_update = "true" if update_policy == "never" else "false"
 
-        # Write cs-conf.json without quay label (for hash calculation)
+    # Write cs-conf.json without quay label or annotations (for hash calculation)
+    _write_cs_conf(cs_conf_file)
+
+    tag = calc_image_hash(
+        workshop_base_cmd,
+        userenv_arg,
+        None,
+        arch,
+        userenv,
+        benchmark,
+        1,
+        workspace,
+        job=job,
+    )
+
+    # Rewrite cs-conf.json with quay label only (no provenance annotations)
+    quay_exp = request.registries.get("public", reg)
+    exp_length = quay_exp.quay_expiration_length or ""
+    _write_cs_conf(
+        cs_conf_file,
+        quay_label=f"quay.expires-after={exp_length}",
+    )
+
+    workshop_args.append({
+        "userenv": userenv_arg,
+        "reqs": None,
+        "tag": tag,
+        "skip-update": skip_update,
+        "repos": [],
+        "description": "base userenv",
+    })
+
+    # Stages 2+: each requirement from the ordered list
+    for stage_req in requirements:
+        # Create intermediate userenv JSON pointing to previous stage's image
+        userenv_data.pop("requirements", None)
+        userenv_data["requirements"] = []
+        userenv_data["userenv"]["origin"]["image"] = (
+            reg.url_details.dest_image_url
+        )
+        userenv_data["userenv"]["origin"]["tag"] = tag
+        userenv_data["userenv"]["origin"].pop("build-policy", None)
+
+        intermediate_file = workspace.config / f"userenv-{tag}.json"
+        intermediate_file.write_text(json.dumps(userenv_data, indent=2) + "\n")
+        userenv_arg = f" --userenv {intermediate_file}"
+
+        # Write cs-conf.json without quay label or annotations (for hash calculation)
         _write_cs_conf(cs_conf_file)
 
         tag = calc_image_hash(
             workshop_base_cmd,
             userenv_arg,
-            req_arg if req_arg else None,
+            stage_req.req_arg,
             arch,
             userenv,
             benchmark,
@@ -439,37 +574,20 @@ def _source_container_image(
             job=job,
         )
 
-        # Rewrite cs-conf.json with quay label (and annotations on last stage)
-        quay_exp = request.registries.get("public", reg)
-        exp_length = quay_exp.quay_expiration_length or ""
+        # Rewrite cs-conf.json with quay label only (no provenance annotations)
         _write_cs_conf(
             cs_conf_file,
             quay_label=f"quay.expires-after={exp_length}",
-            annotations=provenance_annotations,
         )
 
         workshop_args.append({
             "userenv": userenv_arg,
-            "reqs": req_arg,
+            "reqs": stage_req.req_arg,
             "tag": tag,
-            "skip-update": skip_update,
+            "skip-update": "true",
+            "repos": stage_req.repos,
+            "description": stage_req.description,
         })
-
-        count += 1
-
-        if len(requirements) > 0:
-            # Create intermediate userenv JSON pointing to previous stage's image
-            userenv_data.pop("requirements", None)
-            userenv_data["requirements"] = []
-            userenv_data["userenv"]["origin"]["image"] = (
-                reg.url_details.dest_image_url
-            )
-            userenv_data["userenv"]["origin"]["tag"] = tag
-            userenv_data["userenv"]["origin"].pop("build-policy", None)
-
-            intermediate_file = workspace.config / f"userenv-{tag}.json"
-            intermediate_file.write_text(json.dumps(userenv_data, indent=2) + "\n")
-            userenv_arg = f" --userenv {intermediate_file}"
 
     logger.debug("workshop_args: %s", workshop_args)
 
@@ -725,8 +843,10 @@ def _source_container_image(
         if x not in existing_stages:
             x += 1
             continue
+        desc = workshop_args[x].get("description", "")
+        desc_str = f" — {desc}" if desc else ""
         job.append_log(
-            f"Processing stage {x + 1} ({workshop_args[x]['tag']})..."
+            f"Processing stage {x + 1} ({workshop_args[x]['tag']}){desc_str}..."
         )
         if has_quay_refresh:
             _refresh_quay_expiration(
@@ -742,8 +862,10 @@ def _source_container_image(
     # Build missing stages
     while i <= num_images - 1:
         tag = workshop_args[i]["tag"]
+        desc = workshop_args[i].get("description", "")
+        desc_str = f" — {desc}" if desc else ""
         job.append_log(
-            f"Processing stage {i + 1} ({tag})..."
+            f"Processing stage {i + 1} ({tag}){desc_str}..."
         )
 
         acquired = False
@@ -794,8 +916,10 @@ def _source_container_image(
                 acquired = True
 
         try:
-            job.append_log(f"\tBuilding stage {i + 1} ({tag})")
-            logger.info("[%s] Building stage %d (%s)", job.id[:8], i + 1, tag)
+            desc = workshop_args[i].get("description", "")
+            desc_str = f" — {desc}" if desc else ""
+            job.append_log(f"\tBuilding stage {i + 1} ({tag}){desc_str}")
+            logger.info("[%s] Building stage %d (%s)%s", job.id[:8], i + 1, tag, desc_str)
             begin = time.time()
             workshop_build_image(
                 userenv,
@@ -814,6 +938,25 @@ def _source_container_image(
             end = time.time()
             job.append_log(f"\tBuilding took {int(end - begin)} seconds")
             logger.info("[%s] Built stage %d in %ds", job.id[:8], i + 1, int(end - begin))
+
+            # Amend the image with provenance data as a post-build layer
+            parent_tag = workshop_args[i - 1]["tag"] if i > 0 else None
+            _amend_provenance(
+                tag,
+                i + 1,
+                num_images,
+                parent_tag,
+                workshop_args[i].get("description", ""),
+                userenv,
+                userenv_image,
+                workshop_args[i].get("repos", []),
+                provenance_data,
+                provenance_annotations,
+                registry_type,
+                request.registries,
+                workspace,
+                job=job,
+            )
 
             # Check for race condition — skip push if image now exists remotely
             if remote_image_found(

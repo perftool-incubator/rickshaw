@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -52,46 +53,75 @@ def _write_toolbox_req_json(config_dir: Path, toolbox_home: Path) -> Path:
     return req_path
 
 
+@dataclass
+class StageRequirement:
+    """A workshop requirement argument paired with the repos it depends on."""
+    req_arg: str
+    repos: list[str]
+    description: str = ""
+
+
 def build_reqs(
     userenv: str,
     benchmark: str,
     workspace_paths: WorkspacePaths,
     utilities: list[str],
     use_workshop: bool,
-) -> list[str]:
-    """Build an ordered list of ``--requirement`` arguments for workshop script.
+) -> list[StageRequirement]:
+    """Build an ordered list of stage requirements for workshop script.
 
     The ordering ensures that the most commonly shared, least-frequently-changed
     requirements come first so that incremental image builds can reuse earlier
     layers.
+
+    Each entry includes the ``--requirement`` argument and a list of repo names
+    whose provenance is relevant to that stage.
 
     Returns an empty list if *use_workshop* is False.
     """
     if not use_workshop:
         return []
 
-    reqs: list[str] = []
+    reqs: list[StageRequirement] = []
 
     # 1. Toolbox files requirement (write config JSON, then reference it)
     tb_req = _write_toolbox_req_json(workspace_paths.config, workspace_paths.toolbox)
-    reqs.append(f"--requirement {tb_req}")
+    reqs.append(StageRequirement(f"--requirement {tb_req}", ["toolbox"], "toolbox files"))
 
     # 2. Toolbox workshop.json (dependency installation)
-    reqs.append(f"--requirement {workspace_paths.config / 'toolbox-workshop.json'}")
+    reqs.append(StageRequirement(
+        f"--requirement {workspace_paths.config / 'toolbox-workshop.json'}",
+        ["toolbox"],
+        "toolbox dependencies",
+    ))
 
     # 3. Roadblock workshop.json (Python libraries)
-    reqs.append(f"--requirement {workspace_paths.roadblock / 'workshop.json'}")
+    reqs.append(StageRequirement(
+        f"--requirement {workspace_paths.roadblock / 'workshop.json'}",
+        ["roadblock"],
+        "roadblock dependencies",
+    ))
 
     # 4. Rickshaw engine workshop.json
-    reqs.append(f"--requirement {workspace_paths.rickshaw / 'engine' / 'workshop.json'}")
+    reqs.append(StageRequirement(
+        f"--requirement {workspace_paths.rickshaw / 'engine' / 'workshop.json'}",
+        ["rickshaw"],
+        "rickshaw engine",
+    ))
 
     # 5. Utility workshop.json files (if they exist)
     for utility in utilities:
         utility_req = workspace_paths.bench_dirs / utility / "workshop.json"
         if utility_req.exists():
-            reqs.append(f"--requirement {utility_req}")
+            reqs.append(StageRequirement(
+                f"--requirement {utility_req}", [utility], f"{utility} requirements",
+            ))
 
     # 6. Benchmark workshop.json (last — most likely to change)
-    reqs.append(f"--requirement {workspace_paths.bench_dirs / benchmark / 'workshop.json'}")
+    reqs.append(StageRequirement(
+        f"--requirement {workspace_paths.bench_dirs / benchmark / 'workshop.json'}",
+        [benchmark],
+        f"{benchmark} requirements",
+    ))
 
     return reqs
