@@ -1021,41 +1021,97 @@ sub load_tool_params() {
         exit 1;
     }
     my @tmp_tools_params = @{ $json_ref };
+
+    # Count how many times each tool name appears (excluding disabled entries)
+    my %tool_name_count;
+    foreach my $tool_entry (@tmp_tools_params) {
+        next if (exists($$tool_entry{'enabled'}) && ($$tool_entry{'enabled'} eq "no"));
+        $tool_name_count{$$tool_entry{'tool'}}++;
+    }
+
+    my %seen_tool_ids;
     foreach my $tool_entry (@tmp_tools_params) {
         if (exists($$tool_entry{'enabled'}) && ($$tool_entry{'enabled'} eq "no")) {
             next;
         }
+
+        my $tool_name = $$tool_entry{'tool'};
+        my $is_multi = $tool_name_count{$tool_name} > 1;
+
+        if ($is_multi && !exists($$tool_entry{'id'})) {
+            log_print sprintf "[ERROR] Tool '%s' specified multiple times without unique 'id' fields\n", $tool_name;
+            log_print "When running multiple instances of the same tool, each must have a unique 'id' in the format '<tool-name>-<suffix>'\n";
+            exit 1;
+        }
+
+        if (!$is_multi && exists($$tool_entry{'id'})) {
+            log_print sprintf "[ERROR] Tool '%s' has an 'id' field but is only specified once\n", $tool_name;
+            log_print "The 'id' field is only used when running multiple instances of the same tool\n";
+            exit 1;
+        }
+
+        if (exists($$tool_entry{'id'})) {
+            my $id = $$tool_entry{'id'};
+            my $expected_prefix = $tool_name . "-";
+            if (substr($id, 0, length($expected_prefix)) ne $expected_prefix) {
+                log_print sprintf "[ERROR] Tool id '%s' must start with '%s' (the tool name followed by a hyphen)\n", $id, $expected_prefix;
+                exit 1;
+            }
+            if (length($id) <= length($expected_prefix)) {
+                log_print sprintf "[ERROR] Tool id '%s' must have a suffix after '%s'\n", $id, $expected_prefix;
+                exit 1;
+            }
+        }
+
+        my $tool_id = exists($$tool_entry{'id'}) ? $$tool_entry{'id'} : $tool_name;
+        $$tool_entry{'tool-id'} = $tool_id;
+
+        if (exists $seen_tool_ids{$tool_id}) {
+            log_print sprintf "[ERROR] Duplicate tool id '%s' -- each tool instance must have a unique id\n", $tool_id;
+            exit 1;
+        }
+        $seen_tool_ids{$tool_id} = 1;
+
         push(@tools_params, $tool_entry);
     }
     # Load a tool configuration for every tool the user is asking for
+    my %tool_id_map;
     foreach my $tool_entry (@tools_params) {
         my $tool_name = $$tool_entry{'tool'};
+        my $tool_id = $$tool_entry{'tool-id'};
         if (not exists($$tool_entry{'userenv'})) {
             $$tool_entry{'userenv'} = $default_tool_userenv;
         }
 
-        my $this_tool_dir = $run{'tools-dir'} . "/" . $tool_name;
-        my $this_tool_config = $this_tool_dir . "/rickshaw.json";
-        my ($rc, $json_ref) = get_json_file($this_tool_config, $tool_schema_file);
-        if ($rc > 0 or ! defined $json_ref) {
-            log_print sprintf "Could not open the tool config file: %s\n", $this_tool_config;
-            exit 1;
+        $tool_id_map{$tool_id} = $tool_name;
+
+        if (not exists $tools_configs{$tool_name}) {
+            my $this_tool_dir = $run{'tools-dir'} . "/" . $tool_name;
+            my $this_tool_config = $this_tool_dir . "/rickshaw.json";
+            my ($rc, $json_ref) = get_json_file($this_tool_config, $tool_schema_file);
+            if ($rc > 0 or ! defined $json_ref) {
+                log_print sprintf "Could not open the tool config file: %s\n", $this_tool_config;
+                exit 1;
+            }
+            if (! exists $$json_ref{'tool'} or $$json_ref{'tool'} ne $tool_name) {
+                log_print sprintf "In the following tool config, found in %s, the value for key \"tool\" ", $this_tool_config;
+                log_print sprintf "does not match the tool name, '%s'\n", $tool_name;
+                log_print "Either correct the tool config, or remove this tool from your test\n";
+                my $coder = JSON::XS->new->canonical->pretty;
+                log_print $coder->encode($json_ref);
+                exit 1;
+            }
+            $tools_configs{$tool_name} = $json_ref;
         }
-        if (! exists $$json_ref{'tool'} or $$json_ref{'tool'} ne $tool_name) {
-            log_print sprintf "In the following tool config, found in %s, the value for key \"tool\" ", $this_tool_config;
-            log_print sprintf "does not match the tool name, '%s'\n", $tool_name;
-            log_print "Either correct the tool config, or remove this tool from your test\n";
-            my $coder = JSON::XS->new->canonical->pretty;
-            log_print $coder->encode($json_ref);
-            exit 1;
-        }
-        $tools_configs{$$json_ref{'tool'}} = $json_ref;
-        $bench_dirs{$tool_name} = $this_tool_dir;
+        $bench_dirs{$tool_id} = $run{'tools-dir'} . "/" . $tool_name;
 
         # Populate the image_ids with tools
         my %userenv_info = ( 'image' => '' );
-        $image_ids{$tool_name}{$$tool_entry{'userenv'}} = \%userenv_info;
+        $image_ids{$tool_id}{$$tool_entry{'userenv'}} = \%userenv_info;
     }
+
+    # Write tool-id-map.json for post-processing
+    put_json_file($config_dir . "/tool-id-map.json", \%tool_id_map);
 }
 
 sub load_utility_params() {
@@ -1917,19 +1973,20 @@ sub build_tool_cmd {
     my $endpoint_type = shift;
 
     my $tool_name = $$tool_entry{'tool'};
+    my $tool_id = $$tool_entry{'tool-id'};
 
     # Check if the engine is deployed by an endpoint that blacklists this tool
     if (exists $tools_configs{$tool_name}{'collector'}{'blacklist'}) {
         for my $i (@{ $tools_configs{$tool_name}{'collector'}{'blacklist'} }) {
             if (defined $endpoint_type and $endpoint_type eq $$i{'endpoint'}) {
-                debug_log(sprintf "returning undefined because this tool [%s] is not allowed to run on the specified endpoint [%s]\n", $tool_name, $endpoint_type);
+                debug_log(sprintf "returning undefined because this tool [%s] is not allowed to run on the specified endpoint [%s]\n", $tool_id, $endpoint_type);
                 return;
             }
         }
     }
 
     # Assemble the arguments as a bash array in order to not get them scrambled later
-    my %tool = ( 'name' => $tool_name,
+    my %tool = ( 'name' => $tool_id,
                  'command' => 'declare -a ARGS=(',
                  'deployment' => "auto",
                  'opt-tag' => undef );
@@ -2087,6 +2144,7 @@ sub prepare_bench_tool_engines() {
     my %collector_tools;
     foreach my $tool_entry (@tools_params) {
         my $tool_name = $$tool_entry{'tool'};
+        my $tool_id = $$tool_entry{'tool-id'};
         if (exists $tools_configs{$tool_name}{'collector'}{'whitelist'}) {
             for my $i (@{ $tools_configs{$tool_name}{'collector'}{'whitelist'} }) {
                 my $endpoint = $$i{'endpoint'};
@@ -2097,8 +2155,8 @@ sub prepare_bench_tool_engines() {
                         if (! exists($collector_tools{$collector})) {
                             $collector_tools{$collector} = ();
                         }
-                        debug_log("Adding " . $tool_name . " to " . $collector . "\n");
-                        push(@{ $collector_tools{$collector} }, $tool_name);
+                        debug_log("Adding " . $tool_id . " to " . $collector . "\n");
+                        push(@{ $collector_tools{$collector} }, $tool_id);
                     }
                 }
             }
@@ -2119,14 +2177,15 @@ sub prepare_bench_tool_engines() {
 
             foreach my $tool_entry (@tools_params) {
                 my $tool_name = $$tool_entry{'tool'};
+                my $tool_id = $$tool_entry{'tool-id'};
 
-                debug_log(sprintf "tool_name: [%s]\n", $tool_name);
+                debug_log(sprintf "tool: [%s] id: [%s]\n", $tool_name, $tool_id);
 
                 for my $i (@{ $tools_configs{$tool_name}{'collector'}{'whitelist'} }) {
                     debug_log(sprintf "endpoint: [%s]\n", $$i{'endpoint'});
 
                     if (grep(/^$collector$/, @{ $$i{'collector-types'} })) {
-                        debug_log(sprintf "building tool [%s]\n", $tool_name);
+                        debug_log(sprintf "building tool [%s]\n", $tool_id);
 
                         my $tool = build_tool_cmd($tool_entry, $start_stop);
 
@@ -2175,9 +2234,9 @@ sub prepare_bench_tool_engines() {
                 my %tool_data = ( 'tools' => [] );
 
                 foreach my $tool_entry (@tools_params) {
-                    my $tool_name = $$tool_entry{'tool'};
+                    my $tool_id = $$tool_entry{'tool-id'};
 
-                    debug_log(sprintf "building tool [%s]\n", $tool_name);
+                    debug_log(sprintf "building tool [%s]\n", $tool_id);
 
                     my $tool = build_tool_cmd($tool_entry, $start_stop, $$cs_ref{'endpoint-type'});
 
@@ -2304,7 +2363,7 @@ sub deploy_endpoints() {
                 foreach my $bench_or_tool (keys %image_ids) {
 		    my $chosen_userenv;
                     # Is this a tool?  Then get the userenv from tools_params
-                    my $index = find_index(\@tools_params, "tool", $bench_or_tool);
+                    my $index = find_index(\@tools_params, "tool-id", $bench_or_tool);
                     if ($index > -1) {
                         $chosen_userenv = $tools_params[$index]{'userenv'};
 	            } else {
@@ -2718,12 +2777,35 @@ print "Preparing userenvs:\n";
 debug_log (sprintf "image_ids (before):\n" . Dumper \%image_ids);
 {
     # Build input JSON for rickshaw-source-images
+    # Deduplicate image_ids and bench_dirs so multi-instance tools only
+    # trigger one image build per tool+userenv combination
+    my %dedup_image_ids;
+    my %dedup_bench_dirs;
+    foreach my $id (keys %image_ids) {
+        my $tool_name = $id;
+        foreach my $tool_entry (@tools_params) {
+            if ($$tool_entry{'tool-id'} eq $id) {
+                $tool_name = $$tool_entry{'tool'};
+                last;
+            }
+        }
+        $dedup_bench_dirs{$tool_name} = $bench_dirs{$id} if exists $bench_dirs{$id};
+        foreach my $userenv (keys %{$image_ids{$id}}) {
+            $dedup_image_ids{$tool_name}{$userenv} = $image_ids{$id}{$userenv};
+        }
+    }
+    # Benchmarks are not deduplicated, add them directly
+    foreach my $bench (keys %bench_dirs) {
+        if (not exists $dedup_bench_dirs{$bench} and not grep { $$_{'tool-id'} eq $bench } @tools_params) {
+            $dedup_bench_dirs{$bench} = $bench_dirs{$bench};
+        }
+    }
     my %source_input = (
-        'image-ids'    => \%image_ids,
+        'image-ids'    => \%dedup_image_ids,
         'registries'   => $run{'registries'},
         'registries-json' => $run{'registries-json'},
         'arch'         => $arch,
-        'bench-dirs'   => \%bench_dirs,
+        'bench-dirs'   => \%dedup_bench_dirs,
         'utilities'    => \@utilities,
         'dirs' => {
             'rickshaw'       => $rickshaw_project_dir,
@@ -2795,9 +2877,23 @@ debug_log (sprintf "image_ids (before):\n" . Dumper \%image_ids);
             'roadblock' => $run{'roadblock-dir'},
             'workshop'  => $run{'workshop-dir'},
         );
-        # Add benchmark repos
-        foreach my $bench (keys %bench_dirs) {
-            $repo_paths{$bench} = $bench_dirs{$bench};
+        # Add benchmark and tool repos (deduplicate by path so multi-instance
+        # tools don't produce duplicate provenance entries)
+        my %seen_paths;
+        foreach my $id (keys %bench_dirs) {
+            my $path = $bench_dirs{$id};
+            if (not exists $seen_paths{$path}) {
+                # Use tool name (not instance ID) for provenance
+                my $name = $id;
+                foreach my $tool_entry (@tools_params) {
+                    if ($$tool_entry{'tool-id'} eq $id) {
+                        $name = $$tool_entry{'tool'};
+                        last;
+                    }
+                }
+                $repo_paths{$name} = $path;
+                $seen_paths{$path} = 1;
+            }
         }
         # Add utility repos
         foreach my $util (keys %utility_dirs) {
@@ -2873,9 +2969,22 @@ debug_log (sprintf "image_ids (before):\n" . Dumper \%image_ids);
     if ($rc != 0 || !defined $output_ref) {
         die "Failed to read image source output JSON: $source_output_file\n";
     }
-    foreach my $bench_or_tool (keys %{$$output_ref{'image-ids'}}) {
-        foreach my $userenv (keys %{$$output_ref{'image-ids'}{$bench_or_tool}}) {
-            $image_ids{$bench_or_tool}{$userenv}{'image'} = $$output_ref{'image-ids'}{$bench_or_tool}{$userenv}{'image'};
+    # Map source-images output (keyed by tool name) back to image_ids (keyed by tool ID)
+    foreach my $name (keys %{$$output_ref{'image-ids'}}) {
+        foreach my $userenv (keys %{$$output_ref{'image-ids'}{$name}}) {
+            my $image = $$output_ref{'image-ids'}{$name}{$userenv}{'image'};
+            if (exists $image_ids{$name}) {
+                $image_ids{$name}{$userenv}{'image'} = $image;
+            }
+            # Also assign to any tool instances that map to this tool name
+            foreach my $tool_entry (@tools_params) {
+                if ($$tool_entry{'tool'} eq $name && $$tool_entry{'tool-id'} ne $name) {
+                    my $tool_id = $$tool_entry{'tool-id'};
+                    if (exists $image_ids{$tool_id}{$userenv}) {
+                        $image_ids{$tool_id}{$userenv}{'image'} = $image;
+                    }
+                }
+            }
         }
     }
     log_print "Userenv image summary:\n";
