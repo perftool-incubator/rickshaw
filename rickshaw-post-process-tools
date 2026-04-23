@@ -217,8 +217,8 @@ if (opendir(TOOLDIR, $run_dir . "/" . $tool_dir)) {
     for my $collector (@collectors) {
         my $collector_dir = $tool_dir . "/" . $collector;  # $run_dir/tool-data/[client|server|worker|master|profiler]
         if (opendir(COLLECTORDIR, $run_dir . "/" . $collector_dir)) {
-        # sample directory entry: remotehost-1-kernel-1
-            my @engines = grep (/\w+-\d+-\w+-\d+/, readdir(COLLECTORDIR));
+            # sample directory entry: remotehost-1-kernel-1 or kube-1-sysstat-1sec-1
+            my @engines = grep (/^[a-zA-Z0-9]+-\d+-[a-zA-Z0-9-]+-\d+$/, readdir(COLLECTORDIR));
             for my $engine (@engines) {
                 my $engine_dir = $collector_dir . "/" . $engine; # $run_dir/tool-data/[client|server|worker|master]/[0-N]
                 if (opendir(ENGDIR, $run_dir . "/" . $engine_dir)) {

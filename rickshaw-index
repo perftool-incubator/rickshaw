@@ -931,15 +931,15 @@ if (-e $tool_dir and $index_tools == 1) {
         for my $collector (@collectors) {
                 my $collector_dir = $tool_dir . "/" . $collector;  # $run_dir/tool-data/[client|server|worker|master]
             if (opendir(COLLECTORDIR, $collector_dir)) {
-                my @numbers = grep (/\d+/, readdir(COLLECTORDIR));
-                for my $num (@numbers) {
-                    my $cd_id = $collector . "-" . $num;
-                    my $num_dir = $collector_dir . "/" . $num; # $run_dir/tool-data/[client|server|worker|master]/[0-N]
-                    log_print sprintf "Indexing of tool data for %s starting\n", $cd_id;
-                    if (opendir(NUMDIR, $num_dir)) {
-                        my @tools = grep(/\w+/, readdir(NUMDIR));
+                # engine directory entries: remotehost-1-sysstat-1 or kube-1-sysstat-1sec-1
+                my @engines = grep (/^[a-zA-Z0-9]+-\d+-[a-zA-Z0-9-]+-\d+$/, readdir(COLLECTORDIR));
+                for my $engine (@engines) {
+                    my $engine_dir = $collector_dir . "/" . $engine;
+                    log_print sprintf "Indexing of tool data for %s/%s starting\n", $collector, $engine;
+                    if (opendir(ENGDIR, $engine_dir)) {
+                        my @tools = grep(/\w+/, readdir(ENGDIR));
                         for my $tool (@tools) {
-                            my $tool_dir = $num_dir . "/" . $tool;
+                            my $tool_dir = $engine_dir . "/" . $tool;
                             if (opendir(TOOLDIR, $tool_dir)) {
                                 my @tool_files = grep(/metric-data-\S+\.json/, readdir(TOOLDIR));
                                 for my $tool_file (@tool_files) {
@@ -950,7 +950,7 @@ if (-e $tool_dir and $index_tools == 1) {
                                     my %job_args = ( 'tool-dir' => $tool_dir,
                                                      'tool-file' => $tool_file,
                                                      'collector' => $collector,
-                                                     'num' => $num,
+                                                     'num' => $engine,
                                                      'doc-ref' => $base_metric_doc_ref );
                                     push(@jobs, \%job_args);
 
