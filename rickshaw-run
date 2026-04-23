@@ -2343,15 +2343,18 @@ sub deploy_endpoints() {
     # Deploy ths endpoints so they are ready to run benchmark and tools.
     # Each endpoint is responible for launching a osruntime for each client and server.
     my %remote_hosts;
-    log_print "\nDeploying endpoints\n";
+
+    log_print "\nCalculating dynamic roadblock timeout values:\n";
     $endpoint_deploy_timeout += scalar @endpoints * 120;
     foreach my $engine (keys %clients_servers) {
         $endpoint_deploy_timeout += scalar @{ $clients_servers{$engine} } * 15;
         $engine_script_start_timeout += scalar @{ $clients_servers{$engine} } * 15;
     }
-    log_print sprintf "endpoint-deploy-timeout adjusted to %d seconds\n", $endpoint_deploy_timeout;
-    log_print sprintf "engine-script-timeout adjusted to %d seconds\n", $endpoint_deploy_timeout;
+    log_print sprintf "  endpoint-deploy-timeout adjusted to %d seconds\n", $endpoint_deploy_timeout;
+    log_print sprintf "  engine-script-timeout adjusted to %d seconds\n", $endpoint_deploy_timeout;
+
     debug_log(sprintf "\nendpoint output:\n");
+    log_print "\nDeploying endpoints:\n\n";
     for (my $i = 0; $i < scalar @endpoints; $i++) {
         my $type = $endpoints[$i]{'type'};
         my $opts = $endpoints[$i]{'opts'};
