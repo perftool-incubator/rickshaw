@@ -1936,7 +1936,11 @@ def remote_image_manager(thread_name, remote_name, connection, image_max_cache_s
             thread_logger("Podman image '%s' is valid and remains under consideration" % (image), remote_name = remote_name, log_prefix = log_prefix)
     for kind in deletes.keys():
         for image in deletes[kind]:
-            del images[kind][image]
+            # it is possible for an image to get appended to the
+            # deletes multiple times so we need to ensure that we only
+            # delete it from the dict once
+            if image in images[kind]:
+                del images[kind][image]
     thread_logger("images[rickshaw]:\n%s" % (endpoints.dump_json(images["rickshaw"])), remote_name = remote_name, log_prefix = log_prefix)
     thread_logger("images[podman]:\n%s" % (endpoints.dump_json(images["podman"])), remote_name = remote_name, log_prefix = log_prefix)
 
