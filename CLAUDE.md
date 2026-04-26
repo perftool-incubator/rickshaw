@@ -5,7 +5,6 @@ Rickshaw is a benchmark orchestration framework that manages container image bui
 ## Project Structure
 
 - **`rickshaw-run`** (Perl) — Main orchestrator script. Parses CLI args, validates environment, coordinates image sourcing, and manages benchmark execution across endpoints.
-- **`rickshaw-source-images`** (Perl) — Standalone image sourcing via local workshop invocation.
 - **`rickshaw-source-images-client`** (Python, no pip deps) — CLI bridge that translates local files into HTTP API calls to the source-images-service.
 - **`source-images-service/`** (Python/FastAPI) — Web service for container image building. See `SOURCE-IMAGES-SERVICE-OVERVIEW.md` for detailed architecture.
 - **`endpoints/`** — Endpoint implementations (kube, remotehosts, etc.) in Python.
@@ -16,7 +15,7 @@ Rickshaw is a benchmark orchestration framework that manages container image bui
 
 ## Languages
 
-- **Perl**: `rickshaw-run`, `rickshaw-source-images`, `rickshaw-index`, `rickshaw-gen-docs`, `rickshaw-post-process-*`
+- **Perl**: `rickshaw-run`, `rickshaw-index`, `rickshaw-gen-docs`, `rickshaw-post-process-*`
 - **Python 3.10+**: `rickshaw-source-images-client`, `source-images-service/`, `endpoints/`, `util/`
 - **JSON**: Schema definitions, configuration files
 
@@ -52,7 +51,7 @@ Key modules under `source_images_service/`:
 
 The workshop script (`workshop.pl` or `workshop.py`) builds container images. The `--workshop-script` flag (or `WORKSHOP_SCRIPT` env var) selects which script to use, defaulting to `workshop.pl`. This flows through:
 1. `rickshaw-run` → input JSON (`workshop.script`)
-2. `rickshaw-source-images` / `rickshaw-source-images-client` → reads from JSON/env
+2. `rickshaw-source-images-client` → reads from JSON/env
 3. `source-images-service` → `WorkshopConfig.workshop_script` field
 
 ## CI
