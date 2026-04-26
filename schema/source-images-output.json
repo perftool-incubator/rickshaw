@@ -1,7 +1,7 @@
 {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "title": "rickshaw source-images output",
-    "description": "Schema for image-source-output.json, written by rickshaw-source-images (Perl) or rickshaw-source-images-client (Python) and read by rickshaw-run. Contains the same image-ids structure as the input but with populated image URLs.",
+    "description": "Schema for image-source-output.json, written by rickshaw-source-images-client and read by rickshaw-run. Contains the same image-ids structure as the input but with populated image URLs.",
     "type": "object",
     "required": ["image-ids"],
     "additionalProperties": false,

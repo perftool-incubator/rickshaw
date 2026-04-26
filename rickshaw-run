@@ -2946,24 +2946,20 @@ debug_log (sprintf "image_ids (before):\n" . Dumper \%image_ids);
     if ($toolbox::logging::debug) {
         $log_level_arg = " --log-level debug";
     }
-    my $source_images_cmd;
-    if (exists $run{'source-images-service-url'}) {
-        $source_images_cmd = $rickshaw_project_dir . "/rickshaw-source-images-client"
-                            . " --input " . $source_input_file
-                            . " --output " . $source_output_file
-                            . " --service-url " . $run{'source-images-service-url'}
-                            . $log_level_arg;
-    } else {
-        $source_images_cmd = $rickshaw_project_dir . "/rickshaw-source-images"
-                            . " --input " . $source_input_file
-                            . " --output " . $source_output_file
-                            . $log_level_arg;
+    if (not exists $run{'source-images-service-url'}) {
+        log_print "[ERROR] --source-images-service-url is required\n";
+        exit 1;
     }
+    my $source_images_cmd = $rickshaw_project_dir . "/rickshaw-source-images-client"
+                        . " --input " . $source_input_file
+                        . " --output " . $source_output_file
+                        . " --service-url " . $run{'source-images-service-url'}
+                        . $log_level_arg;
     log_print sprintf "Running: %s\n", $source_images_cmd;
     my $source_images_rc = system($source_images_cmd);
     $source_images_rc = $source_images_rc >> 8;
     if ($source_images_rc != 0) {
-        log_print sprintf "rickshaw-source-images failed with exit code %d\n", $source_images_rc;
+        log_print sprintf "rickshaw-source-images-client failed with exit code %d\n", $source_images_rc;
         exit 1;
     }
 
