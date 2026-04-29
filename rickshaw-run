@@ -55,7 +55,7 @@ my @utilities = ( "packrat" );
 my $jsonsettings;
 my $registries_settings;
 my $use_workshop = 0;
-my $workshop_script = "workshop.pl";
+my $workshop_script = "workshop.py";
 my %bench_configs;
 my %bench_dirs;
 my %benchmark_to_ids;
@@ -162,7 +162,7 @@ sub usage {
     log_print "--json-validator         Path to json schema validation utility\n";
     log_print "--engine-dir             Directory where the engine project exists\n";
     log_print "--workshop-dir           Directory where workshop project exists\n";
-    log_print "--workshop-script        Workshop script filename (workshop.pl or workshop.py, default: workshop.pl)\n";
+    log_print "--workshop-script        Workshop script filename (default: workshop.py)\n";
     log_print "--packrat-dir            Directory where the packrat project exists\n";
     log_print "--roadblock-dir          Directory where workshop project exists\n";
     log_print "--roadblock-password     Password to use to access the valkey instance\n";
@@ -901,7 +901,7 @@ sub validate_controller_env() {
         log_print "ERROR, roadblock project directory not defined or roadblocker.py not found";
         exit 1;
     }
-    $workshop_script = $run{'workshop-script'} // $ENV{'WORKSHOP_SCRIPT'} // "workshop.pl";
+    $workshop_script = $run{'workshop-script'} // $ENV{'WORKSHOP_SCRIPT'} // "workshop.py";
     if (defined $run{'workshop-dir'} and -e $run{'workshop-dir'} . "/$workshop_script") {
         $use_workshop = 1;
         if ( ! exists $run{'registries'}{'public'}{'repo'} ) {

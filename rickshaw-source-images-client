@@ -315,7 +315,7 @@ def _build_api_request(input_data):
     # --- Workshop ---
     workshop_script = os.environ.get(
         "WORKSHOP_SCRIPT",
-        input_data.get("workshop", {}).get("script", "workshop.pl"),
+        input_data.get("workshop", {}).get("script", "workshop.py"),
     )
     workshop_script_path = os.path.join(workshop_dir, workshop_script) if workshop_dir else ""
     schema_path = os.path.join(workshop_dir, "schema.json") if workshop_dir else ""

@@ -58,9 +58,9 @@ class WorkshopConfig(BaseModel):
         description="Base64-encoded workshop script",
     )
     workshop_script: str = Field(
-        default="workshop.pl",
+        default="workshop.py",
         alias="workshop-script",
-        description="Workshop script filename: workshop.pl or workshop.py",
+        description="Workshop script filename (default: workshop.py)",
     )
     schema_content: str = Field(
         alias="schema-content",

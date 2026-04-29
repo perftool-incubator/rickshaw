@@ -32,7 +32,7 @@ class WorkspacePaths:
     config: Path = field(init=False)
     registries: Path = field(init=False)
     build: Path = field(init=False)
-    workshop_script: str = "workshop.pl"
+    workshop_script: str = "workshop.py"
 
     def __post_init__(self) -> None:
         self.workshop = self.root / "workshop"
