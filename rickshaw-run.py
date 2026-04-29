@@ -193,7 +193,7 @@ class RunState:
         self.jsonsettings = {}
         self.registries_settings = None
         self.use_workshop = 0
-        self.workshop_script = "workshop.pl"
+        self.workshop_script = "workshop.py"
         self.workshop_force_builds = ""
         self.bench_configs = {}
         self.bench_dirs = {}
@@ -426,7 +426,7 @@ class RunState:
         logger.info("--external-userenvs-dir  Path to look for userenv definitions in that are provided by external sources")
         logger.info("--engine-dir             Directory where the engine project exists")
         logger.info("--workshop-dir           Directory where workshop project exists")
-        logger.info("--workshop-script        Workshop script filename (workshop.pl or workshop.py, default: workshop.pl)")
+        logger.info("--workshop-script        Workshop script filename (default: workshop.py)")
         logger.info("--packrat-dir            Directory where the packrat project exists")
         logger.info("--roadblock-dir          Directory where workshop project exists")
         logger.info("--roadblock-password     Password to use to access the valkey instance")
@@ -726,7 +726,7 @@ class RunState:
             logger.error("ERROR, roadblock project directory not defined or roadblocker.py not found")
             sys.exit(1)
 
-        self.workshop_script = self.run.get("workshop-script") or os.environ.get("WORKSHOP_SCRIPT") or "workshop.pl"
+        self.workshop_script = self.run.get("workshop-script") or os.environ.get("WORKSHOP_SCRIPT") or "workshop.py"
         if "workshop-dir" in self.run and os.path.exists(os.path.join(self.run["workshop-dir"], self.workshop_script)):
             self.use_workshop = 1
             pub_reg = self.run.get("registries", {}).get("public", {})
