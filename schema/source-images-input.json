@@ -121,7 +121,7 @@
                 "script": {
                     "type": "string",
                     "description": "Workshop script filename to use for image builds.",
-                    "enum": ["workshop.pl", "workshop.py"]
+                    "enum": ["workshop.py"]
                 }
             },
             "additionalProperties": false

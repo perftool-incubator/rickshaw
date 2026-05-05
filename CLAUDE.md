@@ -49,7 +49,7 @@ Key modules under `source_images_service/`:
 
 ## Workshop Integration
 
-The workshop script (`workshop.pl` or `workshop.py`) builds container images. The `--workshop-script` flag (or `WORKSHOP_SCRIPT` env var) selects which script to use, defaulting to `workshop.pl`. This flows through:
+The workshop script (`workshop.py`) builds container images. The `--workshop-script` flag (or `WORKSHOP_SCRIPT` env var) can override the default. This flows through:
 1. `rickshaw-run` → input JSON (`workshop.script`)
 2. `rickshaw-source-images-client` → reads from JSON/env
 3. `source-images-service` → `WorkshopConfig.workshop_script` field
