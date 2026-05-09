@@ -1691,7 +1691,6 @@ def create_tools_pods(abort_event):
                     logger.info("Already profiling worker node '%s' and I'm not really sure why..." % (node))
             else:
                 logger.info("Adding worker node '%s' to the list of profiled nodes because is hosting engine pods" % (node))
-                settings["engines"]["endpoint"]["classes"]["profiled-nodes"].append(node)
                 profiled_nodes.append(node)
 
         for node in settings["misc"]["k8s"]["nodes"]["endpoint"]["workers"]:
