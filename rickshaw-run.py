@@ -279,7 +279,7 @@ class RunState:
                 else:
                     logger.error("[ERROR] malformed endpoint: %s", val)
                     sys.exit(1)
-            elif arg == "debug":
+            elif arg == "log-level":
                 pass
             elif arg == "help":
                 self.usage()
@@ -436,6 +436,7 @@ class RunState:
         logger.info("--tool-params            File with tool parameters to use")
         logger.info("--num-samples            The number of sample executions to run for each benchmark iteration")
         logger.info("--max-sample-failures    The total number of benchmark sample executions that are tolerated")
+        logger.info("--log-level              Logging verbosity: normal, verbose, or debug (default: normal)")
         logger.info("--test-order             's' = run all samples of an iteration first")
         logger.info("                         'i' = run all iterations of a sample first")
         logger.info("                         'r' = run a sample from a random iteration one at a time")
@@ -2000,7 +2001,13 @@ class RunState:
 
 def main():
     global logger
-    logger = setup_logging("rickshaw-run", "normal")
+    log_level = "normal"
+    for i, arg in enumerate(sys.argv[1:]):
+        if arg == "--log-level" and i + 2 < len(sys.argv):
+            log_level = sys.argv[i + 2]
+        elif arg.startswith("--log-level="):
+            log_level = arg.split("=", 1)[1]
+    logger = setup_logging("rickshaw-run", log_level)
     logger.info("rickshaw-run.py starting")
 
     state = RunState()
