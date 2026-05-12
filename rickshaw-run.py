@@ -944,6 +944,11 @@ class RunState:
                     for bench_name in self.bench_configs:
                         self.image_ids.setdefault(bench_name, {})[userenv] = {"image": ""}
 
+                else:
+                    logger.error("[ERROR] output from endpoint validation incorrect for %s:\n%s",
+                                 endpoint["label"], line)
+                    sys.exit(1)
+
         if len(self.bench_configs) == 1:
             bench_name = list(self.bench_configs.keys())[0]
             all_ids = sorted(self.clients_servers.get("client", {}).keys(), key=int)
