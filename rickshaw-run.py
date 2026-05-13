@@ -2016,7 +2016,7 @@ class RunState:
                 for item in os.listdir(tool_data_dir):
                     shutil.move(os.path.join(tool_data_dir, item), dest)
             elif os.path.isdir(tool_data_dir) and cs_type != "profiler":
-                logger.warning("WARNING: did not find expected sub-directories in tool-data for %s-%s", cs_type, cs_id)
+                logger.warning("WARNING: did not find sub-directories in tool-data for %s-%s", cs_type, cs_id)
 
             sysinfo_dir = os.path.join(tmp_data_dir, "sysinfo")
             if os.path.isdir(sysinfo_dir) and os.listdir(sysinfo_dir):
