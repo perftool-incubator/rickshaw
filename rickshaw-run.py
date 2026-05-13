@@ -1970,10 +1970,12 @@ class RunState:
             logger.info("Processing archive: %s (cs_type=%s, cs_id=%s)", archive, cs_type, cs_id)
 
             archive_full_path = os.path.join(self.engine_archives_dir, archive)
-            tar_cmd = f"cd {tmp_data_dir} && tar zmxf {archive_full_path}"
-            _, tar_output, tar_rc = run_cmd(tar_cmd)
-            if tar_rc != 0:
-                logger.error("Failed to extract archive %s (rc=%d), preserving: %s", archive, tar_rc, tar_output)
+            try:
+                import tarfile
+                with tarfile.open(archive_full_path, "r:gz") as tf:
+                    tf.extractall(path=tmp_data_dir)
+            except Exception as e:
+                logger.error("Failed to extract archive %s, preserving: %s", archive, e)
                 continue
             logger.verbose("  Extracted archive contents: %s", sorted(os.listdir(tmp_data_dir)))
 
