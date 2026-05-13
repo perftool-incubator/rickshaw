@@ -31,6 +31,7 @@ if RICKSHAW_HOME:
 from toolbox.fileio import open_write_text_file
 from toolbox.json import load_json_file, save_json_file
 from toolbox.jsonsettings import get_json_setting
+import logging
 from toolbox.logging import setup_logging
 from toolbox.roadblock import do_roadblock as toolbox_do_roadblock, ROADBLOCK_EXITS
 from toolbox.run import run_cmd
@@ -258,6 +259,10 @@ class RunState:
                 sys.exit(1)
 
             p = p[2:]
+            if p == "help":
+                self.usage()
+                sys.exit(0)
+
             if "=" in p:
                 arg, val = p.split("=", 1)
             else:
@@ -279,11 +284,8 @@ class RunState:
                 else:
                     logger.error("[ERROR] malformed endpoint: %s", val)
                     sys.exit(1)
-            elif arg == "debug":
+            elif arg == "log-level":
                 pass
-            elif arg == "help":
-                self.usage()
-                sys.exit(0)
             elif re.match(
                 r'^(base-run-dir|workshop-dir|workshop-script|packrat-dir|bench-dir|'
                 r'roadblock-dir|roadblock-password|tools-dir|engine-dir|'
@@ -436,6 +438,7 @@ class RunState:
         logger.info("--tool-params            File with tool parameters to use")
         logger.info("--num-samples            The number of sample executions to run for each benchmark iteration")
         logger.info("--max-sample-failures    The total number of benchmark sample executions that are tolerated")
+        logger.info("--log-level              Logging verbosity: normal, verbose, or debug (default: normal)")
         logger.info("--test-order             's' = run all samples of an iteration first")
         logger.info("                         'i' = run all iterations of a sample first")
         logger.info("                         'r' = run a sample from a random iteration one at a time")
@@ -2000,7 +2003,19 @@ class RunState:
 
 def main():
     global logger
-    logger = setup_logging("rickshaw-run", "normal")
+    log_level = "normal"
+    for i, arg in enumerate(sys.argv[1:]):
+        if arg == "--log-level" and i + 2 < len(sys.argv):
+            log_level = sys.argv[i + 2]
+        elif arg.startswith("--log-level="):
+            log_level = arg.split("=", 1)[1]
+    logger = setup_logging("rickshaw-run", log_level)
+    # At normal level, suppress library INFO (e.g. roadblock) for curated
+    # output. Raise the root logger to WARNING while keeping our own logger
+    # at INFO. Use --log-level=verbose to see library INFO output.
+    if log_level == "normal":
+        logger.setLevel(logging.INFO)
+        logging.getLogger().setLevel(logging.WARNING)
     logger.info("rickshaw-run.py starting")
 
     state = RunState()
