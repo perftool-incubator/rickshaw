@@ -1948,10 +1948,18 @@ class RunState:
         os.makedirs(tmp_data_dir, exist_ok=True)
 
         try:
-            archives = [a for a in os.listdir(self.engine_archives_dir)
-                        if re.match(r'^(\w+)-(.+)-data\.tgz$', a)]
+            all_files = os.listdir(self.engine_archives_dir)
+            archives = [a for a in all_files if re.match(r'^(\w+)-(.+)-data\.tgz$', a)]
+            logger.info("Found %d archives in %s (out of %d files)", len(archives), self.engine_archives_dir, len(all_files))
+            if len(archives) != len(all_files):
+                non_archives = [a for a in all_files if a not in archives]
+                logger.info("Non-archive files: %s", non_archives)
         except FileNotFoundError:
+            logger.warning("Engine archives directory not found: %s", self.engine_archives_dir)
             archives = []
+
+        num_iterations = len(self.run.get("iterations", []))
+        logger.info("Number of iterations: %d", num_iterations)
 
         for archive in sorted(archives):
             m = re.match(r'^(\w+)-(.+)-data\.tgz$', archive)
@@ -1959,25 +1967,45 @@ class RunState:
                 continue
             cs_type = m.group(1)
             cs_id = m.group(2)
-            logger.info("cs_type: %s, cs_id: %s", cs_type, cs_id)
+            logger.info("Processing archive: %s (cs_type=%s, cs_id=%s)", archive, cs_type, cs_id)
 
             archive_full_path = os.path.join(self.engine_archives_dir, archive)
             tar_cmd = f"cd {tmp_data_dir} && tar zmxf {archive_full_path}"
-            _, _, _ = run_cmd(tar_cmd)
+            _, tar_output, tar_rc = run_cmd(tar_cmd)
+            if tar_rc != 0:
+                logger.error("Failed to extract archive %s (rc=%d), preserving: %s", archive, tar_rc, tar_output)
+                continue
+            logger.verbose("  Extracted archive contents: %s", sorted(os.listdir(tmp_data_dir)))
+
+            archive_error = False
 
             if cs_type in ("client", "server"):
-                for i in range(1, len(self.run.get("iterations", [])) + 1):
+                if num_iterations == 0:
+                    logger.error("No iterations found for %s-%s — self.run['iterations'] is empty", cs_type, cs_id)
+                    archive_error = True
+                found_iteration_data = False
+                for i in range(1, num_iterations + 1):
                     iter_dir = os.path.join(tmp_data_dir, f"iteration-{i}")
                     if os.path.isdir(iter_dir):
-                        for samp_dir in sorted(os.listdir(iter_dir)):
-                            if not samp_dir.startswith("sample"):
-                                continue
+                        sample_dirs = sorted([d for d in os.listdir(iter_dir) if d.startswith("sample")])
+                        logger.info("  iteration-%d: found %d sample dirs: %s", i, len(sample_dirs), sample_dirs)
+                        for samp_dir in sample_dirs:
                             iter_samp_path = os.path.join(iter_dir, samp_dir)
                             dest = os.path.join(self.run_dir, "iterations", f"iteration-{i}", samp_dir, cs_type, cs_id)
                             os.makedirs(dest, exist_ok=True)
                             if os.path.isdir(iter_samp_path):
-                                for item in os.listdir(iter_samp_path):
+                                items = os.listdir(iter_samp_path)
+                                logger.info("    %s/%s: moving %d items to %s", f"iteration-{i}", samp_dir, len(items), dest)
+                                for item in items:
                                     shutil.move(os.path.join(iter_samp_path, item), dest)
+                                found_iteration_data = True
+                            else:
+                                logger.warning("    %s/%s: path is not a directory: %s", f"iteration-{i}", samp_dir, iter_samp_path)
+                    else:
+                        logger.warning("  iteration-%d: directory not found in archive for %s-%s", i, cs_type, cs_id)
+                if not found_iteration_data and num_iterations > 0:
+                    logger.error("No iteration data found in archive for %s-%s", cs_type, cs_id)
+                    archive_error = True
 
             tool_data_dir = os.path.join(tmp_data_dir, "tool-data")
             if os.path.isdir(tool_data_dir) and os.listdir(tool_data_dir):
@@ -1994,9 +2022,15 @@ class RunState:
                 os.makedirs(dest, exist_ok=True)
                 for item in os.listdir(sysinfo_dir):
                     shutil.move(os.path.join(sysinfo_dir, item), dest)
+            else:
+                logger.error("No sysinfo data found in archive for %s-%s", cs_type, cs_id)
+                archive_error = True
 
             subprocess.run(f"/bin/rm -rf {tmp_data_dir}/*", shell=True)
-            subprocess.run(f"/bin/rm -rf {archive_full_path}", shell=True)
+            if archive_error:
+                logger.error("Preserving archive %s due to errors", archive_full_path)
+            else:
+                subprocess.run(f"/bin/rm -rf {archive_full_path}", shell=True)
 
         shutil.rmtree(tmp_data_dir, ignore_errors=True)
 
