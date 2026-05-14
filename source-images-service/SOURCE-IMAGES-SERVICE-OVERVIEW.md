@@ -4,12 +4,12 @@
 
 There are three components that work together:
 
-1. **`rickshaw-run`** (Perl) — the orchestrator that decides to source images
+1. **`rickshaw-run.py`** (Python) — the orchestrator that decides to source images
 2. **`rickshaw-source-images-client`** (Python) — a CLI bridge that translates local file paths into an HTTP API call
 3. **`source-images-service`** (Python/FastAPI) — the web service that does the actual work
 
 ```
-rickshaw-run (Perl)
+rickshaw-run.py (Python)
     │  writes input JSON (validated against schema)
     ▼
 rickshaw-source-images-client (Python)
@@ -22,7 +22,7 @@ source-images-service (FastAPI)
 rickshaw-source-images-client
     │  writes output JSON + result files back to disk
     ▼
-rickshaw-run (Perl)
+rickshaw-run.py (Python)
     reads output JSON (validated against schema), continues with image IDs
 ```
 
