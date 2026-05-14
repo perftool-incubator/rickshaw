@@ -4,7 +4,7 @@ Rickshaw is a benchmark orchestration framework that manages container image bui
 
 ## Project Structure
 
-- **`rickshaw-run`** (Perl) — Main orchestrator script. Parses CLI args, validates environment, coordinates image sourcing, and manages benchmark execution across endpoints.
+- **`rickshaw-run.py`** — Main orchestrator script. Parses CLI args, validates environment, coordinates image sourcing, and manages benchmark execution across endpoints.
 - **`rickshaw-source-images-client`** (Python, no pip deps) — CLI bridge that translates local files into HTTP API calls to the source-images-service.
 - **`source-images-service/`** (Python/FastAPI) — Web service for container image building. See `SOURCE-IMAGES-SERVICE-OVERVIEW.md` for detailed architecture.
 - **`endpoints/`** — Endpoint implementations (kube, remotehosts, etc.) in Python.
@@ -15,15 +15,14 @@ Rickshaw is a benchmark orchestration framework that manages container image bui
 
 ## Languages
 
-- **Perl**: `rickshaw-run`, `rickshaw-index`, `rickshaw-gen-docs`, `rickshaw-post-process-*`
-- **Python 3.10+**: `rickshaw-source-images-client`, `source-images-service/`, `endpoints/`, `util/`
+- **Python 3.10+**: `rickshaw-run.py`, `rickshaw-post-process-bench.py`, `rickshaw-post-process-tools.py`, `rickshaw-gen-docs.py`, `rickshaw-source-images-client`, `source-images-service/`, `endpoints/`, `util/`
+- **Bash**: `engine/` scripts
 - **JSON**: Schema definitions, configuration files
 
 ## Key Conventions
 
 - CLI arguments use `--kebab-case` (e.g., `--workshop-dir`, `--bench-params`)
 - JSON keys use `kebab-case` (e.g., `"force-builds"`, `"workshop-script"`)
-- Perl variables use `$snake_case`; hash keys use `'kebab-case'`
 - Python Pydantic models use `snake_case` fields with `alias="kebab-case"` for JSON serialization
 - Commit messages follow conventional commits: `feat:`, `fix:`, etc.
 - Schema validation is enforced at boundaries between components
