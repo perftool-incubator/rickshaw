@@ -51,12 +51,6 @@ _SKIP_DIRS = {".git", "docs", ".github", "__pycache__"}
 _SKIP_EXTENSIONS = {".md"}
 
 
-def _str_to_bool(val):
-    """Convert a value to bool, handling Perl-style string 'true'/'false'."""
-    if isinstance(val, str):
-        return val.lower() == "true"
-    return bool(val)
-
 
 def _resolve_json_path(path):
     """Resolve a JSON file path, transparently handling .xz compression.
@@ -228,12 +222,7 @@ def _build_api_request(input_data):
         if "url-details" in reg_data:
             reg_copy["url-details"] = reg_data["url-details"]
 
-        # tls-verify: convert string "true"/"false" to bool
-        tls_val = reg_data.get("tls-verify", True)
-        if isinstance(tls_val, str):
-            reg_copy["tls-verify"] = tls_val.lower() == "true"
-        else:
-            reg_copy["tls-verify"] = bool(tls_val)
+        reg_copy["tls-verify"] = reg_data.get("tls-verify", True)
 
         # Quay fields pass through
         for key in ("quay-expiration-length",
@@ -341,7 +330,7 @@ def _build_api_request(input_data):
         "workshop-script": workshop_script,
         "schema-content": schema_content,
         "registries-schema-content": registries_schema_content,
-        "force-builds": _str_to_bool(input_data.get("workshop", {}).get("force-builds", False)),
+        "force-builds": input_data.get("workshop", {}).get("force-builds", False),
     }
 
     # --- Rickshaw files (engine/ + userenvs/) ---

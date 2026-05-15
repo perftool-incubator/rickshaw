@@ -6,7 +6,7 @@ on:
     branches: [ master ]
     paths:
     - .github/workflows/crucible-merged.yaml
-    - rickshaw-source-images-client
+    - rickshaw-source-images-client.py
     - 'source-images-service/**'
     - 'userenvs/*.json'
     - '!userenvs/rhel-ai-*.json'
