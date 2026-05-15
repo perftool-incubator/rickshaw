@@ -1428,7 +1428,7 @@ class RunState:
             sys.exit(1)
 
         source_images_cmd = (
-            f"{self.rickshaw_project_dir}/rickshaw-source-images-client"
+            f"{self.rickshaw_project_dir}/rickshaw-source-images-client.py"
             f" --input {source_input_file}"
             f" --output {source_output_file}"
             f" --service-url {self.run['source-images-service-url']}"
@@ -1436,7 +1436,7 @@ class RunState:
         logger.info("Running: %s", source_images_cmd)
         rc = subprocess.run(source_images_cmd, shell=True).returncode
         if rc != 0:
-            logger.error("rickshaw-source-images-client failed with exit code %d", rc)
+            logger.error("rickshaw-source-images-client.py failed with exit code %d", rc)
             sys.exit(1)
 
         output_ref, err = load_json_file(source_output_file)

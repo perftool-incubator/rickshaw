@@ -5,21 +5,21 @@
 There are three components that work together:
 
 1. **`rickshaw-run.py`** (Python) — the orchestrator that decides to source images
-2. **`rickshaw-source-images-client`** (Python) — a CLI bridge that translates local file paths into an HTTP API call
+2. **`rickshaw-source-images-client.py`** (Python) — a CLI bridge that translates local file paths into an HTTP API call
 3. **`source-images-service`** (Python/FastAPI) — the web service that does the actual work
 
 ```
 rickshaw-run.py (Python)
     │  writes input JSON (validated against schema)
     ▼
-rickshaw-source-images-client (Python)
+rickshaw-source-images-client.py (Python)
     │  reads files, base64-encodes everything, POSTs to service
     ▼
 source-images-service (FastAPI)
     │  decodes files to temp workspace, builds/finds images
     │  client polls for status + streams logs
     ▼
-rickshaw-source-images-client
+rickshaw-source-images-client.py
     │  writes output JSON + result files back to disk
     ▼
 rickshaw-run.py (Python)
@@ -197,7 +197,7 @@ This is the big function. For a single (benchmark, userenv) pair, it:
 
 ## 8. The Client Side
 
-**`rickshaw-source-images-client`** (690 lines of Python, no pip dependencies):
+**`rickshaw-source-images-client.py`** (690 lines of Python, no pip dependencies):
 
 1. Reads input JSON from rickshaw-run and validates it against `schema/source-images-input.json` (via `toolbox.json.validate_schema`)
 2. `_build_api_request()` — reads all those files and base64-encodes them into a `SourceImagesRequest`-shaped dict
@@ -216,7 +216,7 @@ This is the big function. For a single (benchmark, userenv) pair, it:
 
 ```
 rickshaw-run
-  └─ rickshaw-source-images-client
+  └─ rickshaw-source-images-client.py
        └─ POST /api/v1/source-images
             └─ JobManager.submit_job()
                  └─ ThreadPool → _run_job()
