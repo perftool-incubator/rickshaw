@@ -114,9 +114,8 @@
                     "description": "Path to the workshop directory."
                 },
                 "force-builds": {
-                    "type": "string",
-                    "description": "Whether to force container image rebuilds. String 'true' or 'false' (not boolean).",
-                    "enum": ["true", "false"]
+                    "type": "boolean",
+                    "description": "Whether to force container image rebuilds."
                 },
                 "script": {
                     "type": "string",
@@ -246,9 +245,8 @@
                     "description": "Registry repository path (e.g. 'quay.io/org/label')."
                 },
                 "tls-verify": {
-                    "type": "string",
-                    "description": "Whether to verify TLS certificates. String 'true' or 'false'.",
-                    "enum": ["true", "false"]
+                    "type": "boolean",
+                    "description": "Whether to verify TLS certificates."
                 },
                 "push-token": {
                     "type": "string",
@@ -271,9 +269,8 @@
                     "description": "Quay API URL endpoint for refreshing tag expirations."
                 },
                 "quay-refresh-expiration-require-success": {
-                    "type": "string",
-                    "description": "Whether refresh-expiration API calls must succeed. String 'true' or 'false'.",
-                    "enum": ["true", "false"]
+                    "type": "boolean",
+                    "description": "Whether refresh-expiration API calls must succeed."
                 },
                 "url-details": {
                     "$ref": "#/$defs/url-details"

@@ -195,7 +195,7 @@ class RunState:
         self.registries_settings = None
         self.use_workshop = 0
         self.workshop_script = "workshop.py"
-        self.workshop_force_builds = ""
+        self.workshop_force_builds = False
         self.bench_configs = {}
         self.bench_dirs = {}
         self.benchmark_to_ids = {}
@@ -238,12 +238,6 @@ class RunState:
         logger.info("Caught a CTRL-C/SIGINT, aborting via roadblock!")
         self.abort_via_roadblock = True
 
-    def _get_setting(self, query, settings):
-        """Wrapper for get_json_setting with Perl-compatible return convention."""
-        value, rc = get_json_setting(settings, query)
-        if isinstance(value, bool):
-            value = "true" if value else "false"
-        return rc, value
 
     # ----------------------------------------------------------------
     # Phase 1: CLI and URL parsing
@@ -533,7 +527,7 @@ class RunState:
                 registries_migration_needed = True
 
         def _load_required(query, settings, name):
-            rc, val = self._get_setting(query, settings)
+            val, rc = get_json_setting(settings, query)
             if rc != 0:
                 logger.error("load_settings_info(): failed to load %s", name)
                 sys.exit(1)
@@ -541,7 +535,7 @@ class RunState:
             return val
 
         def _load_optional(query, settings, default=None):
-            rc, val = self._get_setting(query, settings)
+            val, rc = get_json_setting(settings, query)
             if rc == 0 and val is not None:
                 return val
             return default
@@ -549,7 +543,7 @@ class RunState:
         self.endpoint_log_level = _load_required("endpoints.log-level", self.jsonsettings, "endpoint log-level config")
 
         rb_cw = _load_required("roadblock.connection-watchdog", self.jsonsettings, "roadblock connection-watchdog config")
-        self.rb_connection_watchdog = "enabled" if rb_cw == "true" else "disabled"
+        self.rb_connection_watchdog = "enabled" if rb_cw else "disabled"
 
         self.rb_log_level = _load_required("roadblock.log-level", self.jsonsettings, "roadblock log-level config")
         self.default_rb_timeout = int(_load_required("roadblock.timeouts.default", self.jsonsettings, "default roadblock timeout"))
@@ -604,7 +598,7 @@ class RunState:
         self.run["registries"]["public"]["repo"] = _load_required("engines.public.url", self.registries_settings, "public engines repo url")
         self.decode_repo_urls("public")
 
-        rc, val = self._get_setting("engines.private.url", self.registries_settings)
+        val, rc = get_json_setting(self.registries_settings, "engines.private.url")
         if rc != 0:
             logger.info("load_settings_info(): no private engine registry defined")
         else:
@@ -619,9 +613,9 @@ class RunState:
             self.run["registries"]["private"]["push-token"] = _load_required("engines.private.tokens.push", self.registries_settings, "private engines push token")
             self.run["registries"]["private"]["pull-token"] = _load_required("engines.private.tokens.pull", self.registries_settings, "private engines pull token")
 
-        self.run["registries"]["public"]["tls-verify"] = _load_optional("engines.public.tls-verify", self.registries_settings, "true")
+        self.run["registries"]["public"]["tls-verify"] = _load_optional("engines.public.tls-verify", self.registries_settings, True)
         if "private" in self.run["registries"]:
-            self.run["registries"]["private"]["tls-verify"] = _load_optional("engines.private.tls-verify", self.registries_settings, "true")
+            self.run["registries"]["private"]["tls-verify"] = _load_optional("engines.private.tls-verify", self.registries_settings, True)
 
         default_quay_expiration = "2w"
         self.run["registries"]["public"]["quay-expiration-length"] = _load_optional(
@@ -645,7 +639,7 @@ class RunState:
             self.run["registries"]["public"]["quay-refresh-expiration-api-url"] = val
 
         self.run["registries"]["public"]["quay-refresh-expiration-require-success"] = _load_optional(
-            "engines.public.quay.refresh-expiration.require-success", self.registries_settings, "true")
+            "engines.public.quay.refresh-expiration.require-success", self.registries_settings, True)
 
         if "private" in self.run["registries"]:
             val = _load_optional("engines.private.quay.refresh-expiration.api-url", self.registries_settings)
@@ -653,7 +647,7 @@ class RunState:
                 self.run["registries"]["private"]["quay-refresh-expiration-api-url"] = val
 
             self.run["registries"]["private"]["quay-refresh-expiration-require-success"] = _load_optional(
-                "engines.private.quay.refresh-expiration.require-success", self.registries_settings, "true")
+                "engines.private.quay.refresh-expiration.require-success", self.registries_settings, True)
 
         logger.info("Finished loading json settings")
 
