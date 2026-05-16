@@ -51,6 +51,11 @@ endpoint_default_settings = {
         "namespace": "crucible-rickshaw",
         "pod": "rickshaw"
     },
+    "host-mounts": {
+        "run": True,
+        "modules": True,
+        "firmware": True
+    },
     "tool-deployment": {
         "scope": "endpoint",
         "tool-opt-in-tags": [],
@@ -96,6 +101,13 @@ def normalize_endpoint_settings(endpoint, rickshaw):
         for key in endpoint_default_settings["disable-tools"].keys():
             if not key in endpoint["disable-tools"]:
                 endpoint["disable-tools"][key] = endpoint_default_settings["disable-tools"][key]
+
+    if not "host-mounts" in endpoint:
+        endpoint["host-mounts"] = copy.deepcopy(endpoint_default_settings["host-mounts"])
+    else:
+        for key in endpoint_default_settings["host-mounts"].keys():
+            if not key in endpoint["host-mounts"]:
+                endpoint["host-mounts"][key] = endpoint_default_settings["host-mounts"][key]
 
     if not "tool-deployment" in endpoint:
         endpoint["tool-deployment"] = copy.deepcopy(endpoint_default_settings["tool-deployment"])
@@ -699,6 +711,15 @@ def init_k8s_namespace():
             if result.exited != 0:
                 return 1
 
+        # profiler pods require hostNetwork, hostPID, hostIPC, hostPath,
+        # and privileged containers -- ensure the namespace allows them
+        logger.info("Labeling namespace '%s' with privileged pod security" % (endpoint["namespace"]["name"]))
+        cmd = "%s label --overwrite namespace %s pod-security.kubernetes.io/enforce=privileged pod-security.kubernetes.io/audit=privileged pod-security.kubernetes.io/warn=privileged" % (settings["misc"]["k8s-bin"], endpoint["namespace"]["name"])
+        result = endpoints.run_remote(con, cmd, debug = settings["misc"]["debug-output"], env = settings["misc"]["remote-env"])
+        endpoints.log_result(result)
+        if result.exited != 0:
+            return 1
+
     return 0
 
 def get_k8s_config():
@@ -752,8 +773,7 @@ def get_k8s_config():
             name = node["metadata"]["name"]
             labels = node["metadata"]["labels"]
 
-            # OCP
-            if "node-role.kubernetes.io/master" in labels:
+            if "node-role.kubernetes.io/master" in labels or "node-role.kubernetes.io/control-plane" in labels:
                 masters.add(name)
             if "node-role.kubernetes.io/worker" in labels:
                 workers.add(name)
@@ -763,10 +783,10 @@ def get_k8s_config():
                 masters.add(name)
                 workers.add(name)
 
-            # k3s - single-node like microk8s
-            if "node-role.kubernetes.io/control-plane" in labels:
-                masters.add(name)
-                workers.add(name)
+        # single-node cluster: if there are no dedicated workers, the
+        # master node also serves as the worker (e.g., k3s, minikube)
+        if len(workers) == 0 and len(masters) == 1:
+            workers = set(masters)
 
         settings["misc"]["k8s"]["nodes"]["endpoint"]["masters"] = sorted(masters)
         settings["misc"]["k8s"]["nodes"]["endpoint"]["workers"] = sorted(workers)
@@ -934,10 +954,14 @@ def create_pod_crd(role = None, id = None, node = None, node_tools = None, cs_en
 
     if role == "master":
         # ensure master pod can be scheduled on the master node in case
-        # it is not scheduable
+        # it is not schedulable
         crd["spec"]["tolerations"] = [
             {
                 "key": "node-role.kubernetes.io/master",
+                "effect": "NoSchedule"
+            },
+            {
+                "key": "node-role.kubernetes.io/control-plane",
                 "effect": "NoSchedule"
             }
         ]
@@ -948,15 +972,17 @@ def create_pod_crd(role = None, id = None, node = None, node_tools = None, cs_en
             "emptyDir": {
                 "sizeLimit": "10Mi"
             }
-        },
-        {
+        }
+    ]
+
+    if endpoint["host-mounts"]["firmware"]:
+        crd["spec"]["volumes"].append({
             "name": "hostfs-firmware",
             "hostPath": {
                 "path": "/lib/firmware",
                 "type": "Directory"
-                }
-        }
-    ]
+            }
+        })
 
     if role == "worker" or role == "master":
         # guarantee specific node placement
@@ -969,25 +995,23 @@ def create_pod_crd(role = None, id = None, node = None, node_tools = None, cs_en
         crd["spec"]["hostNetwork"] = True
         crd["spec"]["hostIPC"] = True
 
-        # specific filesystem access is required
-        crd["spec"]["volumes"].extend(
-            [
-                {
-                    "name": "hostfs-run",
-                    "hostPath": {
-                        "path": "/var/run",
-                        "type": "Directory"
-                    }
-                },
-                {
-                    "name": "hostfs-modules",
-                    "hostPath": {
-                        "path": "/lib/modules",
-                        "type": "Directory"
-                    }
+        if endpoint["host-mounts"]["run"]:
+            crd["spec"]["volumes"].append({
+                "name": "hostfs-run",
+                "hostPath": {
+                    "path": "/var/run",
+                    "type": "Directory"
                 }
-            ]
-        )
+            })
+
+        if endpoint["host-mounts"]["modules"]:
+            crd["spec"]["volumes"].append({
+                "name": "hostfs-modules",
+                "hostPath": {
+                    "path": "/lib/modules",
+                    "type": "Directory"
+                }
+            })
 
     has_hugepages = False
 
@@ -1192,30 +1216,31 @@ def create_pod_crd(role = None, id = None, node = None, node_tools = None, cs_en
             {
                 "mountPath": "/shared-engines-dir",
                 "name": "shared-engines-dir"
-            },
-            {
-                "mountPath": "/lib/firmware",
-                "name": "hostfs-firmware"
             }
         ]
+
+        if endpoint["host-mounts"]["firmware"]:
+            container["volumeMounts"].append({
+                "mountPath": "/lib/firmware",
+                "name": "hostfs-firmware"
+            })
 
         if role == "worker" or role == "master":
             container["securityContext"] = {
                 "privileged": True
             }
 
-            container["volumeMounts"].extend(
-                [
-                    {
-                        "mountPath": "/var/run",
-                        "name": "hostfs-run"
-                    },
-                    {
-                        "mountPath": "/lib/modules",
-                        "name": "hostfs-modules"
-                    }
-                ]
-            )
+            if endpoint["host-mounts"]["run"]:
+                container["volumeMounts"].append({
+                    "mountPath": "/var/run",
+                    "name": "hostfs-run"
+                })
+
+            if endpoint["host-mounts"]["modules"]:
+                container["volumeMounts"].append({
+                    "mountPath": "/lib/modules",
+                    "name": "hostfs-modules"
+                })
 
         if is_cs_pod:
             if "securityContext" in container_settings and "container" in container_settings["securityContext"]:
@@ -2011,7 +2036,7 @@ def kube_cleanup():
                 result = endpoints.run_remote(con, cmd, debug = settings["misc"]["debug-output"], env = settings["misc"]["remote-env"])
                 if result.exited == 0:
                     log_file = "%s/%s.txt.xz" % (settings["dirs"]["local"]["engine-logs"], engine)
-                    with lzma.open(log_file, "wt", encoding="ascii") as lfh:
+                    with lzma.open(log_file, "wt", encoding="utf-8") as lfh:
                         lfh.write(result.stdout)
                     logger.info("Wrote log for engine '%s' in pod '%s' to '%s'" % (engine, pod, log_file))
                 else:
@@ -2134,7 +2159,7 @@ def collect_sysinfo():
             endpoints.log_result(result)
         else:
             out_file = settings["dirs"]["local"]["sysinfo"] + "/cluster-info.txt.xz"
-            with lzma.open(out_file, "wt", encoding="ascii") as ofh:
+            with lzma.open(out_file, "wt", encoding="utf-8") as ofh:
                 ofh.write(result.stdout)
             logger.info("Wrote basic cluster-info to '%s'" % (out_file))
 
@@ -2145,7 +2170,7 @@ def collect_sysinfo():
             endpoints.log_result(result)
         else:
             out_file = settings["dirs"]["local"]["sysinfo"] + "/cluster-info.dump.json.xz"
-            with lzma.open(out_file, "wt", encoding="ascii") as ofh:
+            with lzma.open(out_file, "wt", encoding="utf-8") as ofh:
                 ofh.write("STDOUT:\n")
                 ofh.write(result.stdout)
                 ofh.write("STDERR:\n")
@@ -2170,7 +2195,7 @@ def collect_sysinfo():
                 result = endpoints.run_remote(con, cmd, debug = settings["misc"]["debug-output"], env = settings["misc"]["remote-env"])
                 out_file = settings["dirs"]["local"]["sysinfo"] + "/must-gather.txt.xz"
                 logger.info("Logging OpenShift must-gather output to '%s'" % (out_file))
-                with lzma.open(out_file, "wt", encoding="ascii") as ofh:
+                with lzma.open(out_file, "wt", encoding="utf-8") as ofh:
                     ofh.write("STDOUT:\n")
                     ofh.write(result.stdout)
                     ofh.write("STDERR:\n")
