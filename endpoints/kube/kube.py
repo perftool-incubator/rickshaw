@@ -2036,7 +2036,7 @@ def kube_cleanup():
                 result = endpoints.run_remote(con, cmd, debug = settings["misc"]["debug-output"], env = settings["misc"]["remote-env"])
                 if result.exited == 0:
                     log_file = "%s/%s.txt.xz" % (settings["dirs"]["local"]["engine-logs"], engine)
-                    with lzma.open(log_file, "wt", encoding="ascii") as lfh:
+                    with lzma.open(log_file, "wt", encoding="utf-8") as lfh:
                         lfh.write(result.stdout)
                     logger.info("Wrote log for engine '%s' in pod '%s' to '%s'" % (engine, pod, log_file))
                 else:
@@ -2159,7 +2159,7 @@ def collect_sysinfo():
             endpoints.log_result(result)
         else:
             out_file = settings["dirs"]["local"]["sysinfo"] + "/cluster-info.txt.xz"
-            with lzma.open(out_file, "wt", encoding="ascii") as ofh:
+            with lzma.open(out_file, "wt", encoding="utf-8") as ofh:
                 ofh.write(result.stdout)
             logger.info("Wrote basic cluster-info to '%s'" % (out_file))
 
@@ -2170,7 +2170,7 @@ def collect_sysinfo():
             endpoints.log_result(result)
         else:
             out_file = settings["dirs"]["local"]["sysinfo"] + "/cluster-info.dump.json.xz"
-            with lzma.open(out_file, "wt", encoding="ascii") as ofh:
+            with lzma.open(out_file, "wt", encoding="utf-8") as ofh:
                 ofh.write("STDOUT:\n")
                 ofh.write(result.stdout)
                 ofh.write("STDERR:\n")
@@ -2195,7 +2195,7 @@ def collect_sysinfo():
                 result = endpoints.run_remote(con, cmd, debug = settings["misc"]["debug-output"], env = settings["misc"]["remote-env"])
                 out_file = settings["dirs"]["local"]["sysinfo"] + "/must-gather.txt.xz"
                 logger.info("Logging OpenShift must-gather output to '%s'" % (out_file))
-                with lzma.open(out_file, "wt", encoding="ascii") as ofh:
+                with lzma.open(out_file, "wt", encoding="utf-8") as ofh:
                     ofh.write("STDOUT:\n")
                     ofh.write(result.stdout)
                     ofh.write("STDERR:\n")
