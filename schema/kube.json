@@ -125,6 +125,28 @@
                 }
             ]
         },
+        "host-mounts": {
+            "description": "Controls which default host filesystem paths are mounted into pods. All default to true. Disable mounts for paths that do not exist on the target cluster.",
+            "type": "object",
+            "properties": {
+                "run": {
+                    "description": "Mount /var/run from the host (profiler pods only)",
+                    "type": "boolean",
+                    "default": true
+                },
+                "modules": {
+                    "description": "Mount /lib/modules from the host (profiler pods only)",
+                    "type": "boolean",
+                    "default": true
+                },
+                "firmware": {
+                    "description": "Mount /lib/firmware from the host (all pods)",
+                    "type": "boolean",
+                    "default": true
+                }
+            },
+            "additionalProperties": false
+        },
         "sysinfo": {
             "description": "This object contains parameters related to the control of system information collection",
             "type": "object",

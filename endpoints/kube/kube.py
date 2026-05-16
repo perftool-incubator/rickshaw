@@ -51,6 +51,11 @@ endpoint_default_settings = {
         "namespace": "crucible-rickshaw",
         "pod": "rickshaw"
     },
+    "host-mounts": {
+        "run": True,
+        "modules": True,
+        "firmware": True
+    },
     "tool-deployment": {
         "scope": "endpoint",
         "tool-opt-in-tags": [],
@@ -96,6 +101,13 @@ def normalize_endpoint_settings(endpoint, rickshaw):
         for key in endpoint_default_settings["disable-tools"].keys():
             if not key in endpoint["disable-tools"]:
                 endpoint["disable-tools"][key] = endpoint_default_settings["disable-tools"][key]
+
+    if not "host-mounts" in endpoint:
+        endpoint["host-mounts"] = copy.deepcopy(endpoint_default_settings["host-mounts"])
+    else:
+        for key in endpoint_default_settings["host-mounts"].keys():
+            if not key in endpoint["host-mounts"]:
+                endpoint["host-mounts"][key] = endpoint_default_settings["host-mounts"][key]
 
     if not "tool-deployment" in endpoint:
         endpoint["tool-deployment"] = copy.deepcopy(endpoint_default_settings["tool-deployment"])
@@ -960,15 +972,17 @@ def create_pod_crd(role = None, id = None, node = None, node_tools = None, cs_en
             "emptyDir": {
                 "sizeLimit": "10Mi"
             }
-        },
-        {
+        }
+    ]
+
+    if endpoint["host-mounts"]["firmware"]:
+        crd["spec"]["volumes"].append({
             "name": "hostfs-firmware",
             "hostPath": {
                 "path": "/lib/firmware",
                 "type": "Directory"
-                }
-        }
-    ]
+            }
+        })
 
     if role == "worker" or role == "master":
         # guarantee specific node placement
@@ -981,25 +995,23 @@ def create_pod_crd(role = None, id = None, node = None, node_tools = None, cs_en
         crd["spec"]["hostNetwork"] = True
         crd["spec"]["hostIPC"] = True
 
-        # specific filesystem access is required
-        crd["spec"]["volumes"].extend(
-            [
-                {
-                    "name": "hostfs-run",
-                    "hostPath": {
-                        "path": "/var/run",
-                        "type": "Directory"
-                    }
-                },
-                {
-                    "name": "hostfs-modules",
-                    "hostPath": {
-                        "path": "/lib/modules",
-                        "type": "Directory"
-                    }
+        if endpoint["host-mounts"]["run"]:
+            crd["spec"]["volumes"].append({
+                "name": "hostfs-run",
+                "hostPath": {
+                    "path": "/var/run",
+                    "type": "Directory"
                 }
-            ]
-        )
+            })
+
+        if endpoint["host-mounts"]["modules"]:
+            crd["spec"]["volumes"].append({
+                "name": "hostfs-modules",
+                "hostPath": {
+                    "path": "/lib/modules",
+                    "type": "Directory"
+                }
+            })
 
     has_hugepages = False
 
@@ -1204,30 +1216,31 @@ def create_pod_crd(role = None, id = None, node = None, node_tools = None, cs_en
             {
                 "mountPath": "/shared-engines-dir",
                 "name": "shared-engines-dir"
-            },
-            {
-                "mountPath": "/lib/firmware",
-                "name": "hostfs-firmware"
             }
         ]
+
+        if endpoint["host-mounts"]["firmware"]:
+            container["volumeMounts"].append({
+                "mountPath": "/lib/firmware",
+                "name": "hostfs-firmware"
+            })
 
         if role == "worker" or role == "master":
             container["securityContext"] = {
                 "privileged": True
             }
 
-            container["volumeMounts"].extend(
-                [
-                    {
-                        "mountPath": "/var/run",
-                        "name": "hostfs-run"
-                    },
-                    {
-                        "mountPath": "/lib/modules",
-                        "name": "hostfs-modules"
-                    }
-                ]
-            )
+            if endpoint["host-mounts"]["run"]:
+                container["volumeMounts"].append({
+                    "mountPath": "/var/run",
+                    "name": "hostfs-run"
+                })
+
+            if endpoint["host-mounts"]["modules"]:
+                container["volumeMounts"].append({
+                    "mountPath": "/lib/modules",
+                    "name": "hostfs-modules"
+                })
 
         if is_cs_pod:
             if "securityContext" in container_settings and "container" in container_settings["securityContext"]:
