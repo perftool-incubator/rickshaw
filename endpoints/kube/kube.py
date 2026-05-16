@@ -699,6 +699,15 @@ def init_k8s_namespace():
             if result.exited != 0:
                 return 1
 
+        # profiler pods require hostNetwork, hostPID, hostIPC, hostPath,
+        # and privileged containers -- ensure the namespace allows them
+        logger.info("Labeling namespace '%s' with privileged pod security" % (endpoint["namespace"]["name"]))
+        cmd = "%s label --overwrite namespace %s pod-security.kubernetes.io/enforce=privileged pod-security.kubernetes.io/audit=privileged pod-security.kubernetes.io/warn=privileged" % (settings["misc"]["k8s-bin"], endpoint["namespace"]["name"])
+        result = endpoints.run_remote(con, cmd, debug = settings["misc"]["debug-output"], env = settings["misc"]["remote-env"])
+        endpoints.log_result(result)
+        if result.exited != 0:
+            return 1
+
     return 0
 
 def get_k8s_config():
