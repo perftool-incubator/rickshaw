@@ -752,8 +752,7 @@ def get_k8s_config():
             name = node["metadata"]["name"]
             labels = node["metadata"]["labels"]
 
-            # OCP
-            if "node-role.kubernetes.io/master" in labels:
+            if "node-role.kubernetes.io/master" in labels or "node-role.kubernetes.io/control-plane" in labels:
                 masters.add(name)
             if "node-role.kubernetes.io/worker" in labels:
                 workers.add(name)
@@ -763,10 +762,10 @@ def get_k8s_config():
                 masters.add(name)
                 workers.add(name)
 
-            # k3s - single-node like microk8s
-            if "node-role.kubernetes.io/control-plane" in labels:
-                masters.add(name)
-                workers.add(name)
+        # single-node cluster: if there are no dedicated workers, the
+        # master node also serves as the worker (e.g., k3s, minikube)
+        if len(workers) == 0 and len(masters) == 1:
+            workers = set(masters)
 
         settings["misc"]["k8s"]["nodes"]["endpoint"]["masters"] = sorted(masters)
         settings["misc"]["k8s"]["nodes"]["endpoint"]["workers"] = sorted(workers)
@@ -934,10 +933,14 @@ def create_pod_crd(role = None, id = None, node = None, node_tools = None, cs_en
 
     if role == "master":
         # ensure master pod can be scheduled on the master node in case
-        # it is not scheduable
+        # it is not schedulable
         crd["spec"]["tolerations"] = [
             {
                 "key": "node-role.kubernetes.io/master",
+                "effect": "NoSchedule"
+            },
+            {
+                "key": "node-role.kubernetes.io/control-plane",
                 "effect": "NoSchedule"
             }
         ]
