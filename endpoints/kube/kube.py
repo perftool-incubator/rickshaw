@@ -13,6 +13,7 @@ import os
 from paramiko import ssh_exception
 from pathlib import Path
 import re
+import socket
 import sys
 import tempfile
 import threading
@@ -656,13 +657,18 @@ def clean_k8s_namespace(connection):
     logger.info("Cleaning namespace '%s'" % (endpoint["namespace"]["name"]))
 
     component_errors = False
-    for component in [ "pods", "services", "secrets" ]:
+    for component in [ "jobs", "pods", "services", "secrets" ]:
         logger.info("Cleaning component: %s" % (component))
         cmd = "%s delete --namespace %s %s --all" % (settings["misc"]["k8s-bin"], endpoint["namespace"]["name"], component)
         result = endpoints.run_remote(connection, cmd, debug = settings["misc"]["debug-output"], env = settings["misc"]["remote-env"])
         endpoints.log_result(result)
         if result.exited != 0:
             component_errors = True
+
+    logger.info("Removing namespace ownership labels from '%s'" % (endpoint["namespace"]["name"]))
+    cmd = "%s label namespace %s rickshaw.perf/run-id- rickshaw.perf/run-owner- rickshaw.perf/controller-host- rickshaw.perf/run-start-" % (settings["misc"]["k8s-bin"], endpoint["namespace"]["name"])
+    result = endpoints.run_remote(connection, cmd, debug = settings["misc"]["debug-output"], env = settings["misc"]["remote-env"])
+    endpoints.log_result(result)
 
     if component_errors:
         return 1
@@ -690,6 +696,9 @@ def init_k8s_namespace():
 
     endpoint = settings["run-file"]["endpoints"][args.endpoint_index]
 
+    current_host = socket.gethostname()
+    current_owner = settings["run-file"]["endpoints"][args.endpoint_index]["user"]
+
     with endpoints.remote_connection(settings["run-file"]["endpoints"][args.endpoint_index]["host"],
                                      settings["run-file"]["endpoints"][args.endpoint_index]["user"]) as con:
         namespace_exists = False
@@ -700,9 +709,45 @@ def init_k8s_namespace():
             namespace_exists = True
 
         if namespace_exists:
-            logger.info("Found existing namespace '%s', going to clean it" % (endpoint["namespace"]["name"]))
-            if clean_k8s_namespace(con):
-                return 1
+            cmd = "%s get namespace %s --output json" % (settings["misc"]["k8s-bin"], endpoint["namespace"]["name"])
+            result = endpoints.run_remote(con, cmd, debug = settings["misc"]["debug-output"], env = settings["misc"]["remote-env"])
+            endpoints.log_result(result, level = "info")
+
+            existing_run_id = None
+            existing_owner = None
+            existing_host = None
+            existing_start = None
+            if result.exited == 0:
+                ns_obj = json.loads(result.stdout)
+                ns_labels = ns_obj.get("metadata", {}).get("labels", {})
+                existing_run_id = ns_labels.get("rickshaw.perf/run-id")
+                existing_owner = ns_labels.get("rickshaw.perf/run-owner")
+                existing_host = ns_labels.get("rickshaw.perf/controller-host")
+                existing_start = ns_labels.get("rickshaw.perf/run-start")
+
+            if existing_run_id:
+                if existing_owner == current_owner and existing_host == current_host:
+                    logger.info("Found existing namespace '%s' owned by same user '%s' on same host '%s' (run: %s, started: %s), cleaning it" % (endpoint["namespace"]["name"], existing_owner, existing_host, existing_run_id, existing_start))
+                    if clean_k8s_namespace(con):
+                        return 1
+                else:
+                    # Only protect the namespace if it still has active
+                    # jobs or pods.  Orphaned services, secrets, or
+                    # endpoints may remain but are safe to clean up.
+                    cmd = "%s get jobs,pods --namespace %s --no-headers --ignore-not-found" % (settings["misc"]["k8s-bin"], endpoint["namespace"]["name"])
+                    result = endpoints.run_remote(con, cmd, debug = settings["misc"]["debug-output"], env = settings["misc"]["remote-env"])
+                    endpoints.log_result(result, level = "info")
+                    if result.exited == 0 and result.stdout.strip() == "":
+                        logger.info("Namespace '%s' is owned by '%s' on '%s' (run: %s, started: %s) but is empty, reclaiming it" % (endpoint["namespace"]["name"], existing_owner, existing_host, existing_run_id, existing_start))
+                        if clean_k8s_namespace(con):
+                            return 1
+                    else:
+                        logger.error("Namespace '%s' is owned by '%s' on '%s' (run: %s, started: %s) and still has active resources. Cannot proceed without disturbing existing environment." % (endpoint["namespace"]["name"], existing_owner, existing_host, existing_run_id, existing_start))
+                        return 1
+            else:
+                logger.info("Found existing namespace '%s' with no ownership labels, cleaning it" % (endpoint["namespace"]["name"]))
+                if clean_k8s_namespace(con):
+                    return 1
         else:
             logger.info("No namespace '%s' found, creating it" % (endpoint["namespace"]["name"]))
             cmd = "%s create namespace %s" % (settings["misc"]["k8s-bin"], endpoint["namespace"]["name"])
@@ -715,6 +760,27 @@ def init_k8s_namespace():
         # and privileged containers -- ensure the namespace allows them
         logger.info("Labeling namespace '%s' with privileged pod security" % (endpoint["namespace"]["name"]))
         cmd = "%s label --overwrite namespace %s pod-security.kubernetes.io/enforce=privileged pod-security.kubernetes.io/audit=privileged pod-security.kubernetes.io/warn=privileged" % (settings["misc"]["k8s-bin"], endpoint["namespace"]["name"])
+        result = endpoints.run_remote(con, cmd, debug = settings["misc"]["debug-output"], env = settings["misc"]["remote-env"])
+        endpoints.log_result(result)
+        if result.exited != 0:
+            return 1
+
+        # Jobs create pods via the Job controller using the namespace's default
+        # service account, which does not inherit the user's SCC privileges.
+        # Grant the privileged SCC to the default service account so that
+        # Job-created pods can use hostNetwork, hostPID, hostPath, etc.
+        if settings["misc"]["k8s-bin"] == "oc":
+            logger.info("Granting privileged SCC to default service account in namespace '%s'" % (endpoint["namespace"]["name"]))
+            cmd = "oc adm policy add-scc-to-user privileged -z default -n %s" % (endpoint["namespace"]["name"])
+            result = endpoints.run_remote(con, cmd, debug = settings["misc"]["debug-output"], env = settings["misc"]["remote-env"])
+            endpoints.log_result(result)
+            if result.exited != 0:
+                return 1
+
+        logger.info("Labeling namespace '%s' with ownership information" % (endpoint["namespace"]["name"]))
+        # K8s label values cannot contain colons, so use dots in the timestamp
+        run_start = time.strftime("%Y-%m-%dT%H.%M.%SZ", time.gmtime())
+        cmd = "%s label --overwrite namespace %s rickshaw.perf/run-id=%s rickshaw.perf/run-owner=%s rickshaw.perf/controller-host=%s rickshaw.perf/run-start=%s" % (settings["misc"]["k8s-bin"], endpoint["namespace"]["name"], settings["misc"]["run-id"], current_owner, current_host, run_start)
         result = endpoints.run_remote(con, cmd, debug = settings["misc"]["debug-output"], env = settings["misc"]["remote-env"])
         endpoints.log_result(result)
         if result.exited != 0:
@@ -870,9 +936,9 @@ def compile_object_configs():
 
     return 0
 
-def create_pod_crd(role = None, id = None, node = None, node_tools = None, cs_engines = None, pod_name = None):
+def create_job_crd(role = None, id = None, node = None, node_tools = None, cs_engines = None, pod_name = None):
     """
-    Create a pod CRD
+    Create a Job CRD that wraps a pod spec for engine execution.
 
     Args:
         role (str): The role for profiler pods ('master' or 'worker'), or None for CS pods using cs_engines
@@ -896,9 +962,9 @@ def create_pod_crd(role = None, id = None, node = None, node_tools = None, cs_en
     is_profiler_pod = role is not None
 
     if is_cs_pod:
-        logger.info("Creating CRD for CS pod '%s' with engines: %s" % (pod_name, ["%s-%d" % (e["role"], e["id"]) for e in cs_engines]))
+        logger.info("Creating CRD for CS job '%s' with engines: %s" % (pod_name, ["%s-%d" % (e["role"], e["id"]) for e in cs_engines]))
     else:
-        logger.info("Creating CRD for profiler engine %s-%d" % (role, id))
+        logger.info("Creating CRD for profiler engine job %s-%d" % (role, id))
 
     if not is_cs_pod and not is_profiler_pod:
         logger.error("You must define either cs_engines or role/id when calling this function")
@@ -932,30 +998,28 @@ def create_pod_crd(role = None, id = None, node = None, node_tools = None, cs_en
         logger.error("Could not find mapping for pod settings")
         return None, 1
 
-    crd = {
-        "apiVersion": "v1",
-        "kind": "Pod",
-        "metadata": {
-            "name": "%s-%s" % (endpoint_default_settings["prefix"]["pod"], name),
-            "namespace": endpoint["namespace"]["name"],
-        },
-        "spec": {
-            "restartPolicy": "Never"
-        }
+    job_name = "%s-%s" % (endpoint_default_settings["prefix"]["pod"], name)
+
+    ownership_labels = {
+        "rickshaw.perf/managed-by": "rickshaw",
+        "rickshaw.perf/run-id": settings["misc"]["run-id"],
+        "rickshaw.perf/controller-host": socket.gethostname(),
+        "rickshaw.perf/pod-name": name
     }
 
-    if is_cs_pod:
-        crd["metadata"]["labels"] = {
-            "app": crd["metadata"]["name"]
-        }
+    pod_spec = {
+        "restartPolicy": "Never"
+    }
 
-        if "annotations" in pod_settings:
-            crd["metadata"]["annotations"] = copy.deepcopy(pod_settings["annotations"])
+    pod_template_labels = copy.deepcopy(ownership_labels)
+
+    if is_cs_pod:
+        pod_template_labels["app"] = job_name
 
     if role == "master":
         # ensure master pod can be scheduled on the master node in case
         # it is not schedulable
-        crd["spec"]["tolerations"] = [
+        pod_spec["tolerations"] = [
             {
                 "key": "node-role.kubernetes.io/master",
                 "effect": "NoSchedule"
@@ -966,7 +1030,7 @@ def create_pod_crd(role = None, id = None, node = None, node_tools = None, cs_en
             }
         ]
 
-    crd["spec"]["volumes"] = [
+    pod_spec["volumes"] = [
         {
             "name": "shared-engines-dir",
             "emptyDir": {
@@ -976,7 +1040,7 @@ def create_pod_crd(role = None, id = None, node = None, node_tools = None, cs_en
     ]
 
     if endpoint["host-mounts"]["firmware"]:
-        crd["spec"]["volumes"].append({
+        pod_spec["volumes"].append({
             "name": "hostfs-firmware",
             "hostPath": {
                 "path": "/lib/firmware",
@@ -986,17 +1050,17 @@ def create_pod_crd(role = None, id = None, node = None, node_tools = None, cs_en
 
     if role == "worker" or role == "master":
         # guarantee specific node placement
-        crd["spec"]["nodeSelector"] = {
+        pod_spec["nodeSelector"] = {
             "kubernetes.io/hostname": node
         }
 
         # we want to simulate a host like environment
-        crd["spec"]["hostPID"] = True
-        crd["spec"]["hostNetwork"] = True
-        crd["spec"]["hostIPC"] = True
+        pod_spec["hostPID"] = True
+        pod_spec["hostNetwork"] = True
+        pod_spec["hostIPC"] = True
 
         if endpoint["host-mounts"]["run"]:
-            crd["spec"]["volumes"].append({
+            pod_spec["volumes"].append({
                 "name": "hostfs-run",
                 "hostPath": {
                     "path": "/var/run",
@@ -1005,7 +1069,7 @@ def create_pod_crd(role = None, id = None, node = None, node_tools = None, cs_en
             })
 
         if endpoint["host-mounts"]["modules"]:
-            crd["spec"]["volumes"].append({
+            pod_spec["volumes"].append({
                 "name": "hostfs-modules",
                 "hostPath": {
                     "path": "/lib/modules",
@@ -1017,16 +1081,16 @@ def create_pod_crd(role = None, id = None, node = None, node_tools = None, cs_en
 
     if is_cs_pod:
         if "securityContext" in pod_settings and "pod" in pod_settings["securityContext"]:
-            crd["spec"]["securityContext"] = copy.deepcopy(pod_settings["securityContext"]["pod"])
+            pod_spec["securityContext"] = copy.deepcopy(pod_settings["securityContext"]["pod"])
 
         if "runtimeClassName" in pod_settings:
-            crd["spec"]["runtimeClassName"] = pod_settings["runtimeClassName"]
+            pod_spec["runtimeClassName"] = pod_settings["runtimeClassName"]
 
         if "nodeSelector" in pod_settings:
-            crd["spec"]["nodeSelector"] = copy.deepcopy(pod_settings["nodeSelector"])
+            pod_spec["nodeSelector"] = copy.deepcopy(pod_settings["nodeSelector"])
 
         if "hostNetwork" in pod_settings:
-            crd["spec"]["hostNetwork"] = pod_settings["hostNetwork"]
+            pod_spec["hostNetwork"] = pod_settings["hostNetwork"]
 
         # Accumulate volumes from all engines in the pod, deduplicating by name
         volume_names_added = set()
@@ -1042,7 +1106,7 @@ def create_pod_crd(role = None, id = None, node = None, node_tools = None, cs_en
                         for key in volume["volume"].keys():
                             new_volume[key] = copy.deepcopy(volume["volume"][key])
 
-                        crd["spec"]["volumes"].append(new_volume)
+                        pod_spec["volumes"].append(new_volume)
                         volume_names_added.add(volume["name"])
 
             if "resources" in engine_settings and not has_hugepages:
@@ -1050,7 +1114,7 @@ def create_pod_crd(role = None, id = None, node = None, node_tools = None, cs_en
                     if "hugepages" in key:
                         has_hugepages = True
 
-                        crd["spec"]["volumes"].append({
+                        pod_spec["volumes"].append({
                             "name": "hugepage",
                             "emptyDir": {
                                 "medium": "HugePages"
@@ -1076,9 +1140,9 @@ def create_pod_crd(role = None, id = None, node = None, node_tools = None, cs_en
             mapping["ids"].append(engine_name)
             container_names.append(engine_name)
 
-    crd["spec"]["containers"] = []
+    pod_spec["containers"] = []
     for container_name in container_names:
-        logger.info("Adding container '%s' to pod" % (container_name))
+        logger.info("Adding container '%s' to job" % (container_name))
         image = None
         if is_cs_pod:
             engine = container_engine_map[container_name]
@@ -1088,27 +1152,26 @@ def create_pod_crd(role = None, id = None, node = None, node_tools = None, cs_en
             userenv = endpoints.get_profiler_userenv(settings, container_name)
             if userenv is None:
                 logger.error("Could not find userenv for engine '%s'" % (container_name))
-                return crd, 1
+                return None, 1
             else:
                 logger.info("Found userenv '%s' for engine '%s'" % (userenv, container_name))
             image = endpoints.get_engine_id_image(settings, role, container_name, userenv)
         if image is None:
             logger.error("Could not find image for container %s" % (container_name))
-            return crd, 1
+            return None, 1
         else:
             logger.info("Found image '%s' for container '%s'" % (image, container_name))
 
         if "::" in image:
             # this image has a pull token that must be handled
-
             fields = image.split("::")
             image = fields[0]
             token_file = fields[1]
 
             logger.info("Processing image pull secret '%s' for image '%s'" % (token_file, image))
 
-            if not "imagePullSecrets" in crd["spec"]:
-                crd["spec"]["imagePullSecrets"] = []
+            if not "imagePullSecrets" in pod_spec:
+                pod_spec["imagePullSecrets"] = []
 
             if not "pull-secrets" in settings["misc"]:
                 settings["misc"]["pull-secrets"] = {}
@@ -1133,13 +1196,13 @@ def create_pod_crd(role = None, id = None, node = None, node_tools = None, cs_en
                 logger.info("CRD for image pull secret named '%s' already exists" % (secret_name))
 
             add_secret = True
-            for secret in crd["spec"]["imagePullSecrets"]:
+            for secret in pod_spec["imagePullSecrets"]:
                 if secret["name"] == secret_name:
                     add_secret = False
 
             if add_secret:
                 logger.info("Adding image pull secret '%s' to pod spec" % (secret_name))
-                crd["spec"]["imagePullSecrets"].append({ "name": secret_name })
+                pod_spec["imagePullSecrets"].append({ "name": secret_name })
             else:
                 logger.info("Image pull secret '%s' already added to pod spec" % (secret_name))
 
@@ -1266,7 +1329,31 @@ def create_pod_crd(role = None, id = None, node = None, node_tools = None, cs_en
             if "resources" in container_settings:
                 container["resources"] = copy.deepcopy(container_settings["resources"])
 
-        crd["spec"]["containers"].append(container)
+        pod_spec["containers"].append(container)
+
+    pod_template_metadata = {
+        "labels": pod_template_labels
+    }
+    if is_cs_pod and "annotations" in pod_settings:
+        pod_template_metadata["annotations"] = copy.deepcopy(pod_settings["annotations"])
+
+    crd = {
+        "apiVersion": "batch/v1",
+        "kind": "Job",
+        "metadata": {
+            "name": job_name,
+            "namespace": endpoint["namespace"]["name"],
+            "labels": copy.deepcopy(ownership_labels)
+        },
+        "spec": {
+            "backoffLimit": 0,
+            "ttlSecondsAfterFinished": 86400,
+            "template": {
+                "metadata": pod_template_metadata,
+                "spec": pod_spec
+            }
+        }
+    }
 
     return crd, 0
 
@@ -1312,7 +1399,7 @@ def verify_pods_running(connection, pods, pod_details, abort_event):
         count += 1
 
         logger.info("Collecting pod status for namespace '%s'" % (endpoint["namespace"]["name"]))
-        cmd = "%s get pods --namespace %s --output json" % (settings["misc"]["k8s-bin"], endpoint["namespace"]["name"])
+        cmd = "%s get pods --namespace %s -l rickshaw.perf/managed-by=rickshaw --output json" % (settings["misc"]["k8s-bin"], endpoint["namespace"]["name"])
         result = endpoints.run_remote(connection, cmd, debug = settings["misc"]["debug-output"], env = settings["misc"]["remote-env"])
         endpoints.log_result(result)
         if result.exited != 0:
@@ -1324,9 +1411,11 @@ def verify_pods_running(connection, pods, pod_details, abort_event):
 
         logger.info("Analyzing pod status for namespace '%s'" % (endpoint["namespace"]["name"]))
         for pod in pod_status["items"]:
-            pod_name = pod["metadata"]["name"]
-            # strip off the prefix
-            pod_name = re.sub(r"%s-" % (endpoint_default_settings["prefix"]["pod"]), r"", pod_name)
+            pod_labels = pod["metadata"].get("labels", {})
+            pod_name = pod_labels.get("rickshaw.perf/pod-name")
+            if pod_name is None:
+                pod_name = pod["metadata"]["name"]
+                pod_name = re.sub(r"%s-" % (endpoint_default_settings["prefix"]["pod"]), r"", pod_name)
             logger.debug("Processing engine '%s'" % (pod_name))
 
             if pod_name not in pods:
@@ -1385,6 +1474,7 @@ def verify_pods_running(connection, pods, pod_details, abort_event):
                         verified_pods.append(pod_name)
                         pods_info[pod_name] = {
                             "name": pod_name,
+                            "k8s-pod-name": pod["metadata"]["name"],
                             "node": pod["spec"]["nodeName"],
                             "containers": copy.deepcopy(running_containers),
                             "pod-ip": pod["status"]["podIP"],
@@ -1465,7 +1555,7 @@ def create_cs_pods(cpu_partitioning = None, abort_event = None):
     for pod_group in pod_groups:
         logger.info("Creating pod group '%s' with engines: %s" % (pod_group["name"], ["%s-%d" % (e["role"], e["id"]) for e in pod_group["engines"]]))
 
-        pod_group["crd"], rc = create_pod_crd(cs_engines = pod_group["engines"], pod_name = pod_group["name"])
+        pod_group["crd"], rc = create_job_crd(cs_engines = pod_group["engines"], pod_name = pod_group["name"])
         if rc == 1:
             logger.error("Failed to create CRD for pod group '%s'" % (pod_group["name"]))
             if pod_group["crd"] is None:
@@ -1477,7 +1567,7 @@ def create_cs_pods(cpu_partitioning = None, abort_event = None):
 
             logger.info("Created CRD for pod group '%s':\n%s" % (pod_group["name"], crd_json_str))
 
-            crd_filename = settings["dirs"]["local"]["crds"]["pods"] + "/%s.json" % (pod_group["name"])
+            crd_filename = settings["dirs"]["local"]["crds"]["jobs"] + "/%s.json" % (pod_group["name"])
             with open(crd_filename, "w", encoding = "ascii") as crd_fp:
                 crd_fp.write(crd_json_str)
             logger.info("Wrote CRD for pod group '%s' to %s" % (pod_group["name"], crd_filename))
@@ -1844,14 +1934,14 @@ def create_tools_pods(abort_event):
 
         pod_node_tools = per_node_tools.get(node) if per_node_tools is not None else None
         logger.info("Pod '%s-%d' on node '%s' has node_tools=%s" % (pod["role"], pod["id"], pod["node"], pod_node_tools))
-        pod["crd"], rc = create_pod_crd(pod["role"], pod["id"], node = pod["node"], node_tools = pod_node_tools)
+        pod["crd"], rc = create_job_crd(pod["role"], pod["id"], node = pod["node"], node_tools = pod_node_tools)
         if rc == 1:
             logger.error("Failed to create CRD for '%s-%d'" % (pod["role"], pod["id"]))
             if pod["crd"] is None:
                 logger.error("No CRD available for '%s-%d'" % (pod["role"], pod["id"]))
             else:
                 logger.error("CRD generated for '%s-%d':\n%s" % (pod["role"], pod["id"], endpoints.dump_json(pod["crd"])))
-        elif len(pod["crd"]["spec"]["containers"]) == 0:
+        elif len(pod["crd"]["spec"]["template"]["spec"]["containers"]) == 0:
             logger.warning("Skipping pod '%s-%d' on node '%s' because it has no tool containers" % (pod["role"], pod["id"], pod["node"]))
             continue
         else:
@@ -1859,7 +1949,7 @@ def create_tools_pods(abort_event):
 
             logger.info("Created CRD for '%s-%d':\n%s" % (pod["role"], pod["id"], crd_json_str))
 
-            crd_filename = settings["dirs"]["local"]["crds"]["pods"] + "/%s-%s.json" % (pod["role"], pod["id"])
+            crd_filename = settings["dirs"]["local"]["crds"]["jobs"] + "/%s-%s.json" % (pod["role"], pod["id"])
             with open(crd_filename, "w", encoding = "ascii") as crd_fp:
                 crd_fp.write(crd_json_str)
             logger.info("Wrote CRD for %s-%s to %s" % (pod["role"], pod["id"], crd_filename))
@@ -2028,11 +2118,11 @@ def kube_cleanup():
             logger.info("Processing pod '%s' on node '%s'" % (pod_name, node_name))
             for engine in settings["engines"]["endpoint"]["pods"][pod]["containers"]:
                 logger.info("Collecting log for engine '%s'" % (engine))
-                cmd = "%s logs %s-%s --namespace %s --container %s" % (settings["misc"]["k8s-bin"],
-                                                                       endpoint_default_settings["prefix"]["pod"],
-                                                                       pod_name,
-                                                                       endpoint["namespace"]["name"],
-                                                                       engine)
+                k8s_pod_name = settings["engines"]["endpoint"]["pods"][pod].get("k8s-pod-name", "%s-%s" % (endpoint_default_settings["prefix"]["pod"], pod_name))
+                cmd = "%s logs %s --namespace %s --container %s" % (settings["misc"]["k8s-bin"],
+                                                                     k8s_pod_name,
+                                                                     endpoint["namespace"]["name"],
+                                                                     engine)
                 result = endpoints.run_remote(con, cmd, debug = settings["misc"]["debug-output"], env = settings["misc"]["remote-env"])
                 if result.exited == 0:
                     log_file = "%s/%s.txt.xz" % (settings["dirs"]["local"]["engine-logs"], engine)
@@ -3041,7 +3131,7 @@ def init_kube_settings():
 
     settings["dirs"]["local"]["crds"] = dict()
 
-    for crd_type in [ "pods", "networking" ]:
+    for crd_type in [ "jobs", "networking" ]:
         settings["dirs"]["local"]["crds"][crd_type] = settings["dirs"]["local"]["endpoint"] + "/crds/" + crd_type
 
 def create_kube_dirs():
