@@ -10,6 +10,7 @@ import jsonschema
 import logging
 import lzma
 import os
+import platform
 from paramiko import ssh_exception
 from pathlib import Path
 import re
@@ -37,6 +38,7 @@ else:
         print("ERROR: <TOOLBOX_HOME>/python ('%s') does not exist!" % (p))
         exit(2)
     sys.path.append(str(p))
+import json as json_module
 from toolbox.json import *
 
 endpoint_default_settings = {
@@ -580,11 +582,30 @@ def validate():
                 if result.exited != 0:
                     endpoints.validate_error("Failed to run '%s version' on endpoint host '%s' as user '%s'" % (k8s_bin, endpoint_settings["host"], endpoint_settings["user"]))
 
-                result = endpoints.run_remote(con, k8s_bin + " get nodes", validate = True, debug = debug_output, env = remote_env)
-                result.stdout = re.sub(r'\n', ' | ', result.stdout)
-                endpoints.validate_comment("remote '%s' functional check for %s: rc=%d stdout=[%s] and stderr=[%s]" % (k8s_bin, endpoint_settings["host"], result.exited, result.stdout.rstrip(' | '), result.stderr.rstrip('\n')))
+                result = endpoints.run_remote(con, k8s_bin + " get nodes --output json", validate = True, debug = debug_output, env = remote_env)
                 if result.exited != 0:
+                    result.stdout = re.sub(r'\n', ' | ', result.stdout)
+                    endpoints.validate_comment("remote '%s' functional check for %s: rc=%d stdout=[%s] and stderr=[%s]" % (k8s_bin, endpoint_settings["host"], result.exited, result.stdout.rstrip(' | '), result.stderr.rstrip('\n')))
                     endpoints.validate_error("Failed to functionally verify '%s' on endpoint host '%s' as user '%s'" % (k8s_bin, endpoint_settings["host"], endpoint_settings["user"]))
+                else:
+                    endpoints.validate_comment("remote '%s' functional check for %s: rc=%d" % (k8s_bin, endpoint_settings["host"], result.exited))
+
+                    k8s_to_linux_arch = {
+                        "amd64": "x86_64",
+                        "arm64": "aarch64",
+                        "ppc64le": "ppc64le",
+                        "s390x": "s390x",
+                    }
+                    cluster_archs = set()
+                    nodes_data = json_module.loads(result.stdout)
+                    for node in nodes_data.get("items", []):
+                        k8s_arch = node.get("status", {}).get("nodeInfo", {}).get("architecture", "")
+                        if k8s_arch:
+                            cluster_archs.add(k8s_to_linux_arch.get(k8s_arch, k8s_arch))
+
+                    if cluster_archs:
+                        endpoints.validate_comment("detected cluster architectures: %s" % (sorted(cluster_archs)))
+                        endpoints.validate_log("arch %s" % (" ".join(sorted(cluster_archs))))
     except ssh_exception.AuthenticationException as e:
         endpoints.validate_error("remote login verification for %s with user %s resulted in an authentication exception '%s'" % (endpoint_settings["host"], endpoint_settings["user"], str(e)))
     except ssh_exception.NoValidConnectionsError as e:
@@ -833,11 +854,27 @@ def get_k8s_config():
             logger.error("Did not find any nodes")
             return 1
 
+        k8s_to_linux_arch = {
+            "amd64": "x86_64",
+            "arm64": "aarch64",
+            "ppc64le": "ppc64le",
+            "s390x": "s390x",
+        }
+        linux_to_k8s_arch = {v: k for k, v in k8s_to_linux_arch.items()}
+
         masters = set()
         workers = set()
+        cluster_archs = set()
+        node_arch_map = {}
         for node in settings["misc"]["k8s"]["nodes"]["cluster"]["items"]:
             name = node["metadata"]["name"]
             labels = node["metadata"]["labels"]
+
+            k8s_arch = node.get("status", {}).get("nodeInfo", {}).get("architecture", "")
+            if k8s_arch:
+                linux_arch = k8s_to_linux_arch.get(k8s_arch, k8s_arch)
+                cluster_archs.add(linux_arch)
+                node_arch_map[name] = linux_arch
 
             if "node-role.kubernetes.io/master" in labels or "node-role.kubernetes.io/control-plane" in labels:
                 masters.add(name)
@@ -853,6 +890,11 @@ def get_k8s_config():
         # master node also serves as the worker (e.g., k3s, minikube)
         if len(workers) == 0 and len(masters) == 1:
             workers = set(masters)
+
+        settings["misc"]["k8s"]["cluster-archs"] = sorted(cluster_archs)
+        settings["misc"]["k8s"]["node-arch-map"] = node_arch_map
+        settings["misc"]["k8s"]["linux-to-k8s-arch"] = linux_to_k8s_arch
+        logger.info("Cluster architectures: %s" % (sorted(cluster_archs)))
 
         settings["misc"]["k8s"]["nodes"]["endpoint"]["masters"] = sorted(masters)
         settings["misc"]["k8s"]["nodes"]["endpoint"]["workers"] = sorted(workers)
@@ -1140,6 +1182,32 @@ def create_job_crd(role = None, id = None, node = None, node_tools = None, cs_en
             mapping["ids"].append(engine_name)
             container_names.append(engine_name)
 
+    # Determine the target architecture for this pod
+    target_arch = None
+    cluster_archs = settings["misc"]["k8s"].get("cluster-archs", [])
+    node_arch_map = settings["misc"]["k8s"].get("node-arch-map", {})
+    linux_to_k8s_arch = settings["misc"]["k8s"].get("linux-to-k8s-arch", {})
+
+    if is_cs_pod and "arch" in pod_settings:
+        target_arch = pod_settings["arch"]
+        pod_spec.setdefault("nodeSelector", {})["kubernetes.io/arch"] = linux_to_k8s_arch.get(target_arch, target_arch)
+        logger.info("Engine arch setting specifies '%s', adding kubernetes.io/arch nodeSelector" % (target_arch))
+    elif "nodeSelector" in pod_spec and "kubernetes.io/arch" in pod_spec["nodeSelector"]:
+        k8s_to_linux_arch = {v: k for k, v in linux_to_k8s_arch.items()}
+        target_arch = k8s_to_linux_arch.get(pod_spec["nodeSelector"]["kubernetes.io/arch"], pod_spec["nodeSelector"]["kubernetes.io/arch"])
+    elif "nodeSelector" in pod_spec and "kubernetes.io/hostname" in pod_spec["nodeSelector"]:
+        target_node = pod_spec["nodeSelector"]["kubernetes.io/hostname"]
+        target_arch = node_arch_map.get(target_node)
+    elif len(cluster_archs) == 1:
+        target_arch = cluster_archs[0]
+    else:
+        target_arch = platform.machine()
+        if len(cluster_archs) > 1:
+            pod_spec.setdefault("nodeSelector", {})["kubernetes.io/arch"] = linux_to_k8s_arch.get(target_arch, target_arch)
+            logger.info("Multi-arch cluster with no arch constraint, defaulting to '%s' with kubernetes.io/arch nodeSelector" % (target_arch))
+
+    logger.info("Target architecture for pod '%s': %s" % (name, target_arch))
+
     pod_spec["containers"] = []
     for container_name in container_names:
         logger.info("Adding container '%s' to job" % (container_name))
@@ -1147,7 +1215,7 @@ def create_job_crd(role = None, id = None, node = None, node_tools = None, cs_en
         if is_cs_pod:
             engine = container_engine_map[container_name]
             engine_settings = endpoint["engines"]["settings"][engine["role"]][engine["id"]]
-            image = endpoints.get_engine_id_image(settings, engine["role"], engine["id"], engine_settings["userenv"])
+            image = endpoints.get_engine_id_image(settings, engine["role"], engine["id"], engine_settings["userenv"], arch=target_arch)
         elif role == "worker" or role == "master":
             userenv = endpoints.get_profiler_userenv(settings, container_name)
             if userenv is None:
@@ -1155,7 +1223,7 @@ def create_job_crd(role = None, id = None, node = None, node_tools = None, cs_en
                 return None, 1
             else:
                 logger.info("Found userenv '%s' for engine '%s'" % (userenv, container_name))
-            image = endpoints.get_engine_id_image(settings, role, container_name, userenv)
+            image = endpoints.get_engine_id_image(settings, role, container_name, userenv, arch=target_arch)
         if image is None:
             logger.error("Could not find image for container %s" % (container_name))
             return None, 1

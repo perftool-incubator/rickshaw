@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import json
 import logging
+import platform
 import re
 import time
 from datetime import datetime, timezone
@@ -1078,6 +1079,14 @@ def source_all_images(job: Job, build_coordinator: BuildCoordinator) -> dict[str
 
     request = job.request
     workspace = job.workspace
+
+    native_arch = platform.machine()
+    if request.arch != native_arch:
+        raise SourceImagesError(
+            f"Architecture mismatch: this service runs on {native_arch} "
+            f"but received a request for {request.arch} images. "
+            f"Check services.json to ensure the correct service URL is mapped to each architecture."
+        )
 
     image_ids: dict[str, dict[str, dict[str, Any]]] = {}
     workshop_built_tags: dict[str, int] = {}
