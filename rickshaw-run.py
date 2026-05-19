@@ -230,6 +230,8 @@ class RunState:
         self.endpoint_processes = []
 
         self.arch = platform.machine()
+        self.required_archs = set()
+        self.arch_urls = {}
         self.available_cpus = os.cpu_count() or 1
 
         signal.signal(signal.SIGINT, self._sigint_handler)
@@ -280,12 +282,14 @@ class RunState:
                     sys.exit(1)
             elif arg == "log-level":
                 pass
+            elif arg == "source-images-service-url":
+                logger.debug("ignoring legacy --source-images-service-url (using image-sourcing-urls.json instead)")
             elif re.match(
                 r'^(base-run-dir|workshop-dir|workshop-script|packrat-dir|bench-dir|'
                 r'roadblock-dir|roadblock-password|tools-dir|engine-dir|'
                 r'run-id|id|bench-params|tool-params|'
                 r'test-order|tool-group|num-samples|max-sample-failures|name|bench-ids|'
-                r'registries-json|external-userenvs-dir|source-images-service-url|'
+                r'registries-json|external-userenvs-dir|'
                 r'email|desc)$', arg
             ):
                 logger.debug("argument: [%s]", arg)
@@ -933,18 +937,34 @@ class RunState:
                     for etype in parts[1:]:
                         self.active_collector_types[etype] = 1
 
+                elif keyword == "arch":
+                    endpoint["archs"] = parts[1:]
+                    logger.debug("endpoint %s reports architectures: %s",
+                                 endpoint["label"], endpoint["archs"])
+
                 elif keyword == "userenv":
                     userenv = parts[1] if len(parts) > 1 else ""
                     endpoint["userenvs"].append(userenv)
                     logger.debug("clients/servers for endpoint %s will have userenv %s",
                                  endpoint["label"], userenv)
-                    for bench_name in self.bench_configs:
-                        self.image_ids.setdefault(bench_name, {})[userenv] = {"image": ""}
 
                 else:
                     logger.error("[ERROR] output from endpoint validation incorrect for %s:\n%s",
                                  endpoint["label"], line)
                     sys.exit(1)
+
+        for endpoint in self.endpoints:
+            if "archs" in endpoint:
+                self.required_archs.update(endpoint["archs"])
+        if not self.required_archs:
+            self.required_archs.add(self.arch)
+        logger.info("Required architectures across all endpoints: %s", sorted(self.required_archs))
+
+        for endpoint in self.endpoints:
+            for userenv in endpoint.get("userenvs", []):
+                for arch in endpoint.get("archs", [self.arch]):
+                    for bench_name in self.bench_configs:
+                        self.image_ids.setdefault(arch, {}).setdefault(bench_name, {})[userenv] = {"image": ""}
 
         if len(self.bench_configs) == 1:
             bench_name = list(self.bench_configs.keys())[0]
@@ -1063,7 +1083,8 @@ class RunState:
                 self.tools_configs[tool_name] = tool_cfg
 
             self.bench_dirs[tool_id] = os.path.join(self.run["tools-dir"], tool_name)
-            self.image_ids.setdefault(tool_id, {})[tool_entry["userenv"]] = {"image": ""}
+            for arch in self.required_archs:
+                self.image_ids.setdefault(arch, {}).setdefault(tool_id, {})[tool_entry["userenv"]] = {"image": ""}
 
         save_json_file(os.path.join(self.config_dir, "tool-id-map.json"), tool_id_map)
 
@@ -1364,38 +1385,13 @@ class RunState:
             else:
                 self.build_files_list(cs_type)
 
-    def source_images(self):
-        logger.info("Preparing userenvs:")
-        logger.debug("image_ids (before): %s", json.dumps(self.image_ids, indent=2, default=str))
-
-        dedup_image_ids = {}
-        dedup_bench_dirs = {}
-        for tid in list(self.image_ids.keys()):
-            tool_name = tid
-            for tool_entry in self.tools_params:
-                if tool_entry["tool-id"] == tid:
-                    tool_name = tool_entry["tool"]
-                    break
-            if tid in self.bench_dirs:
-                dedup_bench_dirs[tool_name] = self.bench_dirs[tid]
-            for userenv in self.image_ids[tid]:
-                dedup_image_ids.setdefault(tool_name, {})[userenv] = self.image_ids[tid][userenv]
-
-        for bench in self.bench_dirs:
-            if bench not in dedup_bench_dirs and not any(t["tool-id"] == bench for t in self.tools_params):
-                dedup_bench_dirs[bench] = self.bench_dirs[bench]
-
-        utility_dirs = {}
-        for utility in UTILITIES:
-            utility_dir_key = f"{utility}-dir"
-            if utility_dir_key in self.run:
-                utility_dirs[utility] = self.run[utility_dir_key]
-
+    def _source_images_for_arch(self, arch, service_url, dedup_image_ids, dedup_bench_dirs, utility_dirs, provenance):
+        """Source images for a single architecture. Returns (arch, output_ref, error_msg)."""
         source_input = {
             "image-ids": dedup_image_ids,
             "registries": self.run.get("registries", {}),
             "registries-json": self.run.get("registries-json", ""),
-            "arch": self.arch,
+            "arch": arch,
             "bench-dirs": dedup_bench_dirs,
             "utilities": UTILITIES,
             "dirs": {
@@ -1415,56 +1411,147 @@ class RunState:
         }
         if "external-userenvs-dir" in self.run:
             source_input["external-userenvs-dir"] = self.run["external-userenvs-dir"]
-
-        provenance = self._build_provenance(utility_dirs)
         source_input["provenance"] = provenance
 
-        source_input_file = os.path.join(self.config_dir, "image-source-input.json")
-        source_output_file = os.path.join(self.config_dir, "image-source-output.json")
+        source_input_file = os.path.join(self.config_dir, f"image-source-input-{arch}.json")
+        source_output_file = os.path.join(self.config_dir, f"image-source-output-{arch}.json")
         save_json_file(source_input_file, source_input)
-
-        if "source-images-service-url" not in self.run:
-            logger.error("[ERROR] --source-images-service-url is required")
-            sys.exit(1)
 
         source_images_cmd = (
             f"{self.rickshaw_project_dir}/rickshaw-source-images-client.py"
             f" --input {source_input_file}"
             f" --output {source_output_file}"
-            f" --service-url {self.run['source-images-service-url']}"
+            f" --service-url {service_url}"
         )
-        logger.info("Running: %s", source_images_cmd)
-        rc = subprocess.run(source_images_cmd, shell=True).returncode
+        logger.info("Running (%s): %s", arch, source_images_cmd)
+        if len(self.required_archs) > 1:
+            prefix = f"[{arch}] "
+            proc = subprocess.Popen(source_images_cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+            for line in proc.stdout:
+                print(f"{prefix}{line}", end="")
+            rc = proc.wait()
+        else:
+            rc = subprocess.run(source_images_cmd, shell=True).returncode
         if rc != 0:
-            logger.error("rickshaw-source-images-client.py failed with exit code %d", rc)
-            sys.exit(1)
+            return (arch, None, f"rickshaw-source-images-client.py failed for {arch} with exit code {rc}")
 
         output_ref, err = load_json_file(source_output_file)
         if output_ref is None:
             output_ref, err = load_json_file(source_output_file + ".xz", uselzma=True)
         if output_ref is None:
-            logger.error("Failed to read image source output JSON: %s", source_output_file)
+            return (arch, None, f"Failed to read image source output JSON for {arch}: {source_output_file}")
+
+        return (arch, output_ref, None)
+
+    def source_images(self):
+        logger.info("Preparing userenvs:")
+        logger.debug("image_ids (before): %s", json.dumps(self.image_ids, indent=2, default=str))
+
+        # Load per-architecture image sourcing service URLs
+        urls_file = os.path.join(self.config_dir, "image-sourcing-urls.json")
+        self.arch_urls, err = load_json_file(urls_file)
+        if self.arch_urls is None:
+            logger.error("[ERROR] Failed to read %s: %s", urls_file, err)
             sys.exit(1)
 
+        for arch in self.required_archs:
+            if arch not in self.arch_urls:
+                logger.error("[ERROR] No image sourcing service URL configured for architecture '%s'", arch)
+                logger.error("  Available architectures: %s", list(self.arch_urls.keys()))
+                sys.exit(1)
+
+        # Deduplicate image IDs and bench dirs (same for all architectures)
+        dedup_bench_dirs = {}
+        dedup_image_ids = {}
+        for arch in self.image_ids:
+            for tid in list(self.image_ids[arch].keys()):
+                tool_name = tid
+                for tool_entry in self.tools_params:
+                    if tool_entry["tool-id"] == tid:
+                        tool_name = tool_entry["tool"]
+                        break
+                if tid in self.bench_dirs:
+                    dedup_bench_dirs[tool_name] = self.bench_dirs[tid]
+                for userenv in self.image_ids[arch][tid]:
+                    dedup_image_ids.setdefault(tool_name, {})[userenv] = self.image_ids[arch][tid][userenv]
+
+        for bench in self.bench_dirs:
+            if bench not in dedup_bench_dirs and not any(t["tool-id"] == bench for t in self.tools_params):
+                dedup_bench_dirs[bench] = self.bench_dirs[bench]
+
+        utility_dirs = {}
+        for utility in UTILITIES:
+            utility_dir_key = f"{utility}-dir"
+            if utility_dir_key in self.run:
+                utility_dirs[utility] = self.run[utility_dir_key]
+
+        provenance = self._build_provenance(utility_dirs)
+
+        # Source images in parallel — one call per required architecture
+        source_errors = 0
+        if len(self.required_archs) == 1:
+            arch = list(self.required_archs)[0]
+            arch_result, output_ref, error_msg = self._source_images_for_arch(
+                arch, self.arch_urls[arch], dedup_image_ids, dedup_bench_dirs, utility_dirs, provenance
+            )
+            if error_msg:
+                logger.error(error_msg)
+                source_errors += 1
+            else:
+                self._merge_source_output(arch, output_ref)
+        else:
+            with ThreadPoolExecutor(max_workers=len(self.required_archs)) as executor:
+                futures = {}
+                for arch in sorted(self.required_archs):
+                    future = executor.submit(
+                        self._source_images_for_arch,
+                        arch, self.arch_urls[arch], dedup_image_ids, dedup_bench_dirs, utility_dirs, provenance
+                    )
+                    futures[future] = arch
+
+                for future in as_completed(futures):
+                    arch_result, output_ref, error_msg = future.result()
+                    if error_msg:
+                        logger.error(error_msg)
+                        source_errors += 1
+                    else:
+                        self._merge_source_output(arch_result, output_ref)
+
+        if source_errors > 0:
+            logger.error("[ERROR] %d architecture(s) failed image sourcing", source_errors)
+            sys.exit(1)
+
+        logger.info("Userenv image summary:")
+        missing_images = []
+        for arch in sorted(self.image_ids.keys()):
+            for bench_or_tool in sorted(self.image_ids[arch].keys()):
+                for userenv in sorted(self.image_ids[arch][bench_or_tool].keys()):
+                    image = self.image_ids[arch][bench_or_tool][userenv]["image"]
+                    display_image = re.sub(r'::.*', '', image)
+                    logger.info("  %s / %s / %s: %s", arch, bench_or_tool, userenv, display_image)
+                    if not image:
+                        missing_images.append(f"{arch} / {bench_or_tool} / {userenv}")
+
+        if missing_images:
+            logger.error("[ERROR] The following image(s) were not resolved during sourcing:")
+            for entry in missing_images:
+                logger.error("  %s", entry)
+            sys.exit(1)
+
+        logger.debug("image_ids (after): %s", json.dumps(self.image_ids, indent=2, default=str))
+
+    def _merge_source_output(self, arch, output_ref):
+        """Merge image sourcing output into self.image_ids for the given architecture."""
         for name in output_ref.get("image-ids", {}):
             for userenv in output_ref["image-ids"][name]:
                 image = output_ref["image-ids"][name][userenv]["image"]
-                if name in self.image_ids:
-                    self.image_ids[name][userenv]["image"] = image
+                if arch in self.image_ids and name in self.image_ids[arch]:
+                    self.image_ids[arch][name][userenv]["image"] = image
                 for tool_entry in self.tools_params:
                     if tool_entry["tool"] == name and tool_entry["tool-id"] != name:
                         tool_id = tool_entry["tool-id"]
-                        if tool_id in self.image_ids and userenv in self.image_ids[tool_id]:
-                            self.image_ids[tool_id][userenv]["image"] = image
-
-        logger.info("Userenv image summary:")
-        for bench_or_tool in sorted(self.image_ids.keys()):
-            for userenv in sorted(self.image_ids[bench_or_tool].keys()):
-                image = self.image_ids[bench_or_tool][userenv]["image"]
-                image = re.sub(r'::.*', '', image)
-                logger.info("  %s / %s: %s", bench_or_tool, userenv, image)
-
-        logger.debug("image_ids (after): %s", json.dumps(self.image_ids, indent=2, default=str))
+                        if arch in self.image_ids and tool_id in self.image_ids[arch] and userenv in self.image_ids[arch][tool_id]:
+                            self.image_ids[arch][tool_id][userenv]["image"] = image
 
     def _build_provenance(self, utility_dirs):
         provenance = {}
@@ -1655,18 +1742,22 @@ class RunState:
             endpoint_image_opt = ""
 
             if "userenvs" in endpoint:
+                endpoint_archs = endpoint.get("archs", [self.arch])
                 for userenv in endpoint["userenvs"]:
-                    for bench_or_tool in self.image_ids:
-                        chosen_userenv = userenv
-                        idx = find_index(self.tools_params, "tool-id", bench_or_tool)
-                        if idx > -1:
-                            chosen_userenv = self.tools_params[idx]["userenv"]
-                        if chosen_userenv not in self.image_ids.get(bench_or_tool, {}):
-                            logger.error("ERROR: image for %s / userenv %s not found in image_ids",
-                                         bench_or_tool, chosen_userenv)
-                            sys.exit(1)
-                        image = self.image_ids[bench_or_tool][chosen_userenv]["image"]
-                        endpoint_image_opt += f",{bench_or_tool}::{chosen_userenv}::{image}"
+                    for arch in endpoint_archs:
+                        if arch not in self.image_ids:
+                            continue
+                        for bench_or_tool in self.image_ids[arch]:
+                            chosen_userenv = userenv
+                            idx = find_index(self.tools_params, "tool-id", bench_or_tool)
+                            if idx > -1:
+                                chosen_userenv = self.tools_params[idx]["userenv"]
+                            if chosen_userenv not in self.image_ids[arch].get(bench_or_tool, {}):
+                                logger.error("ERROR: image for %s / %s / userenv %s not found in image_ids",
+                                             arch, bench_or_tool, chosen_userenv)
+                                sys.exit(1)
+                            image = self.image_ids[arch][bench_or_tool][chosen_userenv]["image"]
+                            endpoint_image_opt += f",{bench_or_tool}::{chosen_userenv}::{arch}::{image}"
                 if endpoint_image_opt:
                     endpoint_image_opt = f" --image={endpoint_image_opt.lstrip(',')}"
 

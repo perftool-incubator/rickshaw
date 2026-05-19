@@ -1,5 +1,7 @@
 """Health check endpoint."""
 
+import platform
+
 from fastapi import APIRouter, Request
 
 from source_images_service.models.responses import HealthResponse
@@ -16,6 +18,7 @@ async def health_check(request: Request) -> dict:
     return {
         "status": "healthy",
         "version": config.version,
+        "arch": platform.machine(),
         "active-jobs": active,
         "pending-jobs": pending,
     }

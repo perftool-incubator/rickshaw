@@ -66,6 +66,7 @@ class HealthResponse(BaseModel):
 
     status: str
     version: str
+    arch: str
     active_jobs: int = Field(alias="active-jobs")
     pending_jobs: int = Field(alias="pending-jobs")
 

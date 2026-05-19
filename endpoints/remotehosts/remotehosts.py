@@ -10,6 +10,7 @@ from fabric import Connection
 import jsonschema
 import logging
 import os
+import platform
 from paramiko import ssh_exception
 from pathlib import Path
 import queue
@@ -172,12 +173,17 @@ def validate():
     debug_output = False
     if args.log_level == "debug":
         debug_output = True
+    remote_archs = set()
     for remote in remotes.keys():
         for remote_user in remotes[remote].keys():
             try:
                 with endpoints.remote_connection(remote, remote_user, validate = True) as c:
-                    result = endpoints.run_remote(c, "uptime", validate = True, debug = debug_output)
-                    endpoints.validate_comment("remote login verification for %s with user %s: rc=%d and stdout=[%s] annd stderr=[%s]" % (remote, remote_user, result.exited, result.stdout.rstrip('\n'), result.stderr.rstrip('\n')))
+                    # uname -m serves dual purpose: verifies SSH connectivity and detects architecture
+                    result = endpoints.run_remote(c, "uname -m", validate = True, debug = debug_output)
+                    host_arch = result.stdout.strip()
+                    endpoints.validate_comment("remote login and architecture check for %s with user %s: rc=%d arch=%s" % (remote, remote_user, result.exited, host_arch))
+                    if result.exited == 0 and host_arch:
+                        remote_archs.add(host_arch)
 
                     result = endpoints.run_remote(c, "podman --version", validate = True, debug = debug_output)
                     endpoints.validate_comment("remote podman presence check for %s: rc=%d and stdout=[%s] and stderr=[%s]" % (remote, result.exited, result.stdout.rstrip('\n'), result.stderr.rstrip('\n')))
@@ -192,6 +198,10 @@ def validate():
                 endpoints.validate_error("remote login verification for %s with user %s resulted in an authentication exception '%s'" % (remote, remote_user, str(e)))
             except ssh_exception.NoValidConnectionsError as e:
                 endpoints.validate_error("remote login verification for %s with user %s resulted in an connection exception '%s'" % (remote, remote_user, str(e)))
+
+    if remote_archs:
+        endpoints.validate_comment("detected remote host architectures: %s" % (sorted(remote_archs)))
+        endpoints.validate_log("arch %s" % (" ".join(sorted(remote_archs))))
 
     return 0
 
@@ -357,6 +367,18 @@ def build_unique_remote_configs():
         for role in settings["engines"]["remotes"][remote]["roles"].keys():
             if "ids" in settings["engines"]["remotes"][remote]["roles"][role]:
                 settings["engines"]["remotes"][remote]["roles"][role]["ids"].sort()
+
+    # Detect architecture for each remote host
+    for remote in settings["engines"]["remotes"].keys():
+        my_run_file_remote = settings["run-file"]["endpoints"][args.endpoint_index]["remotes"][settings["engines"]["remotes"][remote]["run-file-idx"][0]]
+        with endpoints.remote_connection(remote, my_run_file_remote["config"]["settings"]["remote-user"]) as con:
+            result = endpoints.run_remote(con, "uname -m")
+            if result.exited == 0:
+                settings["engines"]["remotes"][remote]["arch"] = result.stdout.strip()
+                logger.info("Remote %s architecture: %s" % (remote, settings["engines"]["remotes"][remote]["arch"]))
+            else:
+                logger.warning("Could not detect architecture for remote %s, defaulting to controller arch" % (remote))
+                settings["engines"]["remotes"][remote]["arch"] = platform.machine()
 
     profiler_count = 0
     for remote in settings["engines"]["remotes"].keys():
@@ -683,7 +705,8 @@ def remotes_pull_images():
                     logger.error("Cound not find userenv for remote %s with role %s and id %s" % (remote, role, str(id)))
                     print("could not find userenv for " + endpoint)
                 else:
-                    image = endpoints.get_engine_id_image(settings, role, id, userenv)
+                    remote_arch = settings["engines"]["remotes"][remote].get("arch")
+                    image = endpoints.get_engine_id_image(settings, role, id, userenv, arch=remote_arch)
 
                 if image is None:
                     logger.error("Could not find image for remote %s with role %s and id %s" % (remote, role, str(id)))
@@ -1237,7 +1260,8 @@ def launch_engines_worker_thread(thread_id, work_queue, threads_rcs):
                     else:
                         userenv = settings["run-file"]["endpoints"][args.endpoint_index]["remotes"][remote_idx]["config"]["settings"]["userenv"]
 
-                    image = endpoints.get_engine_id_image(settings, engine["role"], engine_id, userenv)
+                    remote_arch = settings["engines"]["remotes"][remote["config"]["host"]].get("arch")
+                    image = endpoints.get_engine_id_image(settings, engine["role"], engine_id, userenv, arch=remote_arch)
                     if image is None:
                         thread_logger("Could not determine image", log_level = "error", remote_name = remote_name, engine_name = engine_name)
                         continue

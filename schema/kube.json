@@ -412,6 +412,14 @@
                     "type": "object",
                     "minProperties": 1
                 },
+                "arch": {
+                    "description": "This parameter defines the target CPU architecture for the associated engines.  When set, a kubernetes.io/arch nodeSelector is automatically added to ensure pods are scheduled on nodes of the specified architecture.  Valid values match Linux architecture names.",
+                    "type": "string",
+                    "enum": [
+                        "x86_64",
+                        "aarch64"
+                    ]
+                },
                 "cpu-partitioning": {
                     "description": "This parameter defines whether engines that have it assigned are to be configured with or without CPU partitioning enabled.",
                     "type": "boolean",

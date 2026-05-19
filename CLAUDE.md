@@ -53,6 +53,16 @@ The workshop script (`workshop.py`) builds container images. The `--workshop-scr
 2. `rickshaw-source-images-client.py` → reads from JSON/env
 3. `source-images-service` → `WorkshopConfig.workshop_script` field
 
+## Multi-Architecture Image Sourcing
+
+Endpoints detect and report their CPU architecture(s) during validation via the `arch` keyword (e.g., `arch x86_64 aarch64`). The kube endpoint reads `node.status.nodeInfo.architecture` from `kubectl get nodes --output json` and normalizes K8s names to Linux names (`amd64` → `x86_64`, `arm64` → `aarch64`). The remotehosts endpoint runs `uname -m` on each remote host.
+
+`rickshaw-run.py` collects required architectures across all endpoints and routes image sourcing requests to per-arch service URLs read from `image-sourcing-urls.json` (written by crucible's `bin/_main`). When multiple architectures are needed, sourcing runs in parallel. The `--image` format passed to endpoints includes architecture: `role::userenv::arch::image_url`. The `get_image()` and `get_engine_id_image()` functions in `endpoints/endpoints.py` accept an optional `arch` parameter.
+
+For the kube endpoint, the `arch` setting in `schema/kube.json` lets users target a specific architecture without writing a raw `kubernetes.io/arch` nodeSelector. On multi-arch clusters without explicit arch constraints, the endpoint defaults to the controller's native architecture and adds a `kubernetes.io/arch` nodeSelector automatically.
+
+The source-images-service validates that `request.arch` matches `platform.machine()` at the start of each job, preventing architecture mismatches from producing incorrectly-tagged images. The `/api/v1/health` endpoint reports the service's native architecture.
+
 ## CI
 
 GitHub Actions workflows in `.github/workflows/`:
