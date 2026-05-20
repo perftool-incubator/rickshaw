@@ -1851,7 +1851,12 @@ def init_settings(settings, args):
     images = args.images.split(",")
     for image in images:
         parts = image.split("::")
-        if len(parts) == 4:
+        if len(parts) == 5:
+            role, userenv, arch, image_url, auth_file = parts
+            image_value = image_url + "::" + auth_file
+            settings["misc"]["image-map"].setdefault(role, {}).setdefault(userenv, {})[arch] = image_value
+            logger.info("Adding %s to userenv %s arch %s for role %s to image-map" % (image_value, userenv, arch, role))
+        elif len(parts) == 4:
             role, userenv, arch, image_url = parts
             settings["misc"]["image-map"].setdefault(role, {}).setdefault(userenv, {})[arch] = image_url
             logger.info("Adding %s to userenv %s arch %s for role %s to image-map" % (image_url, userenv, arch, role))
@@ -1861,6 +1866,8 @@ def init_settings(settings, args):
                 settings["misc"]["image-map"][role] = dict()
             settings["misc"]["image-map"][role][userenv] = image_url
             logger.info("Adding %s to userenv %s for role %s to image-map" % (image_url, userenv, role))
+        else:
+            logger.warning("Unexpected image format with %d fields: %s" % (len(parts), image))
 
     log_settings(settings, mode = "misc")
 
