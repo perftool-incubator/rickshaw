@@ -282,8 +282,6 @@ class RunState:
                     sys.exit(1)
             elif arg == "log-level":
                 pass
-            elif arg == "source-images-service-url":
-                logger.debug("ignoring legacy --source-images-service-url (using image-sourcing-urls.json instead)")
             elif re.match(
                 r'^(base-run-dir|workshop-dir|workshop-script|packrat-dir|bench-dir|'
                 r'roadblock-dir|roadblock-password|tools-dir|engine-dir|'
