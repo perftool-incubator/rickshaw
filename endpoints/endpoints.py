@@ -1851,21 +1851,15 @@ def init_settings(settings, args):
     images = args.images.split(",")
     for image in images:
         parts = image.split("::")
-        if len(parts) == 5:
-            role, userenv, arch, image_url, auth_file = parts
+        if len(parts) == 6:
+            bench, engine_role, userenv, arch, image_url, auth_file = parts
             image_value = image_url + "::" + auth_file
-            settings["misc"]["image-map"].setdefault(role, {}).setdefault(userenv, {})[arch] = image_value
-            logger.info("Adding %s to userenv %s arch %s for role %s to image-map" % (image_value, userenv, arch, role))
-        elif len(parts) == 4:
-            role, userenv, arch, image_url = parts
-            settings["misc"]["image-map"].setdefault(role, {}).setdefault(userenv, {})[arch] = image_url
-            logger.info("Adding %s to userenv %s arch %s for role %s to image-map" % (image_url, userenv, arch, role))
-        elif len(parts) == 3:
-            role, userenv, image_url = parts
-            if not role in settings["misc"]["image-map"]:
-                settings["misc"]["image-map"][role] = dict()
-            settings["misc"]["image-map"][role][userenv] = image_url
-            logger.info("Adding %s to userenv %s for role %s to image-map" % (image_url, userenv, role))
+            settings["misc"]["image-map"].setdefault(bench, {}).setdefault(engine_role, {}).setdefault(userenv, {})[arch] = image_value
+            logger.info("Adding %s to role %s userenv %s arch %s for bench %s to image-map" % (image_value, engine_role, userenv, arch, bench))
+        elif len(parts) == 5:
+            bench, engine_role, userenv, arch, image_url = parts
+            settings["misc"]["image-map"].setdefault(bench, {}).setdefault(engine_role, {}).setdefault(userenv, {})[arch] = image_url
+            logger.info("Adding %s to role %s userenv %s arch %s for bench %s to image-map" % (image_url, engine_role, userenv, arch, bench))
         else:
             logger.warning("Unexpected image format with %d fields: %s" % (len(parts), image))
 
@@ -2079,13 +2073,14 @@ def get_benchmark(settings, benchmark_id):
 
     return None
 
-def get_image(settings, image_role, userenv, arch=None):
+def get_image(settings, image_role, engine_role, userenv, arch=None):
     """
     Get the image that is used to run a specific benchmark/tool
 
     Args:
         settings (dict): the one data structure to rule then all
         image_role (str): The tool or benchmark whose container image is being asked for
+        engine_role (str): The engine role ('client', 'server', or 'all')
         userenv (str): The userenv whose container image is being asked for
         arch (str): The target CPU architecture (e.g., 'x86_64', 'aarch64').
                     If None, falls back to legacy non-arch-keyed lookup.
@@ -2098,26 +2093,38 @@ def get_image(settings, image_role, userenv, arch=None):
         or
         None: If no matching container image can be located
     """
-    if image_role in settings["misc"]["image-map"]:
-        userenv_map = settings["misc"]["image-map"][image_role].get(userenv)
-        if userenv_map is None:
-            logger.error("Could not find userenv %s in image-map[%s]" % (userenv, image_role))
-            return None
-        if isinstance(userenv_map, dict) and arch:
-            if arch in userenv_map:
-                return userenv_map[arch]
-            else:
-                logger.error("Could not find arch %s in image-map[%s][%s]" % (arch, image_role, userenv))
-                return None
-        elif isinstance(userenv_map, str):
-            return userenv_map
-        else:
-            logger.error("Unexpected image-map format for %s / %s" % (image_role, userenv))
-            return None
-    else:
+    if image_role not in settings["misc"]["image-map"]:
         logger.error("Could not find image_role %s in image-map" % (image_role))
+        return None
 
-    return None
+    bench_map = settings["misc"]["image-map"][image_role]
+
+    if engine_role not in bench_map:
+        logger.error("Could not find engine_role %s in image-map[%s]" % (engine_role, image_role))
+        return None
+
+    role_map = bench_map[engine_role]
+    userenv_map = role_map.get(userenv)
+    if userenv_map is None:
+        if engine_role != "all":
+            for avail_userenv in role_map:
+                userenv_map = role_map[avail_userenv]
+                break
+        if userenv_map is None:
+            logger.error("Could not find userenv %s in image-map[%s][%s]" % (userenv, image_role, engine_role))
+            return None
+
+    if isinstance(userenv_map, dict) and arch:
+        if arch in userenv_map:
+            return userenv_map[arch]
+        else:
+            logger.error("Could not find arch %s in image-map[%s][%s][%s]" % (arch, image_role, engine_role, userenv))
+            return None
+    elif isinstance(userenv_map, str):
+        return userenv_map
+    else:
+        logger.error("Unexpected image-map format for %s / %s / %s" % (image_role, engine_role, userenv))
+        return None
 
 def get_engine_id_image(settings, role, id, userenv, arch=None):
     """
@@ -2125,7 +2132,7 @@ def get_engine_id_image(settings, role, id, userenv, arch=None):
 
     Args:
         settings (dict): the one data structure to rule then all
-        role (str): The engine's role
+        role (str): The engine's role ('client', 'server', 'profiler', 'worker', 'master')
         id (str, int): The engine's ID
         userenv (str): The engine's userenv
         arch (str): The target CPU architecture (e.g., 'x86_64', 'aarch64').
@@ -2146,8 +2153,13 @@ def get_engine_id_image(settings, role, id, userenv, arch=None):
             image_role = get_profiler(settings, id)
         case _:
             image_role = get_benchmark(settings, id)
-    if not image_role is None:
-        image = get_image(settings, image_role, userenv, arch=arch)
+    if image_role is not None:
+        bench_map = settings["misc"]["image-map"].get(image_role, {})
+        if role in bench_map:
+            engine_role = role
+        else:
+            engine_role = "all"
+        image = get_image(settings, image_role, engine_role, userenv, arch=arch)
     return image
 
 def get_profiler_userenv(settings, id):
@@ -2175,11 +2187,13 @@ def get_profiler_userenv(settings, id):
         logger.error("Could not find profiler name for id %s" % (id))
     else:
         if profiler_name in settings["misc"]["image-map"]:
-            if len(settings["misc"]["image-map"][profiler_name]) == 1:
-                for userenv in settings["misc"]["image-map"][profiler_name].keys():
+            bench_map = settings["misc"]["image-map"][profiler_name]
+            role_map = bench_map.get("all", {})
+            if len(role_map) == 1:
+                for userenv in role_map.keys():
                     return userenv
             else:
-                if len(settings["misc"]["image-map"][profiler_name]) == 0:
+                if len(role_map) == 0:
                     logger.error("Found no possible userenv for profiler %s" % (profiler_name))
                 else:
                     logger.error("Found more than one possible userenv for profiler %s" % (profiler_name))
