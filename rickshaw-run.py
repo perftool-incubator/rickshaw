@@ -241,6 +241,13 @@ class RunState:
         logger.info("Caught a CTRL-C/SIGINT, aborting via roadblock!")
         self.abort_via_roadblock = True
 
+    def _role_has_engines(self, role, bench_name):
+        """Check if any engines of the given role are assigned to this benchmark."""
+        for engine_id in self.clients_servers.get(role, {}):
+            if self.ids_to_benchmark.get(str(engine_id)) == bench_name:
+                return True
+        return False
+
 
     # ----------------------------------------------------------------
     # Phase 1: CLI and URL parsing
@@ -1014,6 +1021,14 @@ class RunState:
 
         self.assign_bench_ids()
 
+        for bench_name in self.split_benchmarks:
+            for role in list(self.split_benchmarks[bench_name].keys()):
+                if not self._role_has_engines(role, bench_name):
+                    role_key = self.split_benchmarks[bench_name].pop(role)
+                    for arch in list(self.image_ids.keys()):
+                        self.image_ids[arch].pop(role_key, None)
+                    logger.info("Skipping %s image for benchmark '%s' (no %s engines in this run)", role, bench_name, role)
+
         min_id = None
         max_id = None
         for cs_type in ("client", "server"):
@@ -1491,6 +1506,8 @@ class RunState:
         dedup_image_ids = {}
         for arch in self.image_ids:
             for tid in list(self.image_ids[arch].keys()):
+                if "::" in tid:
+                    continue
                 tool_name = tid
                 for tool_entry in self.tools_params:
                     if tool_entry["tool-id"] == tid:
@@ -1507,6 +1524,10 @@ class RunState:
             if bench in self.split_benchmarks:
                 for role_key in self.split_benchmarks[bench].values():
                     dedup_bench_dirs[role_key] = self.bench_dirs[bench]
+                    for arch in self.image_ids:
+                        if role_key in self.image_ids[arch]:
+                            for userenv in self.image_ids[arch][role_key]:
+                                dedup_image_ids.setdefault(role_key, {})[userenv] = self.image_ids[arch][role_key][userenv]
             elif bench not in dedup_bench_dirs:
                 dedup_bench_dirs[bench] = self.bench_dirs[bench]
 
