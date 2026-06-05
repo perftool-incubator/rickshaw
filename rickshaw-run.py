@@ -198,6 +198,7 @@ class RunState:
         self.workshop_force_builds = False
         self.bench_configs = {}
         self.bench_dirs = {}
+        self.split_benchmarks = {}
         self.benchmark_to_ids = {}
         self.ids_to_benchmark = {}
         self.endpoints = []
@@ -239,6 +240,13 @@ class RunState:
     def _sigint_handler(self, signum, frame):
         logger.info("Caught a CTRL-C/SIGINT, aborting via roadblock!")
         self.abort_via_roadblock = True
+
+    def _role_has_engines(self, role, bench_name):
+        """Check if any engines of the given role are assigned to this benchmark."""
+        for engine_id in self.clients_servers.get(role, {}):
+            if self.ids_to_benchmark.get(str(engine_id)) == bench_name:
+                return True
+        return False
 
 
     # ----------------------------------------------------------------
@@ -687,6 +695,29 @@ class RunState:
             self.run["benchmark"] += f",{benchmark_name}"
             self.bench_configs[benchmark_name] = bench_config_ref
 
+            has_client_workshop = os.path.exists(os.path.join(this_bench_dir, "client-workshop.json"))
+            has_server_workshop = os.path.exists(os.path.join(this_bench_dir, "server-workshop.json"))
+            has_plain_workshop = os.path.exists(os.path.join(this_bench_dir, "workshop.json"))
+
+            if has_client_workshop and has_server_workshop and has_plain_workshop:
+                logger.error("[ERROR] benchmark '%s' has workshop.json alongside client-workshop.json and server-workshop.json; remove workshop.json when using split workshop files", benchmark_name)
+                sys.exit(1)
+
+            if has_client_workshop and not has_server_workshop:
+                logger.error("[ERROR] benchmark '%s' has client-workshop.json but is missing server-workshop.json; both are required for split workshop builds", benchmark_name)
+                sys.exit(1)
+
+            if has_server_workshop and not has_client_workshop:
+                logger.error("[ERROR] benchmark '%s' has server-workshop.json but is missing client-workshop.json; both are required for split workshop builds", benchmark_name)
+                sys.exit(1)
+
+            if has_client_workshop and has_server_workshop:
+                logger.info("Benchmark '%s' has split workshop files (client-workshop.json + server-workshop.json)", benchmark_name)
+                self.split_benchmarks[benchmark_name] = {
+                    "client": f"{benchmark_name}::client",
+                    "server": f"{benchmark_name}::server",
+                }
+
             param_sets, err = load_json_file(params_files[count])
             if param_sets is None:
                 logger.error("Could not open the bench params file: %s", params_files[count])
@@ -962,7 +993,11 @@ class RunState:
             for userenv in endpoint.get("userenvs", []):
                 for arch in endpoint.get("archs", [self.arch]):
                     for bench_name in self.bench_configs:
-                        self.image_ids.setdefault(arch, {}).setdefault(bench_name, {})[userenv] = {"image": ""}
+                        if bench_name in self.split_benchmarks:
+                            for role_key in self.split_benchmarks[bench_name].values():
+                                self.image_ids.setdefault(arch, {}).setdefault(role_key, {})[userenv] = {"image": ""}
+                        else:
+                            self.image_ids.setdefault(arch, {}).setdefault(bench_name, {})[userenv] = {"image": ""}
 
         if len(self.bench_configs) == 1:
             bench_name = list(self.bench_configs.keys())[0]
@@ -985,6 +1020,14 @@ class RunState:
                 self.run["bench-ids"] = f"{bench_name}:{'+'.join(id_ranges)}"
 
         self.assign_bench_ids()
+
+        for bench_name in self.split_benchmarks:
+            for role in list(self.split_benchmarks[bench_name].keys()):
+                if not self._role_has_engines(role, bench_name):
+                    role_key = self.split_benchmarks[bench_name].pop(role)
+                    for arch in list(self.image_ids.keys()):
+                        self.image_ids[arch].pop(role_key, None)
+                    logger.info("Skipping %s image for benchmark '%s' (no %s engines in this run)", role, bench_name, role)
 
         min_id = None
         max_id = None
@@ -1463,6 +1506,8 @@ class RunState:
         dedup_image_ids = {}
         for arch in self.image_ids:
             for tid in list(self.image_ids[arch].keys()):
+                if "::" in tid:
+                    continue
                 tool_name = tid
                 for tool_entry in self.tools_params:
                     if tool_entry["tool-id"] == tid:
@@ -1474,7 +1519,16 @@ class RunState:
                     dedup_image_ids.setdefault(tool_name, {})[userenv] = self.image_ids[arch][tid][userenv]
 
         for bench in self.bench_dirs:
-            if bench not in dedup_bench_dirs and not any(t["tool-id"] == bench for t in self.tools_params):
+            if any(t["tool-id"] == bench for t in self.tools_params):
+                continue
+            if bench in self.split_benchmarks:
+                for role_key in self.split_benchmarks[bench].values():
+                    dedup_bench_dirs[role_key] = self.bench_dirs[bench]
+                    for arch in self.image_ids:
+                        if role_key in self.image_ids[arch]:
+                            for userenv in self.image_ids[arch][role_key]:
+                                dedup_image_ids.setdefault(role_key, {})[userenv] = self.image_ids[arch][role_key][userenv]
+            elif bench not in dedup_bench_dirs:
                 dedup_bench_dirs[bench] = self.bench_dirs[bench]
 
         utility_dirs = {}
@@ -1741,11 +1795,18 @@ class RunState:
 
             if "userenvs" in endpoint:
                 endpoint_archs = endpoint.get("archs", [self.arch])
-                for userenv in endpoint["userenvs"]:
-                    for arch in endpoint_archs:
-                        if arch not in self.image_ids:
+
+                for arch in endpoint_archs:
+                    if arch not in self.image_ids:
+                        continue
+                    for bench_or_tool in self.image_ids[arch]:
+                        if "::" in bench_or_tool:
+                            bench_name, engine_role = bench_or_tool.split("::", 1)
+                            for avail_userenv in self.image_ids[arch][bench_or_tool]:
+                                image = self.image_ids[arch][bench_or_tool][avail_userenv]["image"]
+                                endpoint_image_opt += f",{bench_name}::{engine_role}::{avail_userenv}::{arch}::{image}"
                             continue
-                        for bench_or_tool in self.image_ids[arch]:
+                        for userenv in endpoint["userenvs"]:
                             chosen_userenv = userenv
                             idx = find_index(self.tools_params, "tool-id", bench_or_tool)
                             if idx > -1:
@@ -1755,7 +1816,7 @@ class RunState:
                                              arch, bench_or_tool, chosen_userenv)
                                 sys.exit(1)
                             image = self.image_ids[arch][bench_or_tool][chosen_userenv]["image"]
-                            endpoint_image_opt += f",{bench_or_tool}::{chosen_userenv}::{arch}::{image}"
+                            endpoint_image_opt += f",{bench_or_tool}::all::{chosen_userenv}::{arch}::{image}"
                 if endpoint_image_opt:
                     endpoint_image_opt = f" --image={endpoint_image_opt.lstrip(',')}"
 

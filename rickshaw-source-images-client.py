@@ -106,6 +106,34 @@ def _collect_directory(dir_path):
     return {"name": base_name, "files": files}
 
 
+def _remap_workshop_for_role(collected, role):
+    """Remap a collected directory for a role-specific workshop build.
+
+    For split workshop benchmarks (client-workshop.json + server-workshop.json),
+    rename {role}-workshop.json to workshop.json and exclude the other role's
+    workshop file so the source-images-service sees a standard workshop.json.
+    """
+    role_filename = f"{role}-workshop.json"
+    other_roles = {"client", "server"} - {role}
+    exclude_filenames = {f"{r}-workshop.json" for r in other_roles} | {"workshop.json"}
+
+    remapped_files = []
+    for entry in collected["files"]:
+        if entry["filename"] in exclude_filenames:
+            continue
+        if entry["filename"] == role_filename:
+            remapped_files.append({
+                "filename": "workshop.json",
+                "content_base64": entry["content_base64"],
+                "mode": entry["mode"],
+            })
+        else:
+            remapped_files.append(entry)
+
+    remapped_files.sort(key=lambda f: f["filename"])
+    return {"name": collected["name"], "files": remapped_files}
+
+
 # ---------------------------------------------------------------------------
 # HTTP helpers (stdlib only — no external deps)
 # ---------------------------------------------------------------------------
@@ -279,7 +307,12 @@ def _build_api_request(input_data):
     api_bench_dirs = {}
     for bench_name, bench_path in bench_dirs_input.items():
         if os.path.isdir(bench_path):
-            api_bench_dirs[bench_name] = _collect_directory(bench_path)
+            collected = _collect_directory(bench_path)
+            if "::" in bench_name:
+                role = bench_name.split("::", 1)[1]
+                collected = _remap_workshop_for_role(collected, role)
+                collected["name"] = bench_name
+            api_bench_dirs[bench_name] = collected
             logger.debug("Collected bench dir '%s': %d files",
                         bench_name, len(api_bench_dirs[bench_name]["files"]))
         else:
