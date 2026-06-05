@@ -2,6 +2,39 @@
     "config": {
         "enabled": true
     },
+    "capabilities": {
+        "k8s-cluster": "Access to a Kubernetes cluster for deploying benchmark engines as pods",
+        "remotehosts-access": "SSH access to test hosts with podman for deploying benchmark engines as containers",
+        "cpu-partitioning": "Test hosts have CPU isolation configured (isolcpus, nohz_full) for latency-sensitive workloads"
+    },
+    "endpoints": {
+        "kube": {
+            "enabled": true,
+            "requirements": [
+                "k8s-cluster"
+            ]
+        },
+        "remotehosts": {
+            "enabled": true,
+            "requirements": [
+                "remotehosts-access"
+            ]
+        }
+    },
+    "runner-pools": {
+        "aws-cloud-1": {
+            "enabled": true,
+            "provides": [
+                "k8s-cluster",
+                "remotehosts-access",
+                "cpu-partitioning"
+            ],
+            "labels": [
+                "self-hosted",
+                "aws-cloud-1"
+            ]
+        }
+    },
     "benchmarks": [
         {
             "name": "cyclictest",
@@ -12,22 +45,16 @@
                     "endpoints": [
                         "kube"
                     ],
-                    "runners": {
-                        "type": "github"
-                    }
+                    "requirements": []
                 },
                 {
                     "enabled": true,
                     "endpoints": [
                         "remotehosts"
                     ],
-                    "runners": {
-                        "type": "self-hosted",
-                        "tags": [
-                            "cpu-partitioning",
-                            "remotehosts"
-                        ]
-                    }
+                    "requirements": [
+                        "cpu-partitioning"
+                    ]
                 }
             ]
         },
@@ -41,9 +68,7 @@
                         "kube",
                         "remotehosts"
                     ],
-                    "runners": {
-                        "type": "github"
-                    }
+                    "requirements": []
                 }
             ]
         },
@@ -56,22 +81,16 @@
                     "endpoints": [
                         "kube"
                     ],
-                    "runners": {
-                        "type": "github"
-                    }
+                    "requirements": []
                 },
                 {
                     "enabled": true,
                     "endpoints": [
                         "remotehosts"
                     ],
-                    "runners": {
-                        "type": "self-hosted",
-                        "tags": [
-                            "cpu-partitioning",
-                            "remotehosts"
-                        ]
-                    }
+                    "requirements": [
+                        "cpu-partitioning"
+                    ]
                 }
             ]
         },
@@ -85,9 +104,7 @@
                         "kube",
                         "remotehosts"
                     ],
-                    "runners": {
-                        "type": "github"
-                    }
+                    "requirements": []
                 }
             ]
         },
@@ -101,9 +118,7 @@
                         "kube",
                         "remotehosts"
                     ],
-                    "runners": {
-                        "type": "github"
-                    }
+                    "requirements": []
                 }
             ]
         },
@@ -116,22 +131,16 @@
                     "endpoints": [
                         "kube"
                     ],
-                    "runners": {
-                        "type": "github"
-                    }
+                    "requirements": []
                 },
                 {
                     "enabled": true,
                     "endpoints": [
                         "remotehosts"
                     ],
-                    "runners": {
-                        "type": "self-hosted",
-                        "tags": [
-                            "cpu-partitioning",
-                            "remotehosts"
-                        ]
-                    }
+                    "requirements": [
+                        "cpu-partitioning"
+                    ]
                 }
             ]
         },
@@ -145,9 +154,7 @@
                         "kube",
                         "remotehosts"
                     ],
-                    "runners": {
-                        "type": "github"
-                    }
+                    "requirements": []
                 }
             ]
         },
@@ -161,9 +168,7 @@
                         "kube",
                         "remotehosts"
                     ],
-                    "runners": {
-                        "type": "github"
-                    }
+                    "requirements": []
                 }
             ]
         }

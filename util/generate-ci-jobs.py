@@ -63,21 +63,21 @@ def process_options():
 
     parser.add_argument("--runner-tags",
                         dest = "runner_tags",
-                        help = "What tags are required for self-hosted runners",
+                        help = argparse.SUPPRESS,
                         default = "",
                         type = str)
 
     parser.add_argument("--runner-pool",
                         dest = "runner_pool",
-                        help = "Which pool of self-hosted runners to use (e.g., 'kmr-cloud-1', 'aws-cloud-1')",
+                        help = "Which runner pool to use (e.g., 'aws-cloud-1')",
                         default = "",
                         type = str)
 
     parser.add_argument("--runner-type",
                         dest = "runner_type",
-                        help = "Which runner type to generate jobs for",
+                        help = argparse.SUPPRESS,
                         default = "github",
-                        choices = [ "github", "self-hosted" ])
+                        type = str)
 
     parser.add_argument("--runtime-env",
                         dest = "runtime_env",
@@ -93,7 +93,6 @@ def process_options():
 
     the_args = parser.parse_args()
 
-    # convert from comma separated string list to a Python list
     the_args.runner_tags = the_args.runner_tags.split(",")
 
     return the_args
@@ -146,54 +145,104 @@ def dump_raw_json(obj):
     """
     return json.dumps(obj, separators=(',', ':'), sort_keys = True, default = not_json_serializable)
 
-def build_runner_labels(logger, runner_type, runner_tags, runner_pool):
+def _validate_capabilities(logger, input_json):
     """
-    Build the list of runner labels for the runs-on directive
+    Validate that all capability references in endpoints, runner-pools, and
+    scenarios are defined in the capabilities dictionary.
+
+    Returns:
+        list: error messages, empty if valid
+    """
+    defined = set(input_json.get("capabilities", {}).keys())
+    if not defined:
+        return []
+
+    errors = []
+
+    for ep_name, ep_config in input_json.get("endpoints", {}).items():
+        for req in ep_config.get("requirements", []):
+            if req not in defined:
+                errors.append("Endpoint '%s' references undefined capability '%s'" % (ep_name, req))
+
+    for pool_name, pool_config in input_json.get("runner-pools", {}).items():
+        for cap in pool_config.get("provides", []):
+            if cap not in defined:
+                errors.append("Runner pool '%s' references undefined capability '%s'" % (pool_name, cap))
+
+    for benchmark in input_json.get("benchmarks", []):
+        for scenario in benchmark.get("scenarios", []):
+            for req in scenario.get("requirements", []):
+                if req not in defined:
+                    errors.append("Benchmark '%s' scenario references undefined capability '%s'" % (benchmark.get("name", "?"), req))
+
+    return errors
+
+
+def _get_runner_pool(logger, input_json):
+    """
+    Get the runner pool configuration from the CI config or fall back to legacy behavior.
 
     Args:
         logger: a logger instance used to output status
-        runner_type: The type of runner (github or self-hosted)
-        runner_tags: List of tags for self-hosted runners
-        runner_pool: Optional pool identifier for self-hosted runners
-
-    Globals:
-        None
+        input_json: the parsed CI config
 
     Returns:
-        list: A list of runner labels to be used in the runs-on directive
+        dict: pool config with 'provides' and 'labels' keys, or None if no pool matches
     """
-    labels = []
+    runner_pools = input_json.get("runner-pools", {})
 
-    # If runner_pool is specified, always use self-hosted runners with that pool
-    # This allows scenarios configured as "github" type to run on self-hosted pools
-    # when runner_pool is provided, maintaining backward compatibility
-    if runner_pool:
-        labels.append("self-hosted")
-        labels.append(runner_pool)
-        logger.debug("Using self-hosted runner with pool '%s'" % (runner_pool))
+    if args.runner_pool and args.runner_pool in runner_pools:
+        pool = runner_pools[args.runner_pool]
+        if not pool.get("enabled", True):
+            logger.error("Requested runner pool '%s' is disabled" % (args.runner_pool))
+            return None
+        logger.info("Using runner pool '%s' with capabilities: %s" % (args.runner_pool, pool["provides"]))
+        return pool
 
-        # Add scenario tags (works for both github-type and self-hosted-type scenarios)
-        for tag in runner_tags:
-            if tag:
-                labels.append(tag)
-                logger.debug("Adding runner tag '%s'" % (tag))
+    if args.runner_pool and runner_pools:
+        logger.error("Requested runner pool '%s' not found in config. Available pools: %s" % (args.runner_pool, list(runner_pools.keys())))
+        return None
 
-    elif runner_type == "self-hosted":
-        # Traditional self-hosted without pool (backward compatibility)
-        labels.append("self-hosted")
+    if args.runner_pool:
+        logger.info("No runner-pools config found, using legacy label construction for pool '%s'" % (args.runner_pool))
+        return {
+            "provides": [],
+            "labels": ["self-hosted", args.runner_pool] + [t for t in args.runner_tags if t],
+        }
 
-        # Add other runner tags (e.g., 'cpu-partitioning', 'remotehosts')
-        # Filter out empty strings that might come from split
-        for tag in runner_tags:
-            if tag:  # only add non-empty tags
-                labels.append(tag)
-                logger.debug("Adding runner tag '%s'" % (tag))
-    else:
-        # Default: GitHub-hosted runners (backward compatibility)
-        labels.append("ubuntu-latest")
+    logger.info("No runner pool specified, using legacy label construction")
+    return {
+        "provides": [],
+        "labels": ["ubuntu-latest"],
+    }
 
-    logger.debug("Built runner labels: %s" % (str(labels)))
-    return labels
+
+def _get_effective_requirements(logger, scenario, endpoint_name, input_json):
+    """
+    Compute the effective requirements for a scenario + endpoint combination.
+
+    Args:
+        logger: a logger instance
+        scenario: the scenario dict from the config
+        endpoint_name: the endpoint being evaluated
+        input_json: the full CI config
+
+    Returns:
+        set: the union of scenario requirements and endpoint requirements
+    """
+    scenario_reqs = set(scenario.get("requirements", []))
+    endpoint_config = input_json.get("endpoints", {}).get(endpoint_name, {})
+    endpoint_reqs = set(endpoint_config.get("requirements", []))
+    effective = scenario_reqs | endpoint_reqs
+    logger.debug("Effective requirements for endpoint '%s': scenario=%s + endpoint=%s = %s" % (
+        endpoint_name, scenario_reqs, endpoint_reqs, effective))
+    return effective
+
+
+def _is_legacy_config(scenario):
+    """Check if a scenario uses the legacy runners format."""
+    return "runners" in scenario
+
 
 def get_jobs(logger):
     """
@@ -228,6 +277,16 @@ def get_jobs(logger):
     else:
         logger.info("Validated input file against schema file: %s" % (ci_schema_file))
 
+    capability_errors = _validate_capabilities(logger, input_json)
+    if capability_errors:
+        for err in capability_errors:
+            logger.error(err)
+        return None
+
+    pool = _get_runner_pool(logger, input_json)
+    if pool is None:
+        return None
+
     raw_jobs = list()
 
     if input_json["config"]["enabled"]:
@@ -244,44 +303,10 @@ def get_jobs(logger):
                         if scenario["enabled"]:
                             logger.debug("Scenario '%s' enabled is True" % (str(scenario)))
 
-                            if scenario["runners"]["type"] == args.runner_type:
-                                add_scenario = True
-                                if args.runner_type == "self-hosted":
-                                    for tag in scenario["runners"]["tags"]:
-                                        if tag in args.runner_tags:
-                                            logger.debug("Found scenario tag '%s' in requested" % (tag))
-                                        else:
-                                            logger.debug("Scenario tag '%s' not found in requested" % (tag))
-                                            add_scenario = False
-
-                                if add_scenario:
-                                    logger.info("Adding jobs for benchmark '%s' and runner type '%s'" % (benchmark["name"], scenario["runners"]["type"]))
-                                    # Build runner labels for this scenario
-                                    # When runner_pool is specified, pass scenario tags regardless of runner_type
-                                    # to enable proper label matching on self-hosted pools
-                                    scenario_tags = scenario["runners"].get("tags", []) if (args.runner_type == "self-hosted" or args.runner_pool) else []
-                                    runner_labels = build_runner_labels(
-                                        logger,
-                                        scenario["runners"]["type"],
-                                        scenario_tags,
-                                        args.runner_pool
-                                    )
-                                    for endpoint in scenario["endpoints"]:
-                                        if args.endpoint != "all" and args.endpoint != endpoint:
-                                            logger.debug("Skipping endpoint '%s' because it does not match requested endpoint '%s'" % (endpoint, args.endpoint))
-                                            continue
-                                        job = {
-                                            "benchmark": benchmark["name"],
-                                            "enabled": True,
-                                            "endpoint": endpoint,
-                                            "runner_labels": runner_labels
-                                        }
-                                        logger.info("Adding job for endpoint '%s'" % (endpoint))
-                                        raw_jobs.append(job)
-                                else:
-                                    logger.debug("Not adding jobs for benchmark '%s' and runner type '%s' due to missing tag" % (benchmark["name"], scenario["runners"]["type"]))
+                            if _is_legacy_config(scenario):
+                                _process_legacy_scenario(logger, scenario, benchmark, pool, raw_jobs)
                             else:
-                                logger.debug("Runner type '%s' does not match '%s'" % (scenario["runners"]["type"], args.runner_type))
+                                _process_scenario(logger, scenario, benchmark, pool, input_json, raw_jobs)
                         else:
                             logger.debug("Scenario '%s' enabled is False" % (str(scenario)))
                 else:
@@ -292,19 +317,7 @@ def get_jobs(logger):
         logger.debug("Global enabled is False")
 
     if len(raw_jobs) == 0:
-        # we need at least one job otherwise the github action workflow
-        # for this runnter-type will fail -- this should only happen if
-        # a specific benchmark is requested that does not require this
-        # runner type so lets hard code that benchmark
-
-        # the job will be disabled so that it does not actually run the
-        # integration test, it's just a "filler" to have something in
-        # the job matrix
-
-        # specifying the remotehosts endpoint since that should work on
-        # all current runner types (not that it really matters since it
-        # won't actually run)
-        runner_labels = build_runner_labels(logger, args.runner_type, args.runner_tags, args.runner_pool)
+        runner_labels = pool["labels"]
         job = {
             "benchmark": args.benchmark,
             "enabled": False,
@@ -314,6 +327,67 @@ def get_jobs(logger):
         raw_jobs.append(job)
 
     return raw_jobs
+
+
+def _process_legacy_scenario(logger, scenario, benchmark, pool, raw_jobs):
+    """Process a scenario using the legacy runners format (backward compatibility)."""
+    add_scenario = True
+
+    if scenario["runners"]["type"] == "self-hosted":
+        for tag in scenario["runners"].get("tags", []):
+            if tag not in args.runner_tags:
+                logger.debug("Scenario tag '%s' not found in requested" % (tag))
+                add_scenario = False
+
+    if not add_scenario:
+        logger.debug("Not adding jobs for benchmark '%s' due to missing tag" % (benchmark["name"]))
+        return
+
+    logger.info("Adding jobs for benchmark '%s' (legacy config)" % (benchmark["name"]))
+
+    for endpoint in scenario["endpoints"]:
+        if args.endpoint != "all" and args.endpoint != endpoint:
+            logger.debug("Skipping endpoint '%s' because it does not match requested endpoint '%s'" % (endpoint, args.endpoint))
+            continue
+        job = {
+            "benchmark": benchmark["name"],
+            "enabled": True,
+            "endpoint": endpoint,
+            "runner_labels": pool["labels"]
+        }
+        logger.info("Adding job for endpoint '%s'" % (endpoint))
+        raw_jobs.append(job)
+
+
+def _process_scenario(logger, scenario, benchmark, pool, input_json, raw_jobs):
+    """Process a scenario using the capability-based requirements format."""
+    for endpoint in scenario["endpoints"]:
+        if args.endpoint != "all" and args.endpoint != endpoint:
+            logger.debug("Skipping endpoint '%s' because it does not match requested endpoint '%s'" % (endpoint, args.endpoint))
+            continue
+
+        endpoint_config = input_json.get("endpoints", {}).get(endpoint, {})
+        if not endpoint_config.get("enabled", True):
+            logger.info("Skipping endpoint '%s' because it is disabled" % (endpoint))
+            continue
+
+        effective_reqs = _get_effective_requirements(logger, scenario, endpoint, input_json)
+        pool_provides = set(pool.get("provides", []))
+
+        if not effective_reqs.issubset(pool_provides):
+            missing = effective_reqs - pool_provides
+            logger.warning("Runner pool does not satisfy requirements for benchmark '%s' endpoint '%s': missing %s" % (benchmark["name"], endpoint, missing))
+            continue
+
+        logger.info("Adding job for benchmark '%s' endpoint '%s' (requirements satisfied: %s)" % (benchmark["name"], endpoint, effective_reqs))
+        job = {
+            "benchmark": benchmark["name"],
+            "enabled": True,
+            "endpoint": endpoint,
+            "runner_labels": pool["labels"]
+        }
+        raw_jobs.append(job)
+
 
 def references_file(obj, target_path):
     """
