@@ -3,8 +3,10 @@
 # vim: autoindent tabstop=4 shiftwidth=4 expandtab softtabstop=4 filetype=python
 
 import argparse
+import glob
 import os
 import re
+import shutil
 import sys
 from pathlib import Path
 
@@ -149,7 +151,16 @@ def main():
     logger.info("Will run a maximum of %d post-processing jobs at a time", max_workers)
 
     def run_post_process(job):
-        cmd = f"cd {job['tool_dir']} && {job['pp_cmd']} >post-process-output.txt 2>&1"
+        pp_dir = os.path.join(job['tool_dir'], "postprocess")
+        if os.path.exists(pp_dir):
+            shutil.rmtree(pp_dir)
+        os.makedirs(pp_dir)
+        for stale in glob.glob(os.path.join(job['tool_dir'], "metric-data-*")):
+            os.remove(stale)
+        stale_output = os.path.join(job['tool_dir'], "post-process-output.txt")
+        if os.path.exists(stale_output):
+            os.remove(stale_output)
+        cmd = f"cd {job['tool_dir']} && {job['pp_cmd']} >postprocess/post-process-output.txt 2>&1"
         _, output, rc = run_cmd(cmd)
         return rc
 
