@@ -137,56 +137,13 @@
                                         "type": "string",
                                         "minLength": 1
                                     }
-                                },
-                                "runners": {
-                                    "oneOf": [
-                                        {
-                                            "type": "object",
-                                            "properties": {
-                                                "type": {
-                                                    "type": "string",
-                                                    "enum": [
-                                                        "github"
-                                                    ]
-                                                }
-                                            },
-                                            "additionalProperties": false,
-                                            "required": [
-                                                "type"
-                                            ]
-                                        },
-                                        {
-                                            "type": "object",
-                                            "properties": {
-                                                "type": {
-                                                    "type": "string",
-                                                    "enum": [
-                                                        "self-hosted"
-                                                    ]
-                                                },
-                                                "tags": {
-                                                    "type": "array",
-                                                    "minItems": 1,
-                                                    "uniqueItems": true,
-                                                    "items": {
-                                                        "type": "string",
-                                                        "minLength": 1
-                                                    }
-                                                }
-                                            },
-                                            "additionalProperties": false,
-                                            "required": [
-                                                "tags",
-                                                "type"
-                                            ]
-                                        }
-                                    ]
                                 }
                             },
                             "additionalProperties": false,
                             "required": [
                                 "enabled",
-                                "endpoints"
+                                "endpoints",
+                                "requirements"
                             ]
                         }
                     },
@@ -243,6 +200,9 @@
     "additionalProperties": false,
     "required": [
         "benchmarks",
-        "config"
+        "capabilities",
+        "config",
+        "endpoints",
+        "runner-pools"
     ]
 }
