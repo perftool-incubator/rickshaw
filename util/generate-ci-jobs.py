@@ -61,22 +61,10 @@ def process_options():
                         default = "normal",
                         choices = [ "normal", "debug" ])
 
-    parser.add_argument("--runner-tags",
-                        dest = "runner_tags",
-                        help = argparse.SUPPRESS,
-                        default = "",
-                        type = str)
-
     parser.add_argument("--runner-pool",
                         dest = "runner_pool",
                         help = "Which runner pool to use (e.g., 'aws-cloud-1')",
                         default = "",
-                        type = str)
-
-    parser.add_argument("--runner-type",
-                        dest = "runner_type",
-                        help = argparse.SUPPRESS,
-                        default = "github",
                         type = str)
 
     parser.add_argument("--runtime-env",
@@ -92,8 +80,6 @@ def process_options():
                         choices = [ "all", "minimal", "unique" ])
 
     the_args = parser.parse_args()
-
-    the_args.runner_tags = the_args.runner_tags.split(",")
 
     return the_args
 
@@ -204,17 +190,11 @@ def _get_runner_pool(logger, input_json):
         return None
 
     if args.runner_pool:
-        logger.info("No runner-pools config found, using legacy label construction for pool '%s'" % (args.runner_pool))
-        return {
-            "provides": [],
-            "labels": ["self-hosted", args.runner_pool] + [t for t in args.runner_tags if t],
-        }
+        logger.error("Runner pool '%s' specified but no runner-pools config found" % (args.runner_pool))
+        return None
 
-    logger.info("No runner pool specified, using legacy label construction")
-    return {
-        "provides": [],
-        "labels": ["ubuntu-latest"],
-    }
+    logger.error("No runner pool specified and no runner-pools config found")
+    return None
 
 
 def _get_effective_requirements(logger, scenario, endpoint_name, input_json):
@@ -237,11 +217,6 @@ def _get_effective_requirements(logger, scenario, endpoint_name, input_json):
     logger.debug("Effective requirements for endpoint '%s': scenario=%s + endpoint=%s = %s" % (
         endpoint_name, scenario_reqs, endpoint_reqs, effective))
     return effective
-
-
-def _is_legacy_config(scenario):
-    """Check if a scenario uses the legacy runners format."""
-    return "runners" in scenario
 
 
 def get_jobs(logger):
@@ -303,10 +278,7 @@ def get_jobs(logger):
                         if scenario["enabled"]:
                             logger.debug("Scenario '%s' enabled is True" % (str(scenario)))
 
-                            if _is_legacy_config(scenario):
-                                _process_legacy_scenario(logger, scenario, benchmark, pool, raw_jobs)
-                            else:
-                                _process_scenario(logger, scenario, benchmark, pool, input_json, raw_jobs)
+                            _process_scenario(logger, scenario, benchmark, pool, input_json, raw_jobs)
                         else:
                             logger.debug("Scenario '%s' enabled is False" % (str(scenario)))
                 else:
@@ -327,36 +299,6 @@ def get_jobs(logger):
         raw_jobs.append(job)
 
     return raw_jobs
-
-
-def _process_legacy_scenario(logger, scenario, benchmark, pool, raw_jobs):
-    """Process a scenario using the legacy runners format (backward compatibility)."""
-    add_scenario = True
-
-    if scenario["runners"]["type"] == "self-hosted":
-        for tag in scenario["runners"].get("tags", []):
-            if tag not in args.runner_tags:
-                logger.debug("Scenario tag '%s' not found in requested" % (tag))
-                add_scenario = False
-
-    if not add_scenario:
-        logger.debug("Not adding jobs for benchmark '%s' due to missing tag" % (benchmark["name"]))
-        return
-
-    logger.info("Adding jobs for benchmark '%s' (legacy config)" % (benchmark["name"]))
-
-    for endpoint in scenario["endpoints"]:
-        if args.endpoint != "all" and args.endpoint != endpoint:
-            logger.debug("Skipping endpoint '%s' because it does not match requested endpoint '%s'" % (endpoint, args.endpoint))
-            continue
-        job = {
-            "benchmark": benchmark["name"],
-            "enabled": True,
-            "endpoint": endpoint,
-            "runner_labels": pool["labels"]
-        }
-        logger.info("Adding job for endpoint '%s'" % (endpoint))
-        raw_jobs.append(job)
 
 
 def _process_scenario(logger, scenario, benchmark, pool, input_json, raw_jobs):
