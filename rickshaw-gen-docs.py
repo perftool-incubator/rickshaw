@@ -396,21 +396,25 @@ def main():
                     tool_dir_path = os.path.join(engine_dir, tool)
                     if not os.path.isdir(tool_dir_path):
                         continue
+                    pp_dir = os.path.join(tool_dir_path, "postprocess")
                     processed = set()
-                    for tf in sorted(os.listdir(tool_dir_path)):
-                        m_file = re.match(r'(metric-data-\S+)\.json', tf)
-                        if m_file:
-                            tool_file = m_file.group(1)
-                            if tool_file in processed:
-                                continue
-                            processed.add(tool_file)
-                            logger.debug("Working on tool_file: %s", tool_file)
-                            jobs.append({
-                                "tool_dir": tool_dir_path,
-                                "tool_file": tool_file,
-                                "collector": collector,
-                                "engine": engine,
-                            })
+                    for scan_dir in [pp_dir, tool_dir_path]:
+                        if not os.path.isdir(scan_dir):
+                            continue
+                        for tf in sorted(os.listdir(scan_dir)):
+                            m_file = re.match(r'(metric-data-\S+)\.json', tf)
+                            if m_file:
+                                tool_file = m_file.group(1)
+                                if tool_file in processed:
+                                    continue
+                                processed.add(tool_file)
+                                logger.debug("Working on tool_file: %s", tool_file)
+                                jobs.append({
+                                    "tool_dir": scan_dir,
+                                    "tool_file": tool_file,
+                                    "collector": collector,
+                                    "engine": engine,
+                                })
 
         logger.info("Launching up to %d jobs", args.max_jobs)
 
@@ -520,10 +524,15 @@ def main():
                         if not re.match(r'^\d+$', cs_id_str):
                             continue
                         cs_id_dir = os.path.join(cs_name_dir, cs_id_str)
-                        data_file = os.path.join(cs_id_dir, "post-process-data.json")
-                        data, _ = load_json_file(data_file)
-                        if data is None:
-                            data, _ = load_json_file(data_file + ".xz", uselzma=True)
+                        pp_dir = os.path.join(cs_id_dir, "postprocess")
+                        data = None
+                        for search_dir in [pp_dir, cs_id_dir]:
+                            data_file = os.path.join(search_dir, "post-process-data.json")
+                            data, _ = load_json_file(data_file)
+                            if data is None:
+                                data, _ = load_json_file(data_file + ".xz", uselzma=True)
+                            if data is not None:
+                                break
                         if data is None:
                             if cs_name == "client":
                                 logger.error("Could not open client post-process-data.json: %s", cs_id_dir)
@@ -571,7 +580,13 @@ def main():
                             )
 
                             for metric_file_prefix in period_data.get("metric-files", []):
-                                metric_dir = os.path.join(run_dir, this_samp_dir, cs_name, cs_id_str)
+                                base_dir = os.path.join(run_dir, this_samp_dir, cs_name, cs_id_str)
+                                pp_metric_dir = os.path.join(base_dir, "postprocess")
+                                metric_json = os.path.join(pp_metric_dir, metric_file_prefix + ".json")
+                                if os.path.exists(metric_json) or os.path.exists(metric_json + ".xz"):
+                                    metric_dir = pp_metric_dir
+                                else:
+                                    metric_dir = base_dir
                                 ndjson_chunk, _, pm_found, this_begin, this_end = generate_metrics(
                                     cdm, result, metric_dir, metric_file_prefix,
                                     cs_name, cs_id_str, base_metric_doc,

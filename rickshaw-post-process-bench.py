@@ -3,6 +3,7 @@
 # vim: autoindent tabstop=4 shiftwidth=4 expandtab softtabstop=4 filetype=python
 
 import argparse
+import glob
 import json
 import os
 import re
@@ -213,11 +214,21 @@ def main():
 
             if jobs:
                 def run_bench_pp(job):
+                    pp_dir = os.path.join(job['cs_id_path'], "postprocess")
+                    if os.path.exists(pp_dir):
+                        shutil.rmtree(pp_dir)
+                    os.makedirs(pp_dir)
+                    for stale in glob.glob(os.path.join(job['cs_id_path'], "metric-data-*")):
+                        os.remove(stale)
+                    for stale_name in ["post-process-data.json", "post-process-output.txt"]:
+                        stale_path = os.path.join(job['cs_id_path'], stale_name)
+                        if os.path.exists(stale_path):
+                            os.remove(stale_path)
                     full_cmd = (
                         f"cd {job['cs_id_path']} && "
                         f"RS_CS_LABEL={job['cs_name']}-{job['cs_id']} "
                         f"{job['pp_cmd']} {job['iter_params']} "
-                        f">post-process-output.txt 2>&1"
+                        f">postprocess/post-process-output.txt 2>&1"
                     )
                     logger.debug("Running: %s", full_cmd)
                     _, output, rc = run_cmd(full_cmd)
