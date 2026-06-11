@@ -1,13 +1,18 @@
 {
+  "title": "Tool Integration Schema",
+  "description": "Schema for rickshaw.json files inside tool subprojects.  Defines the tool's controller-side post-processing script and collector configuration including deployment constraints, lifecycle scripts, and file transfers.",
   "type": "object",
   "properties": {
     "rickshaw-tool": {
+      "description": "Metadata block containing the schema version for this rickshaw.json tool file format.",
       "type": "object",
       "properties": {
         "schema": {
+          "description": "Schema version information.",
           "type": "object",
           "properties": {
             "version": {
+              "description": "The schema version this file conforms to.  Currently must be '2020.03.18'.",
               "type": "string",
               "pattern": "^2020\\.03\\.18$"
             }
@@ -16,21 +21,24 @@
             "version"
           ],
           "additionalProperties": false
-        },
-        "required": [
-          "schema"
-        ],
-        "additionalProperties": false
-      }
+        }
+      },
+      "required": [
+        "schema"
+      ],
+      "additionalProperties": false
     },
     "tool": {
+      "description": "The tool name, used to identify this tool throughout the system.  Must match the tool's subproject directory name.",
       "type": "string",
       "pattern": "^.+$"
     },
     "controller": {
+      "description": "Defines scripts that run on the controller for post-processing tool data after collection completes.",
       "type": "object",
       "properties": {
         "post-script": {
+          "description": "Script that runs on the controller after tool data has been collected and transferred back from the engines.  Typically handles post-processing, data conversion, or metric extraction.",
           "type": "string",
           "pattern": "^.+$"
         }
@@ -41,22 +49,28 @@
       "additionalProperties": false
     },
     "collector": {
+      "description": "Defines the tool's data collection configuration including lifecycle scripts, file transfers, and deployment constraints that control where the tool runs.",
       "type": "object",
       "properties": {
         "files-from-controller": {
+          "description": "Files to copy from the controller to the collector engine before collection begins.",
           "type": "array",
           "items": {
+            "description": "A file transfer specification defining source and destination paths.",
             "type": "object",
             "properties": {
               "src": {
+                "description": "Source path on the controller where the file is located.",
                 "type": "string",
                 "pattern": "^.+$"
               },
               "dest": {
+                "description": "Destination path in the collector engine where the file will be placed.",
                 "type": "string",
                 "pattern": "^.+$"
               },
               "required": {
+                "description": "Whether this file must exist on the controller.  If true and the file is missing, execution fails.  If false, the file is skipped if absent.",
                 "type": "boolean"
               }
             },
@@ -69,11 +83,14 @@
           "additionalItems": false
         },
         "blacklist": {
+          "description": "A list of endpoint and collector-type combinations where this tool must NOT run.  If a collector matches any blacklist entry, the tool will not be deployed there.",
           "type": "array",
           "items": {
+            "description": "A blacklist entry specifying an endpoint type and the collector types that should be excluded.",
             "type": "object",
             "properties": {
               "endpoint": {
+                "description": "The endpoint type this blacklist entry applies to.",
                 "type": "string",
                 "enum": [
                   "osp",
@@ -82,8 +99,10 @@
                 ]
               },
               "collector-types": {
+                "description": "The collector types within the specified endpoint where this tool must not run.",
                 "type": "array",
                 "items": {
+                  "description": "A collector type that identifies the role or function of the collection node.",
                   "type": "string",
                   "enum": [
                     "compute",
@@ -105,11 +124,14 @@
           "additionalItems": false
         },
         "whitelist": {
+          "description": "A list of endpoint and collector-type combinations where this tool MUST run.  If a whitelist is specified, the tool will only be deployed to collectors that match at least one whitelist entry.",
           "type": "array",
           "items": {
+            "description": "A whitelist entry specifying an endpoint type and the collector types where this tool should run.",
             "type": "object",
             "properties": {
               "endpoint": {
+                "description": "The endpoint type this whitelist entry applies to.",
                 "type": "string",
                 "enum": [
                   "osp",
@@ -118,8 +140,10 @@
                 ]
               },
               "collector-types": {
+                "description": "The collector types within the specified endpoint where this tool must run.",
                 "type": "array",
                 "items": {
+                  "description": "A collector type that identifies the role or function of the collection node.",
                   "type": "string",
                   "enum": [
                     "compute",
@@ -141,10 +165,12 @@
           "additionalItems": false
         },
         "start": {
+          "description": "The script that launches data collection in the background on the collector engine.",
           "type": "string",
           "pattern": "^.+$"
         },
         "stop": {
+          "description": "The script that terminates data collection on the collector engine and prepares the collected data for transfer back to the controller.",
           "type": "string",
           "pattern": "^.+$"
         }
