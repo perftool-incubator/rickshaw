@@ -1,13 +1,18 @@
 {
+  "title": "Benchmark Metric Schema",
+  "description": "Schema for bench-metric.json files inside benchmark subprojects.  Defines the benchmark's metric configuration including the primary metric, primary period, and the mapping of periods to metric data files.",
   "type": "object",
   "properties": {
     "rickshaw-bench-metric": {
+      "description": "Metadata block containing the schema version for this bench-metric.json file format.",
       "type": "object",
       "properties": {
         "schema": {
+          "description": "Schema version information.",
           "type": "object",
           "properties": {
             "version": {
+              "description": "The schema version this file conforms to.  Currently must be '2021.04.12'.",
               "type": "string",
               "pattern": "^2021\\.04\\.12$"
             }
@@ -24,24 +29,31 @@
       "additionalProperties": false
     },
     "benchmark": {
+      "description": "The benchmark name this metric configuration belongs to.",
       "type": "string"
     },
     "primary-metric": {
+      "description": "The name of the primary metric this benchmark reports.  This is the default metric used for result summaries and comparisons.",
       "type": "string"
     },
     "primary-period": {
+      "description": "The name of the default period used for metric reporting.  This period is used when no specific period is requested.",
       "type": "string"
     },
     "periods": {
+      "description": "An array of period definitions, each mapping a named execution phase to the metric data files it produces.",
       "type": "array",
       "items": {
+        "description": "A period definition specifying a named execution phase and its associated metric files.",
         "type": "object",
         "properties": {
           "name": {
+            "description": "The name of the execution period (e.g., 'measurement', 'warmup', 'rampup').",
             "type": "string",
             "pattern": "^.+$"
           },
           "metric-files": {
+            "description": "An array of file paths containing metric data for this period.  These files are produced by the benchmark's post-processing script.",
             "type": "array",
             "items": {
               "type": "string",
