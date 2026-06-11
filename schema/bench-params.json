@@ -1,25 +1,32 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://raw.githubusercontent.com/perftool-incubator/rickshaw/master/schema/bench-params.json",
+  "title": "Benchmark Parameters Schema",
+  "description": "Schema for expanded benchmark parameter arrays produced by the multiplex subproject.  The outer array represents iterations and the inner array contains the parameters for each iteration.",
   "type": "array",
   "minItems": 1,
   "uniqueItems": true,
   "items": {
+    "description": "An iteration consisting of one or more benchmark parameters.  Each iteration represents a unique combination of parameter values to test.",
     "type": "array",
     "minItems": 1,
     "uniqueItems": true,
     "items": {
+      "description": "A single benchmark parameter with an argument name, value, and optional metadata.",
       "type": "object",
       "properties": {
         "arg": {
+          "description": "The parameter argument name passed to the benchmark engine.",
           "type": "string",
           "minLength": 1
         },
         "val": {
+          "description": "The value for this parameter argument.",
           "type": "string",
           "minLength": 1
         },
         "role": {
+          "description": "The engine role this parameter applies to.  'client' and 'server' restrict the parameter to that role, while 'all' applies it to every engine.",
           "type": "string",
           "enum": [
             "client",
@@ -28,9 +35,11 @@
           ]
         },
         "uuid": {
+          "description": "A unique identifier for this parameter instance, used for CDM indexing and result tracking.",
           "type": "string"
         },
         "id": {
+          "description": "A human-readable identifier for this parameter within its iteration.",
           "type": "string"
         }
       },
