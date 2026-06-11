@@ -1,13 +1,18 @@
 {
+  "title": "Benchmark Integration Schema",
+  "description": "Schema for rickshaw.json files inside benchmark subprojects.  Defines the benchmark's controller scripts, client engine configuration, and optional server engine configuration.",
   "type": "object",
   "properties": {
     "rickshaw-benchmark": {
+      "description": "Metadata block containing the schema version for this rickshaw.json benchmark file format.",
       "type": "object",
       "properties": {
         "schema": {
+          "description": "Schema version information.",
           "type": "object",
           "properties": {
             "version": {
+              "description": "The schema version this file conforms to.  Currently must be '2020.05.18'.",
               "type": "string",
               "pattern": "^2020\\.05\\.18$"
             }
@@ -24,17 +29,21 @@
       "additionalProperties": false
     },
     "benchmark": {
+      "description": "The benchmark name, used to identify this benchmark throughout the system.",
       "type": "string",
       "pattern": "^.+$"
     },
     "controller": {
+      "description": "Defines scripts that run on the controller to manage benchmark lifecycle and post-processing.",
       "type": "object",
       "properties": {
         "pre-script": {
+          "description": "Script that runs on the controller before benchmark iterations begin.  Used for setup or preparation tasks.",
           "type": "string",
           "pattern": "^.+$"
         },
         "post-script": {
+          "description": "Script that runs on the controller after benchmark iterations complete.  Typically handles post-processing of results.",
           "type": "string",
           "pattern": "^.+$"
         }
@@ -45,22 +54,28 @@
       "additionalProperties": false
     },
     "client": {
+      "description": "Defines the client engine configuration including scripts, file transfers, and parameter validation.",
       "type": "object",
       "properties": {
         "files-from-controller": {
+          "description": "Files to copy from the controller to the client engine before execution begins.",
           "type": "array",
           "items": {
+            "description": "A file transfer specification defining source and destination paths.",
             "type": "object",
             "properties": {
               "src": {
+                "description": "Source path on the controller where the file is located.",
                 "type": "string",
                 "pattern": "^.+$"
               },
               "dest": {
+                "description": "Destination path in the client engine where the file will be placed.",
                 "type": "string",
                 "pattern": "^.+$"
               },
               "required": {
+                "description": "Whether this file must exist on the controller.  If true and the file is missing, execution fails.  If false, the file is skipped if absent.",
                 "type": "boolean"
               }
             },
@@ -73,22 +88,27 @@
           "additionalItems": false
         },
         "client-server-ratio": {
+          "description": "Defines the ratio of client engines to server engines (e.g., '1:1', '2:1').  Controls how many clients are paired with each server.",
           "type": "string",
           "pattern": "^.+$"
         },
         "runtime": {
+          "description": "The benchmark runtime script executed on the client engine.  Manages the actual benchmark execution loop.",
           "type": "string",
           "pattern": "^.+$"
         },
         "infra": {
+          "description": "Infrastructure setup script that runs on the client engine to prepare the environment before the benchmark starts.",
           "type": "string",
           "pattern": "^.+$"
         },
         "start": {
+          "description": "The client start script that launches the benchmark workload on the client engine.",
           "type": "string",
           "pattern": "^.+$"
         },
         "param_regex": {
+          "description": "Array of regex patterns used to validate benchmark parameters.  Each pattern defines valid parameter formats.",
           "type": "array",
           "items": {
             "type": "string",
@@ -105,42 +125,51 @@
       ]
     },
     "server": {
+      "description": "Defines the server engine configuration for client-server benchmarks.  Similar to the client section but includes start/stop lifecycle scripts.",
       "type": "object",
       "properties": {
         "files-from-controller": {
+          "description": "Files to copy from the controller to the server engine before execution begins.",
           "type": "array",
           "items": {
+            "description": "A file transfer specification defining source and destination paths.",
             "type": "object",
             "properties": {
               "src": {
+                "description": "Source path on the controller where the file is located.",
                 "type": "string",
                 "pattern": "^.+$"
               },
               "dest": {
+                "description": "Destination path in the server engine where the file will be placed.",
                 "type": "string",
                 "pattern": "^.+$"
               },
               "required": {
+                "description": "Whether this file must exist on the controller.  If true and the file is missing, execution fails.  If false, the file is skipped if absent.",
                 "type": "boolean"
               }
             },
             "additionalProperties": false,
-              "required": [
-                "src",
-                "dest"
+            "required": [
+              "src",
+              "dest"
             ]
           },
           "additionalItems": false
         },
         "start": {
+          "description": "Script that starts the server process on the server engine.",
           "type": "string",
           "pattern": "^.+$"
         },
         "stop": {
+          "description": "Script that stops the server process on the server engine after the benchmark completes.",
           "type": "string",
           "pattern": "^.+$"
         },
         "param_regex": {
+          "description": "Array of regex patterns used to validate server-side benchmark parameters.",
           "type": "array",
           "items": {
             "type": "string",
@@ -149,14 +178,15 @@
           "additionalItems": false
         },
         "required": {
+          "description": "Whether a server engine is mandatory for this benchmark.  If true, the benchmark cannot run without a server.  If false, the server is optional.",
           "type": "boolean"
         }
       },
       "additionalProperties": false,
       "required": [
         "files-from-controller",
-          "start",
-          "stop"
+        "start",
+        "stop"
       ]
     }
   },
