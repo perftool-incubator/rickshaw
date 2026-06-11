@@ -1,13 +1,18 @@
 {
+  "title": "Rickshaw Run Schema",
+  "description": "Schema for the internal runtime configuration document that rickshaw-run.py builds and uses to track the state of a benchmark run.  This document accumulates directory paths, benchmark parameters, registry configuration, run identity, execution parameters, and iteration data as the run progresses.",
   "type": "object",
   "properties": {
     "rickshaw-run": {
+      "description": "Metadata block containing the schema version for this runtime configuration format.",
       "type": "object",
       "properties": {
         "schema": {
+          "description": "Schema version information.",
           "type": "object",
           "properties": {
             "version": {
+              "description": "The schema version this document conforms to.",
               "type": "string",
               "enum": [
                 "2020.03.18",
@@ -23,165 +28,211 @@
       }
     },
     "workshop-script": {
+      "description": "The filename of the workshop script used for building container images.",
       "type": "string",
       "minLength": 1
     },
     "source-images-service-url": {
+      "description": "The URL of the source-images-service used for building engine container images.",
       "type": "string",
       "minLength": 1
     },
     "base-run-dir": {
+      "description": "The base directory where run data, configuration, and results are stored.",
       "type": "string",
       "pattern": "^.+$"
     },
     "bench-dir": {
+      "description": "The directory where benchmark subproject code is located.",
       "type": "string",
       "pattern": "^.+$"
     },
     "bench-ids": {
+      "description": "A comma-separated list of benchmark:ID mappings extracted from the run file (e.g., 'uperf:1-2,fio:3').",
       "type": "string",
       "pattern": "^.+$"
     },
     "bench-params": {
+      "description": "A comma-separated list of file paths containing expanded benchmark parameters for each benchmark.",
       "type": "string",
       "pattern": "^.+$"
     },
     "benchmark": {
+      "description": "The benchmark name for single-benchmark runs, or a composite identifier for multi-benchmark runs.",
       "type": "string",
       "pattern": "^.+$"
     },
     "dest-image-url": {
+      "description": "The destination URL where built engine container images are pushed to.",
       "type": "string"
     },
     "engine-dir": {
+      "description": "The directory where the engine scripts are located.",
       "type": "string",
       "pattern": "^.+$"
     },
     "external-userenvs-dir": {
+      "description": "An optional directory containing userenv definitions from external sources, supplementing the built-in userenvs.",
       "type": "string"
     },
     "max-rb-attempts": {
+      "description": "The maximum number of roadblock barrier retry attempts before a synchronization failure is considered permanent.",
       "type": "integer"
     },
     "max-sample-failures": {
+      "description": "The number of failed attempts tolerated before a sample is permanently marked as failed.",
       "type": "integer"
     },
     "num-samples": {
+      "description": "The number of sample executions to run for each benchmark iteration.",
       "type": "integer"
     },
     "packrat-dir": {
+      "description": "The directory where the packrat system information collector is located.",
       "type": "string",
       "pattern": "^.+$"
     },
     "reg-auth": {
+      "description": "Legacy field: registry authentication token file path.",
       "type": "string"
     },
     "reg-host": {
+      "description": "Legacy field: registry hostname.",
       "type": "string"
     },
     "reg-host-port": {
+      "description": "Legacy field: registry host and port combination.",
       "type": "string"
     },
     "reg-label": {
+      "description": "Legacy field: registry image label.",
       "type": "string"
     },
     "reg-proj": {
+      "description": "Legacy field: registry project name.",
       "type": "string"
     },
     "reg-proto": {
+      "description": "Legacy field: registry protocol.",
       "type": "string"
     },
     "reg-repo": {
+      "description": "Legacy field: registry repository URL.",
       "type": "string"
     },
     "reg-tls-verify": {
+      "description": "Legacy field: registry TLS verification setting.",
       "type": "string"
     },
     "registries": {
+      "description": "Container registry configuration for private and public registries used for engine image storage.",
       "type": "object",
       "properties": {
         "private": {
+          "description": "Configuration for the private container registry, used for authenticated image push and pull operations.",
           "$ref": "#/definitions/registry-properties"
         },
         "public": {
+          "description": "Configuration for the public container registry, used for image push and pull operations that may not require authentication for pulls.",
           "$ref": "#/definitions/registry-properties"
         }
       },
       "additionalProperties": false
     },
     "registries-json": {
+      "description": "The file path to the registries.json configuration file.",
       "type": "string"
     },
     "roadblock-dir": {
+      "description": "The directory where the roadblock synchronization project is located.",
       "type": "string",
       "pattern": "^.+$"
     },
     "roadblock-password": {
+      "description": "The password used to authenticate with the Valkey instance for roadblock synchronization.",
       "type": "string",
       "pattern": "^.+$"
     },
     "source-image-url": {
+      "description": "The source URL for pulling base container images used in engine image builds.",
       "type": "string"
     },
     "tool-group": {
+      "description": "An identifier grouping related tool configurations together.",
       "type": "string",
       "pattern": "^.+$"
     },
     "tool-params": {
+      "description": "The file path to the tool parameters configuration file.",
       "type": "string",
       "pattern": "^.+$"
     },
     "tools-dir": {
+      "description": "The directory where all tool subprojects are located.",
       "type": "string",
       "pattern": "^.+$"
     },
     "workshop-dir": {
+      "description": "The directory where the workshop container build project is located.",
       "type": "string",
       "pattern": "^.+$"
     },
     "bechmark": {
+      "description": "Legacy field with an intentional typo preserved for backwards compatibility.  Use 'benchmark' instead.",
       "type": "string",
       "pattern": "^.+$"
     },
     "iterations": {
+      "description": "An array of iteration definitions, each containing a unique parameter combination to test.",
       "type": "array",
       "items": {
+        "description": "An iteration definition with its UUID, numeric ID, and the parameter combination it represents.",
         "type": "object",
         "properties": {
           "iteration-uuid": {
+            "description": "A unique identifier for this iteration, used for CDM indexing.",
             "type": "string",
             "pattern": "^.+$"
           },
           "id": {
+            "description": "The numeric iteration identifier within the run.",
             "type": "string",
             "pattern": "^.+$"
           },
           "params": {
+            "description": "The benchmark parameters for this iteration.",
             "type": "array",
             "items": {
+              "description": "A single benchmark parameter with its argument, value, and metadata.",
               "type": "object",
               "properties": {
                 "param-uuid": {
+                  "description": "A unique identifier for this parameter instance, used for CDM indexing.",
                   "type": "string",
                   "pattern": "^.+$"
                 },
                 "id": {
+                  "description": "The numeric parameter identifier within this iteration.",
                   "type": "string",
                   "pattern": "^.+$"
                 },
                 "arg": {
+                  "description": "The parameter argument name.",
                   "type": "string",
                   "pattern": "^.+$"
                 },
                 "val": {
+                  "description": "The parameter value.",
                   "type": "string",
                   "pattern": "^.+$"
                 },
                 "benchmark": {
+                  "description": "The benchmark this parameter belongs to, used in multi-benchmark runs.",
                   "type": "string",
                   "pattern": "^.+$"
                 },
                 "role": {
+                  "description": "The engine role this parameter applies to.",
                   "type": "string",
                   "enum": [
                     "client",
@@ -207,17 +258,22 @@
       "additionalItems": false
     },
     "endpoints": {
+      "description": "An array of endpoint definitions parsed from the run file or command line, identifying deployment targets for the run.",
       "type": "array",
       "items": {
+        "description": "An endpoint definition with its type, configuration options, and display label.",
         "type": "object",
         "properties": {
           "type": {
+            "description": "The endpoint type (e.g., 'remotehosts', 'kube', 'osp').",
             "type": "string"
           },
           "opts": {
+            "description": "The endpoint configuration options as a serialized string.",
             "type": "string"
           },
           "label": {
+            "description": "A human-readable label for this endpoint, typically combining the type and a numeric index.",
             "type": "string"
           }
         }
@@ -225,35 +281,44 @@
       "additionalItems": false
     },
     "email": {
+      "description": "The email address of the user running the benchmark, used for result attribution.",
       "type": "string",
       "pattern": "^.+$"
     },
     "name": {
+      "description": "The name of the user running the benchmark, used for result attribution.",
       "type": "string",
       "pattern": "^.+$"
     },
     "run-uuid": {
+      "description": "A unique identifier for this run, used for CDM indexing and result tracking.",
       "type": "string",
       "pattern": "^.+$"
     },
     "run-id": {
+      "description": "A human-readable run identifier, typically a timestamp-based directory name.",
       "type": "string",
       "pattern": "^.+$"
     },
     "id": {
+      "description": "A short numeric identifier for the run.",
       "type": "string",
       "pattern": "^.+$"
     },
     "tags": {
+      "description": "An array of user-defined metadata tags for identifying and filtering runs.",
       "type": "array",
       "items": {
+        "description": "A tag consisting of a name-value pair.",
         "type": "object",
         "properties": {
           "name": {
+            "description": "The tag name.",
             "type": "string",
             "pattern": "^.+$"
           },
           "val": {
+            "description": "The tag value.",
             "type": "string",
             "pattern": "^.+$"
           }
@@ -267,10 +332,12 @@
       "additionalItems": false
     },
     "test-order": {
+      "description": "The order in which iterations and samples are executed (e.g., 'sample', 'iteration', 'random').",
       "type": "string",
       "pattern": "^.+$"
     },
     "run-file": {
+      "description": "The file path to the original run file that initiated this run.",
       "type": "string"
     }
   },
@@ -286,18 +353,23 @@
   "additionalProperties": false,
   "definitions": {
     "registry-properties": {
+      "description": "Configuration properties for a container registry including authentication tokens, repository URL, TLS settings, and Quay-specific expiration management.",
       "type": "object",
       "properties": {
         "pull-token": {
+          "description": "The authentication token file path used for pulling images from this registry.",
           "type": "string"
         },
         "push-token": {
+          "description": "The authentication token file path used for pushing images to this registry.",
           "type": "string"
         },
         "quay-expiration-length": {
+          "description": "The duration for Quay image tag expiration (e.g., '13w' for 13 weeks).",
           "type": "string"
         },
         "quay-refresh-expiration-require-success": {
+          "description": "Whether a successful image push is required before refreshing the expiration timer.",
           "type": "string",
           "enum": [
             "false",
@@ -305,15 +377,19 @@
           ]
         },
         "quay-refresh-expiration-api-url": {
+          "description": "The Quay API URL used for refreshing image tag expirations.",
           "type": "string"
         },
         "quay-refresh-expiration-token-file": {
+          "description": "The file path containing the OAuth token used for Quay expiration API calls.",
           "type": "string"
         },
         "repo": {
+          "description": "The full repository URL for this registry (e.g., 'quay.io/org/repo').",
           "type": "string"
         },
         "tls-verify": {
+          "description": "Whether TLS certificate verification is enabled for this registry.",
           "type": "string",
           "enum": [
             "false",
@@ -321,27 +397,35 @@
           ]
         },
         "url-details": {
+          "description": "Decoded components of the repository URL, populated by rickshaw-run after parsing the repo URL.",
           "type": "object",
           "properties": {
             "dest-image-url": {
+              "description": "The fully qualified URL for pushing built images.",
               "type": "string"
             },
             "host": {
+              "description": "The registry hostname extracted from the repo URL.",
               "type": "string"
             },
             "host-port": {
+              "description": "The registry hostname and port combination.",
               "type": "string"
             },
             "label": {
+              "description": "The image label or tag component of the URL.",
               "type": "string"
             },
             "project": {
+              "description": "The project or namespace component of the URL.",
               "type": "string"
             },
             "protocol": {
+              "description": "The protocol prefix from the repo URL (e.g., 'https:/').",
               "type": "string"
             },
             "source-image-url": {
+              "description": "The fully qualified URL for pulling source images.",
               "type": "string"
             }
           },
