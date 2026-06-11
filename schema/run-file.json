@@ -21,15 +21,14 @@
         },
         "endpoints": {
             "type": "array",
+            "minItems": 1,
             "items": {
-                "minItems": 1,
                 "type": "object"
             }
         },
         "tool-params": {
             "type": "array",
             "items": {
-                "minItems": 0,
                 "type": "object"
             }
         },
@@ -109,7 +108,8 @@
     },
     "additionalProperties": false,
     "required": [
-        "benchmarks"
+        "benchmarks",
+        "endpoints"
     ],
     "definitions": {
         "number-lists": {
