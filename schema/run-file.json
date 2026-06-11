@@ -1,11 +1,15 @@
 {
     "$schema": "https://json-schema.org/draft/2019-09/schema",
+    "title": "Run File Schema",
+    "description": "This schema defines the structure of a crucible run file, which specifies what benchmarks to run, where to run them, and how to configure the test",
     "type": "object",
     "properties": {
         "schema": {
+            "description": "Optional schema version identifier for forward compatibility",
             "type": "object",
             "properties": {
                 "version": {
+                    "description": "The schema version this run file conforms to",
                     "type": "string",
                     "enum": [
                         "2023.09.27"
@@ -14,37 +18,43 @@
             }
         },
         "tags": {
+            "description": "Free-form key-value metadata for identifying and filtering runs. Tags are indexed into OpenSearch and appear in the CDM web dashboard.",
             "type": "object",
             "additionalProperties": {
                 "type": "string"
             }
         },
         "endpoints": {
+            "description": "Deployment targets where benchmark and tool engines will run. Each endpoint specifies a type (remotehosts, kube, osp) and host-specific configuration. Endpoint configurations are further validated against endpoint-specific schemas.",
             "type": "array",
+            "minItems": 1,
             "items": {
-                "minItems": 1,
                 "type": "object"
             }
         },
         "tool-params": {
+            "description": "Configuration for which tools run and their settings. When omitted, the default tool set (sysstat and procstat) is used. Specifying this section replaces the defaults entirely.",
             "type": "array",
             "items": {
-                "minItems": 0,
                 "type": "object"
             }
         },
         "run-params": {
+            "description": "Execution behavior parameters. All fields are optional and have sensible defaults.",
             "type": "object",
 	    "properties": {
 		"num-samples": {
+		    "description": "The number of sample executions to run for each benchmark iteration, providing statistical confidence through repetition",
 		    "type": "integer",
 		    "minimum": 1
 		},
 		"max-sample-failures": {
+		    "description": "The number of failed attempts tolerated before a sample is permanently marked as failed",
 		    "type": "integer",
 		    "minimum": 1
 		},
 		"test-order": {
+		    "description": "The order in which iterations and samples are executed. 'sample' runs all samples of one iteration before the next. 'iteration' runs one sample of each iteration before repeating. 'random' randomizes order to reduce systematic bias.",
 		    "type": "string",
 		    "enum": [
 			"s",
@@ -56,10 +66,12 @@
 		    ]
 		},
 		"name": {
+		    "description": "Override the user name for this run. If specified, email must also be provided.",
 		    "type": "string",
 		    "minLength": 1
 		},
 		"email": {
+		    "description": "Override the user email for this run. If specified, name must also be provided.",
 		    "type": "string",
 		    "minLength": 1
 		}
@@ -72,18 +84,22 @@
 	    "required": []
         },
         "benchmarks": {
+            "description": "The benchmarks to execute and their parameter configurations. Each entry specifies the benchmark name, engine IDs, and multivariate parameters that define the iteration matrix.",
             "type": "array",
             "minItems": 1,
             "items": {
                 "type": "object",
                 "properties": {
                     "name": {
+                        "description": "The benchmark name, which must match a deployed benchmark subproject (e.g. uperf, fio, cyclictest)",
                         "type": "string"
-                    },  
+                    },
                     "ids": {
+                        "description": "Engine IDs assigned to this benchmark. These IDs link the benchmark to engines defined in the endpoints section. Accepts a range string (e.g. '1-4', '1+3'), an integer, or an array.",
 			"$ref": "#/definitions/number-lists"
                     },
                     "mv-params": {
+                        "description": "Multivariate parameter configuration defining global-options and sets. Parameters are expanded via cartesian product by the multiplex subproject to generate the iteration matrix.",
                         "anyOf": [
                             {
                                 "type": "array",
@@ -109,10 +125,12 @@
     },
     "additionalProperties": false,
     "required": [
-        "benchmarks"
+        "benchmarks",
+        "endpoints"
     ],
     "definitions": {
         "number-lists": {
+            "description": "A flexible format for specifying engine ID numbers. Supports a single integer, a string with ranges and addition (e.g. '1-4', '1+3', '1-3+5-7'), or an array of integers and/or range strings.",
             "anyOf": [
                 {
                     "type": "string",
