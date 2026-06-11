@@ -1,37 +1,47 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://raw.githubusercontent.com/perftool-incubator/rickshaw/master/schema/tool-params.json",
+  "title": "Tool Parameters Schema",
+  "description": "Schema for tool parameter configurations from run files and rickshaw.json.  Each entry defines a tool instance with optional parameters, deployment strategy, and enable/disable controls.",
   "type": "array",
   "minItems": 0,
   "uniqueItems": true,
   "items": {
+    "description": "A tool instance configuration specifying which tool to run and how to configure it.",
     "type": "object",
     "properties": {
       "tool": {
+        "description": "The tool name, matching a deployed tool subproject (e.g., 'sysstat', 'procstat', 'ftrace').",
         "type": "string",
         "minLength": 1
       },
       "id": {
+        "description": "An optional unique identifier for this tool instance.  Allows multiple instances of the same tool with different configurations.  Must be lowercase alphanumeric with optional hyphens, at least 3 characters.",
         "type": "string",
         "minLength": 3,
         "pattern": "^[a-z0-9]([a-z0-9-]*[a-z0-9])?$"
       },
       "params": {
+        "description": "Arg/val pairs passed to the tool's collector scripts to control collection behavior.",
         "type": "array",
         "minItems": 1,
         "uniqueItems": true,
         "items": {
+          "description": "A single parameter consisting of an argument name and its value.",
           "type": "object",
           "properties": {
             "arg": {
+              "description": "The parameter argument name passed to the tool's collector script.",
               "type": "string",
               "minLength": 1
             },
             "val": {
+              "description": "The value for this parameter argument.",
               "type": "string",
               "minLength": 1
             },
             "enabled": {
+              "description": "Controls whether this individual parameter is active.  Defaults to 'yes' if not specified.",
               "type": "string",
               "enum": [
                 "yes",
@@ -47,6 +57,7 @@
         }
       },
       "enabled": {
+        "description": "Controls whether this tool instance runs.  Defaults to 'yes' if not specified.  Set to 'no' to disable the tool.",
         "type": "string",
         "enum": [
           "yes",
@@ -54,9 +65,11 @@
         ]
       },
       "userenv": {
+        "description": "Restricts this tool to run only within a specific user environment.",
         "type": "string"
       },
       "deployment": {
+        "description": "Controls the tool's deployment strategy.  'auto': the tool decides where to deploy.  'opt-in': only deploys to endpoints that explicitly opt in via tags.  'opt-out': deploys everywhere unless an endpoint explicitly opts out.",
         "type": "string",
         "enum": [
           "auto",
@@ -65,6 +78,7 @@
         ]
       },
       "opt-tag": {
+        "description": "The tag name used for opt-in/opt-out deployment matching against endpoint settings.  Required when deployment is 'opt-in' or 'opt-out'.",
         "type": "string",
         "minLength": 1
       }
