@@ -1211,11 +1211,11 @@ def create_job_crd(role = None, id = None, node = None, node_tools = None, cs_en
     pod_spec["containers"] = []
     for container_name in container_names:
         logger.info("Adding container '%s' to job" % (container_name))
-        image = None
+        image_info = None
         if is_cs_pod:
             engine = container_engine_map[container_name]
             engine_settings = endpoint["engines"]["settings"][engine["role"]][engine["id"]]
-            image = endpoints.get_engine_id_image(settings, engine["role"], engine["id"], engine_settings["userenv"], arch=target_arch)
+            image_info = endpoints.get_engine_id_image(settings, engine["role"], engine["id"], engine_settings["userenv"], arch=target_arch)
         elif role == "worker" or role == "master":
             userenv = endpoints.get_profiler_userenv(settings, container_name)
             if userenv is None:
@@ -1223,19 +1223,16 @@ def create_job_crd(role = None, id = None, node = None, node_tools = None, cs_en
                 return None, 1
             else:
                 logger.info("Found userenv '%s' for engine '%s'" % (userenv, container_name))
-            image = endpoints.get_engine_id_image(settings, role, container_name, userenv, arch=target_arch)
-        if image is None:
+            image_info = endpoints.get_engine_id_image(settings, role, container_name, userenv, arch=target_arch)
+        if image_info is None:
             logger.error("Could not find image for container %s" % (container_name))
             return None, 1
-        else:
-            logger.info("Found image '%s' for container '%s'" % (image, container_name))
 
-        if "::" in image:
-            # this image has a pull token that must be handled
-            fields = image.split("::")
-            image = fields[0]
-            token_file = fields[1]
+        image = image_info["image"]
+        token_file = image_info.get("auth-file")
+        logger.info("Found image '%s' for container '%s'" % (image, container_name))
 
+        if token_file:
             logger.info("Processing image pull secret '%s' for image '%s'" % (token_file, image))
 
             if not "imagePullSecrets" in pod_spec:

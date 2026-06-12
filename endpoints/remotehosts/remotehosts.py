@@ -525,10 +525,10 @@ def image_pull_worker_thread(thread_id, work_queue, threads_rcs):
             for image_info in my_unique_remote["images"]:
                 auth_arg = ""
                 remote_auth_file = settings["dirs"]["remote"]["run"] + "/pull-token.json"
-                if "pull-token" in image_info:
-                    thread_logger("Image %s requires pull token %s" % (image_info["image"], image_info["pull-token"]), remote_name = remote)
-                    result = c.put(image_info["pull-token"], remote_auth_file)
-                    thread_logger("Copied %s to %s:%s" % (image_info["pull-token"], remote, remote_auth_file), remote_name = remote)
+                if "auth-file" in image_info:
+                    thread_logger("Image %s requires auth file %s" % (image_info["image"], image_info["auth-file"]), remote_name = remote)
+                    result = c.put(image_info["auth-file"], remote_auth_file)
+                    thread_logger("Copied %s to %s:%s" % (image_info["auth-file"], remote, remote_auth_file), remote_name = remote)
                     auth_arg = "--authfile=" + remote_auth_file
 
                 result = endpoints.run_remote(c, "podman pull " + auth_arg + " " + image_info["image"])
@@ -538,7 +538,7 @@ def image_pull_worker_thread(thread_id, work_queue, threads_rcs):
                 thread_logger("Attempted to pull %s with return code %d:\nstdout:\n%sstderr:\n%s" % (image_info["image"], result.exited, result.stdout, result.stderr), log_level = loglevel, remote_name = remote)
                 rc += result.exited
 
-                if "pull-token" in image_info:
+                if "auth-file" in image_info:
                     result = endpoints.run_remote(c, "rm -v " + remote_auth_file)
                     log_level = "info"
                     if result.exited != 0:
@@ -682,13 +682,12 @@ def remotes_pull_images():
     """
     logger.info("Determining which images to pull to which remotes")
     for remote in settings["engines"]["remotes"].keys():
-        if not "raw-images" in settings["engines"]["remotes"][remote]:
-            settings["engines"]["remotes"][remote]["raw-images"] = []
+        unique_images = {}
 
         for role in settings["engines"]["remotes"][remote]["roles"].keys():
             for id in settings["engines"]["remotes"][remote]["roles"][role]["ids"]:
                 userenv = None
-                image = None
+                image_info = None
 
                 if role == "profiler":
                     userenv = endpoints.get_profiler_userenv(settings, id)
@@ -706,23 +705,16 @@ def remotes_pull_images():
                     print("could not find userenv for " + endpoint)
                 else:
                     remote_arch = settings["engines"]["remotes"][remote].get("arch")
-                    image = endpoints.get_engine_id_image(settings, role, id, userenv, arch=remote_arch)
+                    image_info = endpoints.get_engine_id_image(settings, role, id, userenv, arch=remote_arch)
 
-                if image is None:
+                if image_info is None:
                     logger.error("Could not find image for remote %s with role %s and id %s" % (remote, role, str(id)))
                 else:
-                    settings["engines"]["remotes"][remote]["raw-images"].append(image)
+                    if "auth-file" in image_info:
+                        logger.info("Found image %s with auth file %s" % (image_info["image"], image_info["auth-file"]))
+                    unique_images[image_info["image"]] = image_info
 
-        settings["engines"]["remotes"][remote]["raw-images"] = list(set(settings["engines"]["remotes"][remote]["raw-images"]))
-        settings["engines"]["remotes"][remote]["images"] = []
-        for image in settings["engines"]["remotes"][remote]["raw-images"]:
-            image_info = dict()
-            image_split = image.split("::")
-            image_info["image"] = image_split[0]
-            if len(image_split) > 1:
-                logger.info("Found image %s with pull token %s" % (image_split[0], image_split[1]))
-                image_info["pull-token"] = image_split[1]
-            settings["engines"]["remotes"][remote]["images"].append(image_info)
+        settings["engines"]["remotes"][remote]["images"] = list(unique_images.values())
 
     endpoints.log_settings(settings, mode = "engines")
 
@@ -1261,14 +1253,13 @@ def launch_engines_worker_thread(thread_id, work_queue, threads_rcs):
                         userenv = settings["run-file"]["endpoints"][args.endpoint_index]["remotes"][remote_idx]["config"]["settings"]["userenv"]
 
                     remote_arch = settings["engines"]["remotes"][remote["config"]["host"]].get("arch")
-                    image = endpoints.get_engine_id_image(settings, engine["role"], engine_id, userenv, arch=remote_arch)
-                    if image is None:
+                    image_info = endpoints.get_engine_id_image(settings, engine["role"], engine_id, userenv, arch=remote_arch)
+                    if image_info is None:
                         thread_logger("Could not determine image", log_level = "error", remote_name = remote_name, engine_name = engine_name)
                         continue
-                    else:
-                        image_split = image.split("::")
-                        image = image_split[0]
-                        thread_logger("Image is '%s'" % (image), remote_name = remote_name, engine_name = engine_name)
+
+                    image = image_info["image"]
+                    thread_logger("Image is '%s'" % (image), remote_name = remote_name, engine_name = engine_name)
 
                     osruntime = None
                     if engine["role"] == "profiler":

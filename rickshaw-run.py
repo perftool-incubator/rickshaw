@@ -1605,6 +1605,19 @@ class RunState:
                         if arch in self.image_ids and tool_id in self.image_ids[arch] and userenv in self.image_ids[arch][tool_id]:
                             self.image_ids[arch][tool_id][userenv]["image"] = image
 
+    @staticmethod
+    def _build_image_entry(raw_image):
+        """Build an image-map entry from a raw image string.
+
+        The source-images service appends '::pull-token-path' to image URLs
+        for private registries.  Split that into separate fields for the
+        structured image-map format.
+        """
+        if "::" in raw_image:
+            image_url, auth_file = raw_image.split("::", 1)
+            return {"image": image_url, "auth-file": auth_file}
+        return {"image": raw_image}
+
     def _build_provenance(self, utility_dirs):
         provenance = {}
 
@@ -1791,7 +1804,7 @@ class RunState:
             ep_type = endpoint["type"]
             opts = endpoint["opts"]
             label = endpoint["label"]
-            endpoint_image_opt = ""
+            image_map = {}
 
             if "userenvs" in endpoint:
                 endpoint_archs = endpoint.get("archs", [self.arch])
@@ -1803,8 +1816,9 @@ class RunState:
                         if "::" in bench_or_tool:
                             bench_name, engine_role = bench_or_tool.split("::", 1)
                             for avail_userenv in self.image_ids[arch][bench_or_tool]:
-                                image = self.image_ids[arch][bench_or_tool][avail_userenv]["image"]
-                                endpoint_image_opt += f",{bench_name}::{engine_role}::{avail_userenv}::{arch}::{image}"
+                                raw_image = self.image_ids[arch][bench_or_tool][avail_userenv]["image"]
+                                image_entry = self._build_image_entry(raw_image)
+                                image_map.setdefault(bench_name, {}).setdefault(engine_role, {}).setdefault(avail_userenv, {})[arch] = image_entry
                             continue
                         for userenv in endpoint["userenvs"]:
                             chosen_userenv = userenv
@@ -1815,17 +1829,23 @@ class RunState:
                                 logger.error("ERROR: image for %s / %s / userenv %s not found in image_ids",
                                              arch, bench_or_tool, chosen_userenv)
                                 sys.exit(1)
-                            image = self.image_ids[arch][bench_or_tool][chosen_userenv]["image"]
-                            endpoint_image_opt += f",{bench_or_tool}::all::{chosen_userenv}::{arch}::{image}"
-                if endpoint_image_opt:
-                    endpoint_image_opt = f" --image={endpoint_image_opt.lstrip(',')}"
+                            raw_image = self.image_ids[arch][bench_or_tool][chosen_userenv]["image"]
+                            image_entry = self._build_image_entry(raw_image)
+                            image_map.setdefault(bench_or_tool, {}).setdefault("all", {}).setdefault(chosen_userenv, {})[arch] = image_entry
+
+            this_endpoint_run_dir = os.path.join(self.base_endpoint_run_dir, label)
+            os.makedirs(this_endpoint_run_dir, exist_ok=True)
+
+            endpoint_image_map_opt = ""
+            if image_map:
+                image_map_file = os.path.join(this_endpoint_run_dir, "image-map.json")
+                with open(image_map_file, "w") as fh:
+                    json.dump(image_map, fh, indent=4)
+                endpoint_image_map_opt = f" --image-map={image_map_file}"
 
             bench_ids_opt = ""
             if "bench-ids" in self.run:
                 bench_ids_opt = f" --bench-ids={self.run['bench-ids']}"
-
-            this_endpoint_run_dir = os.path.join(self.base_endpoint_run_dir, label)
-            os.makedirs(this_endpoint_run_dir, exist_ok=True)
             endpoint_project_dir = os.path.join(self.rickshaw_project_dir, "endpoints", ep_type)
 
             if not os.path.exists(endpoint_project_dir):
@@ -1843,7 +1863,7 @@ class RunState:
                 f" --max-sample-failures={self.run['max-sample-failures']}"
                 f" --endpoint-deploy-timeout={self.endpoint_deploy_timeout}"
                 f" --engine-script-start-timeout={self.engine_script_start_timeout}"
-                f"{endpoint_image_opt}"
+                f"{endpoint_image_map_opt}"
                 f"{self.endpoint_roadblock_opt}"
             )
 

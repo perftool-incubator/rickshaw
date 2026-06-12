@@ -188,18 +188,20 @@ function process_opts() {
                 base_run_dir="$1"
                 shift;
                 ;;
-            --image)
+            --image-map)
                 shift;
-                image="$1"
+                image_map_file="$1"
                 shift;
-                for bench_and_image in `echo $image | sed -e 's/,/ /g'`; do
-                    bench=`echo $bench_and_image | awk -F:: '{print $1}'`
-                    engine_role=`echo $bench_and_image | awk -F:: '{print $2}'`
-                    userenv=`echo $bench_and_image | awk -F:: '{print $3}'`
-                    arch=`echo $bench_and_image | awk -F:: '{print $4}'`
-                    image=`echo $bench_and_image | awk -F:: '{print $5}'`
-                    bench_to_image[$bench]=$image
-                done
+                while IFS=$'\t' read -r bench img; do
+                    bench_to_image[$bench]=$img
+                done < <(jq -r '
+                    to_entries[] |
+                    .key as $bench |
+                    .value | to_entries[] | .value |
+                    to_entries[] | .value |
+                    to_entries[] |
+                    "\($bench)\t\(.value.image)"
+                ' "$image_map_file")
                 ;;
             --roadblock-passwd)
                 shift;
