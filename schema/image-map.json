@@ -1,0 +1,54 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "title": "rickshaw image-map",
+    "description": "Schema for image-map.json, written by rickshaw-run.py and read by endpoint scripts.  Maps benchmark and tool names to their container image URLs, organized by engine role, userenv, and CPU architecture.  Replaces the previous packed format string interface between the orchestrator and endpoints.",
+    "type": "object",
+    "minProperties": 1,
+    "patternProperties": {
+        "^.+$": {
+            "description": "A benchmark or tool name (e.g. 'uperf', 'sysstat').  Each entry maps to the engine roles that have images for this benchmark or tool.",
+            "type": "object",
+            "minProperties": 1,
+            "patternProperties": {
+                "^.+$": {
+                    "description": "An engine role (e.g. 'all', 'client', 'server').  Standard benchmarks use 'all'; benchmarks with split workshop files use 'client' and 'server' for role-specific images.",
+                    "type": "object",
+                    "minProperties": 1,
+                    "patternProperties": {
+                        "^.+$": {
+                            "description": "A userenv name (e.g. 'rhubi9', 'fedora-latest').  Identifies the base container image that benchmark and tool layers are built on top of.",
+                            "type": "object",
+                            "minProperties": 1,
+                            "patternProperties": {
+                                "^.+$": {
+                                    "description": "A CPU architecture (e.g. 'x86_64', 'aarch64').  Each architecture has its own container image built by the architecture-specific source-images-service instance.",
+                                    "type": "object",
+                                    "required": [
+                                        "image"
+                                    ],
+                                    "properties": {
+                                        "image": {
+                                            "description": "Fully-qualified container image URL with a content-based tag (e.g. 'quay.io/crucible/engines:sha256-abc123.img').",
+                                            "type": "string",
+                                            "minLength": 1
+                                        },
+                                        "auth-file": {
+                                            "description": "Path to a Docker/Podman auth JSON file for pulling this image from a private registry.  Only present when the image requires authenticated pulls.",
+                                            "type": "string",
+                                            "minLength": 1
+                                        }
+                                    },
+                                    "additionalProperties": false
+                                }
+                            },
+                            "additionalProperties": false
+                        }
+                    },
+                    "additionalProperties": false
+                }
+            },
+            "additionalProperties": false
+        }
+    },
+    "additionalProperties": false
+}
