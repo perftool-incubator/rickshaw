@@ -1,13 +1,18 @@
 {
+  "title": "Sample Persistent IDs Schema",
+  "description": "Schema for persisting sample and period UUIDs across reindexing operations.  When a run is reindexed, these stored UUIDs are reused so that existing queries and dashboards continue to reference the same data without requiring UUID updates.",
   "type": "object",
   "properties": {
     "sample-persistent-ids": {
+      "description": "Metadata block containing the schema version for this persistent IDs file format.",
       "type": "object",
       "properties": {
         "schema": {
+          "description": "Schema version information.",
           "type": "object",
           "properties": {
             "version": {
+              "description": "The schema version this file conforms to.  Currently must be '2024.01.20'.",
               "type": "string",
               "enum": [
                 "2024.01.20"
@@ -26,13 +31,16 @@
       "additionalProperties": false
     },
     "samples": {
+      "description": "The sample identification data, mapping the sample's numeric ID to its persistent UUID.",
       "type": "object",
       "properties": {
         "id":  {
+          "description": "The numeric sample identifier within the run.",
           "type": "string",
           "pattern": "^.+$"
         },
         "sample-uuid":  {
+          "description": "The persistent UUID assigned to this sample.  This UUID is preserved across reindexing operations.",
           "type": "string",
           "pattern": "^.+$"
         }
@@ -40,19 +48,24 @@
      "additionalProperties": false
     },
     "periods": {
+      "description": "An array of period identification entries, each mapping a period's numeric ID and name to its persistent UUID.",
       "type": "array",
       "items": {
+        "description": "A period identification entry with its numeric ID, name, and persistent UUID.",
         "type": "object",
         "properties": {
           "id": {
+            "description": "The numeric period identifier within the sample.",
             "type": "string",
             "pattern": "^.+$"
           },
           "period-uuid": {
+            "description": "The persistent UUID assigned to this period.  This UUID is preserved across reindexing operations.",
             "type": "string",
             "pattern": "^.+$"
           },
           "name": {
+            "description": "The name of the execution period (e.g., 'measurement', 'warmup').",
             "type": "string",
             "pattern": "^.+$"
           }

@@ -1,10 +1,14 @@
 {
+    "title": "Crucible CI Schema",
+    "description": "Schema for crucible-ci.json configuration files that define the CI test matrix.  Controls which benchmarks are tested, what endpoints and runner pools are available, and what capabilities are required for each test scenario.",
     "type": "object",
     "properties": {
         "config": {
+            "description": "Global CI configuration settings.",
             "type": "object",
             "properties": {
                 "enabled": {
+                    "description": "Master switch that controls whether CI testing is enabled for this configuration.",
                     "type": "boolean"
                 }
             },
@@ -14,9 +18,11 @@
             ]
         },
         "capabilities": {
+            "description": "A dictionary of capability names and their descriptions.  Capabilities are abstract labels that describe what a runner pool can do (e.g., 'container-runtime', 'kubernetes-cluster').  Scenarios declare which capabilities they require, and runner pools declare which capabilities they provide.",
             "type": "object",
             "patternProperties": {
                 "^[a-z][a-z0-9-]*$": {
+                    "description": "A human-readable description of what this capability represents.",
                     "type": "string",
                     "minLength": 1
                 }
@@ -24,18 +30,23 @@
             "additionalProperties": false
         },
         "endpoints": {
+            "description": "A dictionary of endpoint configurations available for CI testing.  Each entry defines an endpoint type (e.g., 'remotehosts', 'kube') with its enabled state and capability requirements.",
             "type": "object",
             "patternProperties": {
                 "^.+$": {
+                    "description": "An endpoint configuration specifying whether it is enabled and what capabilities it requires from a runner pool.",
                     "type": "object",
                     "properties": {
                         "enabled": {
+                            "description": "Whether this endpoint is available for CI testing.",
                             "type": "boolean"
                         },
                         "requirements": {
+                            "description": "A list of capability names that a runner pool must provide in order to support this endpoint.",
                             "type": "array",
                             "uniqueItems": true,
                             "items": {
+                                "description": "A capability name from the capabilities dictionary.",
                                 "type": "string",
                                 "minLength": 1
                             }
@@ -50,27 +61,34 @@
             }
         },
         "runner-pools": {
+            "description": "A dictionary of GitHub Actions runner pools available for CI jobs.  Each pool declares what capabilities it provides and what GitHub runner labels to use when scheduling jobs.",
             "type": "object",
             "patternProperties": {
                 "^.+$": {
+                    "description": "A runner pool configuration specifying its capabilities and GitHub Actions runner labels.",
                     "type": "object",
                     "properties": {
                         "enabled": {
+                            "description": "Whether this runner pool is available for scheduling CI jobs.",
                             "type": "boolean"
                         },
                         "provides": {
+                            "description": "A list of capability names that this runner pool provides.  Used to match against endpoint and scenario requirements.",
                             "type": "array",
                             "uniqueItems": true,
                             "items": {
+                                "description": "A capability name from the capabilities dictionary.",
                                 "type": "string",
                                 "minLength": 1
                             }
                         },
                         "labels": {
+                            "description": "A list of GitHub Actions runner labels used in the 'runs-on' field to schedule jobs on this pool's runners.",
                             "type": "array",
                             "minItems": 1,
                             "uniqueItems": true,
                             "items": {
+                                "description": "A GitHub Actions runner label.",
                                 "type": "string",
                                 "minLength": 1
                             }
@@ -86,13 +104,16 @@
             }
         },
         "benchmarks": {
+            "description": "An array of benchmark test configurations.  Each entry defines a benchmark to test, whether it is enabled, its test scenarios, and optional userenv restrictions.",
             "type": "array",
             "minItems": 1,
             "uniqueItems": true,
             "items": {
+                "description": "A benchmark test configuration defining test scenarios and constraints.",
                 "type": "object",
                 "properties": {
                     "name": {
+                        "description": "The benchmark name, matching a deployed benchmark subproject.",
                         "type": "string",
                         "enum": [
                             "cyclictest",
@@ -106,23 +127,29 @@
                         ]
                     },
                     "enabled": {
+                        "description": "Whether this benchmark is included in CI testing.",
                         "type": "boolean"
                     },
                     "scenarios": {
+                        "description": "An array of test scenarios for this benchmark.  Each scenario defines endpoint types and capability requirements, generating CI jobs for each valid combination.",
                         "type": "array",
                         "minItems": 1,
                         "uniqueItems": true,
                         "items": {
+                            "description": "A test scenario specifying which endpoints to test on and what capabilities are required.",
                             "type": "object",
                             "properties": {
                                 "enabled": {
+                                    "description": "Whether this scenario is included in CI testing.",
                                     "type": "boolean"
                                 },
                                 "endpoints": {
+                                    "description": "The endpoint types this scenario should be tested on.",
                                     "type": "array",
                                     "minItems": 1,
                                     "uniqueItems": true,
                                     "items": {
+                                        "description": "An endpoint type name.",
                                         "type": "string",
                                         "enum": [
                                             "kube",
@@ -131,9 +158,11 @@
                                     }
                                 },
                                 "requirements": {
+                                    "description": "Additional capability requirements beyond those inherited from the endpoint.  A runner pool must provide all of these plus the endpoint's requirements to run this scenario.",
                                     "type": "array",
                                     "uniqueItems": true,
                                     "items": {
+                                        "description": "A capability name from the capabilities dictionary.",
                                         "type": "string",
                                         "minLength": 1
                                     }
@@ -148,15 +177,19 @@
                         }
                     },
                     "userenvs": {
+                        "description": "Optional restriction on which user environments this benchmark should be tested with.  Specify either an allowlist or a denylist, but not both.",
                         "oneOf": [
                             {
+                                "description": "An allowlist restricts testing to only the specified user environments.",
                                 "type": "object",
                                 "properties": {
                                     "allowlist": {
+                                        "description": "A list of userenv names to include.  Only these userenvs will be tested.",
                                         "type": "array",
                                         "minItems": 1,
                                         "uniqueItems": true,
                                         "items": {
+                                            "description": "A userenv name.",
                                             "type": "string",
                                             "minLength": 1
                                         }
@@ -168,13 +201,16 @@
                                 ]
                             },
                             {
+                                "description": "A denylist excludes the specified user environments from testing.",
                                 "type": "object",
                                 "properties": {
                                     "denylist": {
+                                        "description": "A list of userenv names to exclude.  All userenvs except these will be tested.",
                                         "type": "array",
                                         "minItems": 1,
                                         "uniqueItems": true,
                                         "items": {
+                                            "description": "A userenv name.",
                                             "type": "string",
                                             "minLength": 1
                                         }

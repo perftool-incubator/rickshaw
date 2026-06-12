@@ -1,13 +1,18 @@
 {
+  "title": "Utility Integration Schema",
+  "description": "Schema for rickshaw.json files inside utility subprojects (such as packrat).  Defines the utility's controller-side lifecycle scripts and engine file transfer configuration.",
   "type": "object",
   "properties": {
     "rickshaw-utility": {
+      "description": "Metadata block containing the schema version for this rickshaw.json utility file format.",
       "type": "object",
       "properties": {
         "schema": {
+          "description": "Schema version information.",
           "type": "object",
           "properties": {
             "version": {
+              "description": "The schema version this file conforms to.  Currently must be '2021.06.16'.",
               "type": "string",
               "pattern": "^2021\\.06\\.16$"
             }
@@ -24,17 +29,21 @@
       "additionalProperties": false
     },
     "utility": {
+      "description": "The utility name, used to identify this utility throughout the system.",
       "type": "string",
       "pattern": "^.+$"
     },
     "controller": {
+      "description": "Defines scripts that run on the controller to manage the utility's lifecycle.",
       "type": "object",
       "properties": {
         "pre-script": {
+          "description": "Script that runs on the controller before benchmark iterations begin.  Used for setup or preparation tasks.",
           "type": "string",
           "pattern": "^.+$"
         },
         "post-script": {
+          "description": "Script that runs on the controller after benchmark iterations complete.  Typically handles post-processing of collected data.",
           "type": "string",
           "pattern": "^.+$"
         }
@@ -45,22 +54,28 @@
       "additionalProperties": false
     },
     "engine": {
+      "description": "Defines the engine-side configuration for this utility, including file transfers from the controller.",
       "type": "object",
       "properties": {
         "files-from-controller": {
+          "description": "Files to copy from the controller to the engine before execution begins.",
           "type": "array",
           "items": {
+            "description": "A file transfer specification defining source and destination paths.",
             "type": "object",
             "properties": {
               "src": {
+                "description": "Source path on the controller where the file is located.",
                 "type": "string",
                 "pattern": "^.+$"
               },
               "dest": {
+                "description": "Destination path in the engine where the file will be placed.",
                 "type": "string",
                 "pattern": "^.+$"
               },
               "required": {
+                "description": "Whether this file must exist on the controller.  If true and the file is missing, execution fails.  If false, the file is skipped if absent.",
                 "type": "boolean"
               }
             },
