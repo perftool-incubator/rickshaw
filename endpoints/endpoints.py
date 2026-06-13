@@ -533,14 +533,10 @@ def get_controller_ip(host):
         for line in result.stdout.splitlines():
             # looking for something like the following line
             #    inet 127.0.0.1/8 scope host lo
-            m = re.search(r"int\s", line)
+            m = re.search(r"inet\s+(\d+\.\d+\.\d+\.\d+)", line)
             if m:
-                split_line = line.split(" ")
-                if len(split_line) > 1:
-                    split_line = split_line[1]
-                    if len(split_line) > 1:
-                        controller_ip = split_line[0]
-                        break
+                controller_ip = m.group(1)
+                break
         if controller_ip is None or not is_ip(controller_ip):
             raise ValueError("Failed to map localhost to loopback IP address (got '%s')" % controller_ip)
         else:
