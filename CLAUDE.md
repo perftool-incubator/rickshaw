@@ -63,6 +63,10 @@ For the kube endpoint, the `arch` setting in `schema/kube.json` lets users targe
 
 The source-images-service validates that `request.arch` matches `platform.machine()` at the start of each job, preventing architecture mismatches from producing incorrectly-tagged images. The `/api/v1/health` endpoint reports the service's native architecture.
 
+## Log Level Propagation
+
+All rickshaw scripts accept `--log-level` with a standard vocabulary: `normal`, `verbose`, `debug`, `verbose-debug`. When `crucible run --log-level <level>` is invoked with a non-default level, `rickshaw-run.py` overrides the `endpoints.log-level` and `roadblock.log-level` values from `rickshaw-settings.json` and updates the settings dict before saving it, so engine scripts also pick up the override via the saved settings file. The `verbose-debug` level enables roadblock's ultra-verbose mode end-to-end (controller, endpoints, and engine-side roadblock invocations).
+
 ## CI
 
 GitHub Actions workflows in `.github/workflows/`:

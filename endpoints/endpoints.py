@@ -976,7 +976,7 @@ def setup_logger(log_level):
     logging_handler.setFormatter(log_format)
 
     match log_level:
-        case "debug":
+        case "debug" | "verbose":
             logging_handler.setLevel(logging.DEBUG)
         case "verbose-debug":
             logging_handler.setLevel(VERBOSE_DEBUG_LEVEL)
@@ -1731,7 +1731,7 @@ def process_options():
                         help = "Allow the user to control the degree of verbosity of the output.",
                         required = False,
                         type = str,
-                        choices = [ "debug", "normal", "verbose-debug" ],
+                        choices = [ "debug", "normal", "verbose", "verbose-debug" ],
                         default = "normal")
 
     parser.add_argument("--max-sample-failures",
