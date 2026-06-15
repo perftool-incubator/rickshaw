@@ -309,7 +309,7 @@ def main():
     parser.add_argument("--base-run-dir", required=True)
     parser.add_argument("--max-jobs", type=int, default=32)
     parser.add_argument("--ver", default="v9dev", choices=SUPPORTED_CDM_VERS)
-    parser.add_argument("--log-level", default="normal", choices=["normal", "debug"])
+    parser.add_argument("--log-level", default="normal", choices=["normal", "verbose", "debug", "verbose-debug"])
     args = parser.parse_args()
 
     logger = setup_logging("rickshaw-gen-docs", args.log_level)

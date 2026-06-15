@@ -29,6 +29,7 @@
                     "enum": [
                         "debug",
                         "normal",
+                        "verbose",
                         "verbose-debug"
                     ],
                     "default": "normal"

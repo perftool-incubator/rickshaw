@@ -32,7 +32,7 @@ def main():
     parser.add_argument("--base-run-dir", required=True,
                         help="Directory where result data is located")
     parser.add_argument("--log-level", default="normal",
-                        choices=["normal", "debug"],
+                        choices=["normal", "verbose", "debug", "verbose-debug"],
                         help="Logging verbosity")
     args = parser.parse_args()
 

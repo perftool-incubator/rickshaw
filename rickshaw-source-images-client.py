@@ -34,12 +34,8 @@ else:
         exit(2)
     sys.path.append(str(p))
 from toolbox.json import validate_schema
+from toolbox.logging import setup_logging
 
-# ---------------------------------------------------------------------------
-# Logging
-# ---------------------------------------------------------------------------
-
-LOG_FORMAT = "%(asctime)s %(levelname)s %(message)s"
 logger = logging.getLogger("rickshaw-source-images-client")
 
 # ---------------------------------------------------------------------------
@@ -665,18 +661,13 @@ def main():
                         help="Path to write output JSON")
     parser.add_argument("--service-url", required=True,
                         help="Base URL of the source-images service")
-    parser.add_argument("--log-level", default="info",
-                        choices=["debug", "info", "warning", "error"],
-                        help="Logging level (default: info)")
+    parser.add_argument("--log-level", default="normal",
+                        choices=["normal", "verbose", "debug", "verbose-debug"],
+                        help="Logging level (default: normal)")
     args = parser.parse_args()
 
     # Configure logging
-    level = getattr(logging, args.log_level.upper(), logging.INFO)
-    if level == logging.DEBUG:
-        log_format = LOG_FORMAT
-    else:
-        log_format = "%(message)s"
-    logging.basicConfig(level=level, format=log_format, stream=sys.stderr)
+    setup_logging("rickshaw-source-images-client", args.log_level)
 
     # 1. Read input JSON
     input_path = _resolve_json_path(args.input)
@@ -704,8 +695,9 @@ def main():
     logger.debug("Building API request from input JSON")
     api_request = _build_api_request(input_data)
 
-    # Pass through the log level to the service
-    api_request["log-level"] = args.log_level
+    # Map to service vocabulary before sending
+    api_level_map = {"normal": "info", "verbose": "debug", "debug": "debug", "verbose-debug": "debug"}
+    api_request["log-level"] = api_level_map.get(args.log_level, "info")
 
     # 4. Submit job
     job_id = _submit_job(args.service_url, api_request)

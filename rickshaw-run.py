@@ -160,6 +160,7 @@ class RunState:
             "roadblock-password": "flubber",
         }
 
+        self.log_level = "normal"
         self.rickshaw_project_dir = str(Path(__file__).resolve().parent)
         self.bench_schema_file = os.path.join(self.rickshaw_project_dir, "schema", "benchmark.json")
         self.tool_schema_file = os.path.join(self.rickshaw_project_dir, "schema", "tool.json")
@@ -1463,6 +1464,7 @@ class RunState:
             f" --input {source_input_file}"
             f" --output {source_output_file}"
             f" --service-url {service_url}"
+            f" --log-level {self.log_level}"
         )
         logger.info("Running (%s): %s", arch, source_images_cmd)
         if len(self.required_archs) > 1:
@@ -2203,12 +2205,16 @@ class RunState:
 
 def main():
     global logger
+    valid_log_levels = ("normal", "verbose", "debug", "verbose-debug")
     log_level = "normal"
     for i, arg in enumerate(sys.argv[1:]):
         if arg == "--log-level" and i + 2 < len(sys.argv):
             log_level = sys.argv[i + 2]
         elif arg.startswith("--log-level="):
             log_level = arg.split("=", 1)[1]
+    if log_level not in valid_log_levels:
+        print(f"Invalid --log-level value '{log_level}'. Must be one of: {', '.join(valid_log_levels)}", file=sys.stderr)
+        sys.exit(1)
     logger = setup_logging("rickshaw-run", log_level)
     # At normal level, suppress library INFO (e.g. roadblock) for curated
     # output. Raise the root logger to WARNING while keeping our own logger
@@ -2219,6 +2225,7 @@ def main():
     logger.info("rickshaw-run.py starting")
 
     state = RunState()
+    state.log_level = log_level
     logger.info("Found %d available cpus, arch=%s", state.available_cpus, state.arch)
 
     for e in ("RS_NAME", "RS_EMAIL", "RS_TAGS", "RS_DESC"):
@@ -2229,6 +2236,18 @@ def main():
 
     state.process_cmdline()
     state.load_settings_info()
+    if state.log_level != "normal":
+        # Map CLI vocabulary to component vocabulary. Endpoints and
+        # roadblock accept normal/debug/verbose-debug but not verbose.
+        settings_level_map = {"verbose": "debug", "debug": "debug", "verbose-debug": "verbose-debug"}
+        settings_level = settings_level_map.get(state.log_level, state.log_level)
+        logger.info("CLI --log-level=%s overriding settings: endpoints=%s->%s, roadblock=%s->%s",
+                     state.log_level, state.endpoint_log_level, settings_level,
+                     state.rb_log_level, settings_level)
+        state.endpoint_log_level = state.log_level
+        state.rb_log_level = settings_level
+        state.jsonsettings["roadblock"]["log-level"] = settings_level
+        state.jsonsettings["endpoints"]["log-level"] = state.log_level
     state.load_bench_params()
     state.validate_controller_env()
     state.make_run_dirs()
