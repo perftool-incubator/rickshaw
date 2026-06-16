@@ -598,26 +598,7 @@ function evaluate_test_roadblock {
 
             echo "My cs_buddy=${cs_buddy}"
 
-            # First look for a message to "all" but sent by my engine buddy
-            # (to be deprecated)
-            local tmp_message_file=$(mktemp)
-            jq -cr '.received[] | select(.payload.sender.id == "'${cs_buddy}'" and
-                    .payload.message.command == "user-object") | .payload.message' ${msgs_log_file} \
-                   > ${tmp_message_file}
-            while read -u 9 line; do
-                let count=${count}+1
-                local msg="${roadblock_label}:${count}"
-                local outfile="${cs_rx_msgs_dir}/${msg}"
-
-                echo "Found user-object message from ${cs_buddy} sent to 'all':"
-                echo -e "\tMessage:  ${line}"
-                echo -e "\tSaved to: ${outfile}"
-
-                echo "${line}" | jq '."user-object"' > "${outfile}"
-            done 9< ${tmp_message_file}
-            rm ${tmp_message_file}
-
-            # Next look for a message sent specifically to this client/server
+            # Look for messages sent specifically to this client/server
             local tmp_message_file=$(mktemp)
             jq -cr '.received[] | select(.payload.recipient.id == "'${cs_label}'" and
                     .payload.message.command == "user-object") | .payload.message' ${msgs_log_file} \
@@ -628,6 +609,27 @@ function evaluate_test_roadblock {
                 local outfile="${cs_rx_msgs_dir}/${msg}"
 
                 echo "Found user-object message sent to 'me':"
+                echo -e "\tMessage:  ${line}"
+                echo -e "\tSaved to: ${outfile}"
+
+                echo "${line}" | jq '."user-object"' > "${outfile}"
+            done 9< ${tmp_message_file}
+            rm ${tmp_message_file}
+
+            # Legacy fallback: accept broadcast messages from engine buddy.
+            # Kept for backward compatibility with benchmark scripts that
+            # still use recipient "all" instead of targeting a specific engine.
+            local tmp_message_file=$(mktemp)
+            jq -cr '.received[] | select(.payload.sender.id == "'${cs_buddy}'" and
+                    .payload.recipient.id == "all" and
+                    .payload.message.command == "user-object") | .payload.message' ${msgs_log_file} \
+                   > ${tmp_message_file}
+            while read -u 9 line; do
+                let count=${count}+1
+                local msg="${roadblock_label}:${count}"
+                local outfile="${cs_rx_msgs_dir}/${msg}"
+
+                echo "Found user-object message from ${cs_buddy} sent to 'all':"
                 echo -e "\tMessage:  ${line}"
                 echo -e "\tSaved to: ${outfile}"
 
