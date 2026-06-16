@@ -673,7 +673,7 @@ function evaluate_test_roadblock {
             # still use recipient "all" instead of targeting a specific engine.
             local tmp_message_file=$(mktemp)
             jq -cr '.received[] | select(.payload.sender.id == "'${cs_buddy}'" and
-                    .payload.recipient.id == "all" and
+                    .payload.recipient.type == "all" and
                     .payload.message.command == "user-object") | .payload.message' ${msgs_log_file} \
                    > ${tmp_message_file}
             while read -u 9 line; do
