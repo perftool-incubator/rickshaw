@@ -526,21 +526,75 @@ function prepare_roadblock_user_msgs_file {
         mkdir -p ${cs_tx_msgs_dir}-sent
         user_msgs_file="${iteration_sample_directory}/rb-msgs-${roadblock_name}.json"
 
+        local separator=""
         echo "[" > "${user_msgs_file}"
         for msg in ${pending_tx_msgs}; do
-            # TODO validate JSON schema
+            local msg_file="${cs_tx_msgs_dir}/${msg}"
             echo "Adding ${msg} to ${user_msgs_file}"
-            cat "${cs_tx_msgs_dir}/${msg}" >> "${user_msgs_file}"
-            /bin/mv "${cs_tx_msgs_dir}/${msg}" "${cs_tx_msgs_dir}-sent"
-            echo "," >> "${user_msgs_file}"
+
+            if jq -e 'has("recipient")' "${msg_file}" >/dev/null 2>&1; then
+                echo "  Pre-formatted message, passing through"
+                echo -n "${separator}" >> "${user_msgs_file}"
+                cat "${msg_file}" >> "${user_msgs_file}"
+            else
+                local buddy=""
+                case "${cs_type}" in
+                    "client") buddy="server-${cs_id}" ;;
+                    "server") buddy="client-${cs_id}" ;;
+                esac
+                echo "  Raw payload, wrapping with targeted addressing (endpoint=${endpoint_label}, buddy=${buddy})"
+                local payload
+                payload=$(cat "${msg_file}")
+                echo -n "${separator}" >> "${user_msgs_file}"
+                echo '{"recipient":{"type":"follower","id":"'${endpoint_label}'"},"user-object":'"${payload}"'}' >> "${user_msgs_file}"
+                echo ',{"recipient":{"type":"follower","id":"'${buddy}'"},"user-object":'"${payload}"'}' >> "${user_msgs_file}"
+            fi
+
+            /bin/mv "${msg_file}" "${cs_tx_msgs_dir}-sent"
+            separator=","
         done
-        echo '{"recipient":{"type":"all","id":"all"},"user-object":{"sync":"'${roadblock_name}'"}}]' >> "${user_msgs_file}"
+        echo "]" >> "${user_msgs_file}"
 
         echo "Contents of ${user_msgs_file}:"
         cat "${user_msgs_file}"
     else
         echo "No queued messages found in ${cs_tx_msgs_dir}"
         user_msgs_file=""
+    fi
+}
+
+function resolve_svc_messages {
+    if [ "${cs_type}" != "client" ]; then
+        return
+    fi
+
+    local svc_file="${cs_rx_msgs_dir}/svc"
+    local source=""
+    local found=""
+
+    for f in ${cs_rx_msgs_dir}/endpoint-start-end:*; do
+        if [ -f "${f}" ]; then
+            found="${f}"
+            source="endpoint"
+            break
+        fi
+    done
+
+    if [ -z "${found}" ]; then
+        for f in ${cs_rx_msgs_dir}/server-start-end:*; do
+            if [ -f "${f}" ]; then
+                found="${f}"
+                source="server (direct)"
+                break
+            fi
+        done
+    fi
+
+    if [ -n "${found}" ]; then
+        ln -s "$(basename "${found}")" "${svc_file}"
+        echo "Resolved service info from ${source} (${svc_file} -> $(basename "${found}"))"
+    else
+        echo "No service info found to resolve"
     fi
 }
 
@@ -596,26 +650,7 @@ function evaluate_test_roadblock {
 
             echo "My cs_buddy=${cs_buddy}"
 
-            # First look for a message to "all" but sent by my engine buddy
-            # (to be deprecated)
-            local tmp_message_file=$(mktemp)
-            jq -cr '.received[] | select(.payload.sender.id == "'${cs_buddy}'" and
-                    .payload.message.command == "user-object") | .payload.message' ${msgs_log_file} \
-                   > ${tmp_message_file}
-            while read -u 9 line; do
-                let count=${count}+1
-                local msg="${roadblock_label}:${count}"
-                local outfile="${cs_rx_msgs_dir}/${msg}"
-
-                echo "Found user-object message from ${cs_buddy} sent to 'all':"
-                echo -e "\tMessage:  ${line}"
-                echo -e "\tSaved to: ${outfile}"
-
-                echo "${line}" | jq '."user-object"' > "${outfile}"
-            done 9< ${tmp_message_file}
-            rm ${tmp_message_file}
-
-            # Next look for a message sent specifically to this client/server
+            # Look for messages sent specifically to this client/server
             local tmp_message_file=$(mktemp)
             jq -cr '.received[] | select(.payload.recipient.id == "'${cs_label}'" and
                     .payload.message.command == "user-object") | .payload.message' ${msgs_log_file} \
@@ -626,6 +661,27 @@ function evaluate_test_roadblock {
                 local outfile="${cs_rx_msgs_dir}/${msg}"
 
                 echo "Found user-object message sent to 'me':"
+                echo -e "\tMessage:  ${line}"
+                echo -e "\tSaved to: ${outfile}"
+
+                echo "${line}" | jq '."user-object"' > "${outfile}"
+            done 9< ${tmp_message_file}
+            rm ${tmp_message_file}
+
+            # Legacy fallback: accept broadcast messages from engine buddy.
+            # Kept for backward compatibility with benchmark scripts that
+            # still use recipient "all" instead of targeting a specific engine.
+            local tmp_message_file=$(mktemp)
+            jq -cr '.received[] | select(.payload.sender.id == "'${cs_buddy}'" and
+                    .payload.recipient.type == "all" and
+                    .payload.message.command == "user-object") | .payload.message' ${msgs_log_file} \
+                   > ${tmp_message_file}
+            while read -u 9 line; do
+                let count=${count}+1
+                local msg="${roadblock_label}:${count}"
+                local outfile="${cs_rx_msgs_dir}/${msg}"
+
+                echo "Found user-object message from ${cs_buddy} sent to 'all':"
                 echo -e "\tMessage:  ${line}"
                 echo -e "\tSaved to: ${outfile}"
 
@@ -923,6 +979,7 @@ function process_bench_roadblocks() {
                 do_roadblock "${rb_name}" ${timeout} messages "${user_msgs_file}"
                 roadblock_rc=$?
                 evaluate_test_roadblock "${rb_name}" ${roadblock_rc} ${iter_array_idx}
+                resolve_svc_messages
                 ####################################################################
                 if [ "${abort}" == "0" -a \
                      "${quit}" == "0" -a \
