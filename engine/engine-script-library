@@ -529,11 +529,28 @@ function prepare_roadblock_user_msgs_file {
         local separator=""
         echo "[" > "${user_msgs_file}"
         for msg in ${pending_tx_msgs}; do
-            # TODO validate JSON schema
+            local msg_file="${cs_tx_msgs_dir}/${msg}"
             echo "Adding ${msg} to ${user_msgs_file}"
-            echo -n "${separator}" >> "${user_msgs_file}"
-            cat "${cs_tx_msgs_dir}/${msg}" >> "${user_msgs_file}"
-            /bin/mv "${cs_tx_msgs_dir}/${msg}" "${cs_tx_msgs_dir}-sent"
+
+            if jq -e 'has("recipient")' "${msg_file}" >/dev/null 2>&1; then
+                echo "  Pre-formatted message, passing through"
+                echo -n "${separator}" >> "${user_msgs_file}"
+                cat "${msg_file}" >> "${user_msgs_file}"
+            else
+                local buddy=""
+                case "${cs_type}" in
+                    "client") buddy="server-${cs_id}" ;;
+                    "server") buddy="client-${cs_id}" ;;
+                esac
+                echo "  Raw payload, wrapping with targeted addressing (endpoint=${endpoint_label}, buddy=${buddy})"
+                local payload
+                payload=$(cat "${msg_file}")
+                echo -n "${separator}" >> "${user_msgs_file}"
+                echo '{"recipient":{"type":"follower","id":"'${endpoint_label}'"},"user-object":'"${payload}"'}' >> "${user_msgs_file}"
+                echo ',{"recipient":{"type":"follower","id":"'${buddy}'"},"user-object":'"${payload}"'}' >> "${user_msgs_file}"
+            fi
+
+            /bin/mv "${msg_file}" "${cs_tx_msgs_dir}-sent"
             separator=","
         done
         echo "]" >> "${user_msgs_file}"
@@ -543,6 +560,41 @@ function prepare_roadblock_user_msgs_file {
     else
         echo "No queued messages found in ${cs_tx_msgs_dir}"
         user_msgs_file=""
+    fi
+}
+
+function resolve_svc_messages {
+    if [ "${cs_type}" != "client" ]; then
+        return
+    fi
+
+    local svc_file="${cs_rx_msgs_dir}/svc"
+    local source=""
+    local found=""
+
+    for f in ${cs_rx_msgs_dir}/endpoint-start-end:*; do
+        if [ -f "${f}" ]; then
+            found="${f}"
+            source="endpoint"
+            break
+        fi
+    done
+
+    if [ -z "${found}" ]; then
+        for f in ${cs_rx_msgs_dir}/server-start-end:*; do
+            if [ -f "${f}" ]; then
+                found="${f}"
+                source="server (direct)"
+                break
+            fi
+        done
+    fi
+
+    if [ -n "${found}" ]; then
+        ln -s "$(basename "${found}")" "${svc_file}"
+        echo "Resolved service info from ${source} (${svc_file} -> $(basename "${found}"))"
+    else
+        echo "No service info found to resolve"
     fi
 }
 
@@ -927,6 +979,7 @@ function process_bench_roadblocks() {
                 do_roadblock "${rb_name}" ${timeout} messages "${user_msgs_file}"
                 roadblock_rc=$?
                 evaluate_test_roadblock "${rb_name}" ${roadblock_rc} ${iter_array_idx}
+                resolve_svc_messages
                 ####################################################################
                 if [ "${abort}" == "0" -a \
                      "${quit}" == "0" -a \
