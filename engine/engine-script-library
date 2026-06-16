@@ -526,15 +526,17 @@ function prepare_roadblock_user_msgs_file {
         mkdir -p ${cs_tx_msgs_dir}-sent
         user_msgs_file="${iteration_sample_directory}/rb-msgs-${roadblock_name}.json"
 
+        local separator=""
         echo "[" > "${user_msgs_file}"
         for msg in ${pending_tx_msgs}; do
             # TODO validate JSON schema
             echo "Adding ${msg} to ${user_msgs_file}"
+            echo -n "${separator}" >> "${user_msgs_file}"
             cat "${cs_tx_msgs_dir}/${msg}" >> "${user_msgs_file}"
             /bin/mv "${cs_tx_msgs_dir}/${msg}" "${cs_tx_msgs_dir}-sent"
-            echo "," >> "${user_msgs_file}"
+            separator=","
         done
-        echo '{"recipient":{"type":"all","id":"all"},"user-object":{"sync":"'${roadblock_name}'"}}]' >> "${user_msgs_file}"
+        echo "]" >> "${user_msgs_file}"
 
         echo "Contents of ${user_msgs_file}:"
         cat "${user_msgs_file}"

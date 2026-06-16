@@ -771,11 +771,6 @@ def prepare_roadblock_user_msgs_file(iteration_sample_dir, engine_tx_msgs_dir, r
                 new_msg_file_full_path = tx_sent_dir + "/" + msg_file
                 logger.info("Moving user message file from %s to %s" % (msg_file_full_path, new_msg_file_full_path))
                 os.replace(msg_file_full_path, new_msg_file_full_path)
-        payload = {
-            "sync": roadblock_name
-        }
-        user_msgs.extend(create_roadblock_msg("all", "all", "user-object", payload))
-
         user_msgs_file = "%s/rb-msgs-%s.json" % (iteration_sample_dir, roadblock_name)
         logger.info("Writing user messages to %s" % (user_msgs_file))
         user_msgs_file_json = dump_json(user_msgs)
