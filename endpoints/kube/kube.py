@@ -525,16 +525,12 @@ def validate():
     endpoints.validate_log("engine-types %s" % (" ".join(list(engine_types))))
 
     engines = dict()
-    userenvs = []
     for engine_role in endpoint_settings["engines"]["settings"].keys():
         if not engine_role in engines:
             engines[engine_role] = []
-        
+
         for engine_id in endpoint_settings["engines"]["settings"][engine_role].keys():
             engines[engine_role].append(engine_id)
-
-            if not endpoint_settings["engines"]["settings"][engine_role][engine_id]["userenv"] in userenvs:
-                userenvs.append(endpoint_settings["engines"]["settings"][engine_role][engine_id]["userenv"])
 
     endpoints.validate_comment("engines: %s" % (engines))
     for engine_role in engines.keys():
@@ -553,9 +549,10 @@ def validate():
             if not found_engine:
                 endpoints.validate_error("Could not find a benchmark mapping for engine ID %d" % (engine_id))
 
-    endpoints.validate_comment("userenvs: %s" % (userenvs))
-    for userenv in userenvs:
-        endpoints.validate_log("userenv %s" % (userenv))
+    for engine_role in endpoint_settings["engines"]["settings"].keys():
+        for engine_id in endpoint_settings["engines"]["settings"][engine_role].keys():
+            userenv = endpoint_settings["engines"]["settings"][engine_role][engine_id]["userenv"]
+            endpoints.validate_log("engine-userenv %s %s %s" % (engine_role, engine_id, userenv))
 
     debug_output = False
     if args.log_level == "debug":
