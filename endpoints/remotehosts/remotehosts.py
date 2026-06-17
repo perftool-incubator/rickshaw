@@ -132,7 +132,6 @@ def validate():
     endpoints.validate_log("engine-types %s" % (" ".join(list(engine_types))))
 
     engines = dict()
-    userenvs = []
     for remote in endpoint_settings["remotes"]:
         for engine in remote["engines"]:
             if engine["role"] == "profiler":
@@ -140,9 +139,6 @@ def validate():
             if not engine["role"] in engines:
                 engines[engine["role"]] = []
             engines[engine["role"]].extend(engine["ids"])
-
-        if not remote["config"]["settings"]["userenv"] in userenvs:
-            userenvs.append(remote["config"]["settings"]["userenv"])
 
     endpoints.validate_comment("engines: %s" % (engines))
     for role in engines.keys():
@@ -158,9 +154,13 @@ def validate():
             if not found_engine:
                 endpoints.validate_error("Could not find a benchmark mapping for engine ID %d" % (engine_id))
 
-    endpoints.validate_comment("userenvs: %s" % (userenvs))
-    for userenv in userenvs:
-        endpoints.validate_log("userenv %s" % (userenv))
+    for remote in endpoint_settings["remotes"]:
+        userenv = remote["config"]["settings"]["userenv"]
+        for engine in remote["engines"]:
+            if engine["role"] == "profiler":
+                continue
+            for eid in engine["ids"]:
+                endpoints.validate_log("engine-userenv %s %d %s" % (engine["role"], eid, userenv))
 
     remotes = dict()
     for remote in endpoint_settings["remotes"]:

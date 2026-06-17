@@ -134,10 +134,9 @@ function osp_req_check() {
     if [ $rc -gt 0 ]; then
         exit_error "Could not run 'openstack' on overcloud host: $osp_cmd"
     fi
-    # Validation returns what clients and servers would be used and the userenv
+    # Validation returns what clients and servers would be used
     if [ "$do_validate" == 1 ]; then
         echo_clients_servers "profiler" "compute"
-        echo "userenv $userenv"
         exit
     fi
 }

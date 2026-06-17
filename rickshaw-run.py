@@ -926,8 +926,6 @@ class RunState:
             with open(os.path.join(validation_dir, f"{endpoint['label']}.txt"), "w") as f:
                 f.write(output)
 
-            endpoint["userenvs"] = []
-
             for line in output.split("\n"):
                 line = line.strip()
                 if not line or line.startswith("#"):
@@ -972,16 +970,21 @@ class RunState:
                     logger.debug("endpoint %s reports architectures: %s",
                                  endpoint["label"], endpoint["archs"])
 
-                elif keyword == "userenv":
-                    userenv = parts[1] if len(parts) > 1 else ""
-                    endpoint["userenvs"].append(userenv)
-                    logger.debug("clients/servers for endpoint %s will have userenv %s",
-                                 endpoint["label"], userenv)
+                elif keyword == "engine-userenv":
+                    role = parts[1]
+                    eid = parts[2]
+                    userenv = parts[3]
+                    endpoint.setdefault("engine-userenvs", {}).setdefault(role, {})[eid] = userenv
 
                 else:
                     logger.error("[ERROR] output from endpoint validation incorrect for %s:\n%s",
                                  endpoint["label"], line)
                     sys.exit(1)
+
+            endpoint["userenvs"] = list(set(
+                ue for role_map in endpoint.get("engine-userenvs", {}).values()
+                for ue in role_map.values()
+            ))
 
         for endpoint in self.endpoints:
             if "archs" in endpoint:
@@ -989,16 +992,6 @@ class RunState:
         if not self.required_archs:
             self.required_archs.add(self.arch)
         logger.info("Required architectures across all endpoints: %s", sorted(self.required_archs))
-
-        for endpoint in self.endpoints:
-            for userenv in endpoint.get("userenvs", []):
-                for arch in endpoint.get("archs", [self.arch]):
-                    for bench_name in self.bench_configs:
-                        if bench_name in self.split_benchmarks:
-                            for role_key in self.split_benchmarks[bench_name].values():
-                                self.image_ids.setdefault(arch, {}).setdefault(role_key, {})[userenv] = {"image": ""}
-                        else:
-                            self.image_ids.setdefault(arch, {}).setdefault(bench_name, {})[userenv] = {"image": ""}
 
         if len(self.bench_configs) == 1:
             bench_name = list(self.bench_configs.keys())[0]
@@ -1021,6 +1014,33 @@ class RunState:
                 self.run["bench-ids"] = f"{bench_name}:{'+'.join(id_ranges)}"
 
         self.assign_bench_ids()
+
+        for endpoint in self.endpoints:
+            engine_userenvs = endpoint.get("engine-userenvs", {})
+            for arch in endpoint.get("archs", [self.arch]):
+                for bench_name in self.bench_configs:
+                    if bench_name in self.split_benchmarks:
+                        for role, role_key in self.split_benchmarks[bench_name].items():
+                            if engine_userenvs:
+                                role_userenvs = set()
+                                for eid, ue in engine_userenvs.get(role, {}).items():
+                                    if self.ids_to_benchmark.get(str(eid)) == bench_name:
+                                        role_userenvs.add(ue)
+                            else:
+                                role_userenvs = endpoint.get("userenvs", [])
+                            for userenv in role_userenvs:
+                                self.image_ids.setdefault(arch, {}).setdefault(role_key, {})[userenv] = {"image": ""}
+                    else:
+                        if engine_userenvs:
+                            bench_userenvs = set()
+                            for role in ("client", "server"):
+                                for eid, ue in engine_userenvs.get(role, {}).items():
+                                    if self.ids_to_benchmark.get(str(eid)) == bench_name:
+                                        bench_userenvs.add(ue)
+                        else:
+                            bench_userenvs = endpoint.get("userenvs", [])
+                        for userenv in bench_userenvs:
+                            self.image_ids.setdefault(arch, {}).setdefault(bench_name, {})[userenv] = {"image": ""}
 
         for bench_name in self.split_benchmarks:
             for role in list(self.split_benchmarks[bench_name].keys()):
