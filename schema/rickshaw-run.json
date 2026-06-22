@@ -157,6 +157,14 @@
       "description": "The source URL for pulling base container images used in engine image builds.",
       "type": "string"
     },
+    "ssh-key-algorithm": {
+      "description": "The SSH key algorithm for the per-run engine key.",
+      "type": "string"
+    },
+    "ssh-key-bits": {
+      "description": "The key size in bits for the per-run SSH key.",
+      "type": "integer"
+    },
     "tool-group": {
       "description": "An identifier grouping related tool configurations together.",
       "type": "string",

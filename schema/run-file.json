@@ -74,6 +74,21 @@
 		    "description": "Override the user email for this run. If specified, name must also be provided.",
 		    "type": "string",
 		    "minLength": 1
+		},
+		"ssh-key-algorithm": {
+		    "description": "The SSH key algorithm for the per-run engine key. Ed25519 is the default but is not permitted in FIPS-compliant environments; use ecdsa or rsa instead.",
+		    "type": "string",
+		    "enum": [
+			"ecdsa",
+			"ed25519",
+			"rsa"
+		    ],
+		    "default": "ed25519"
+		},
+		"ssh-key-bits": {
+		    "description": "The key size in bits for RSA or ECDSA keys. Cannot be used with ed25519 (fixed key size). RSA: minimum 1024, common values 2048/3072/4096. ECDSA: must be 256, 384, or 521 (selecting the elliptic curve).",
+		    "type": "integer",
+		    "minimum": 256
 		}
 	    },
 	    "dependentRequired": {
