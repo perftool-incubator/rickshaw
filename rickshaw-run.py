@@ -297,7 +297,7 @@ class RunState:
                 r'run-id|id|bench-params|tool-params|'
                 r'test-order|tool-group|num-samples|max-sample-failures|name|bench-ids|'
                 r'registries-json|external-userenvs-dir|'
-                r'email|desc)$', arg
+                r'email|desc|ssh-key-algorithm|ssh-key-bits)$', arg
             ):
                 logger.debug("argument: [%s]", arg)
                 self.run[arg] = val
