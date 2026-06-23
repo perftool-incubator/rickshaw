@@ -2752,7 +2752,7 @@ def test_start(msgs_dir, test_id, tx_msgs_dir):
                     if msg["payload"]["message"]["command"] == "user-object":
                         if "svc" in msg["payload"]["message"]["user-object"] and "ports" in msg["payload"]["message"]["user-object"]["svc"]:
                             server_engine = msg["payload"]["sender"]["id"]
-                            client_engine = re.sub(r"server", r"client", server_engine)
+                            client_engine = endpoints.get_engine_buddy(server_engine, settings)
 
                             logger.info("Found a service message from server engine %s to client engine %s:\n%s" % (server_engine, client_engine, endpoints.dump_json(msg["payload"])))
 

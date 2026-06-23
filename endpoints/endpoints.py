@@ -2184,6 +2184,24 @@ def get_profiler_userenv(settings, id):
 
     return None
 
+_engine_pairing_cache = None
+
+def get_engine_buddy(engine_label, settings):
+    """Look up an engine's buddy from the pairing manifest."""
+    global _engine_pairing_cache
+    if _engine_pairing_cache is None:
+        pairing_file = os.path.join(
+            settings["dirs"]["local"]["engine-conf"], "pairing.json")
+        if os.path.exists(pairing_file):
+            _engine_pairing_cache, _ = load_json_file(pairing_file)
+        if _engine_pairing_cache is None:
+            _engine_pairing_cache = {}
+    if engine_label in _engine_pairing_cache:
+        return _engine_pairing_cache[engine_label]
+    return re.sub(r"^(server|client)",
+                  lambda m: "client" if m.group(1) == "server" else "server",
+                  engine_label)
+
 def base64_encode(string):
     """
     Convert a string to base64 encoding
