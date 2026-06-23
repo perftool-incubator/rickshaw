@@ -407,6 +407,26 @@ function get_data() {
         fi
     done 9< "$cs_files_list"
 
+    # Get the engine pairing manifest and determine buddy
+    if [ "$cs_type" == "client" -o "$cs_type" == "server" ]; then
+        scp_from_controller "$ssh_id_file" "$engine_config_dir/pairing.json" "pairing.json" abort get-data-end
+        cs_buddy=""
+        local buddy_source="ID-matching (fallback)"
+        if [ -f "pairing.json" ]; then
+            cs_buddy=$(jq -r '.["'"$cs_label"'"] // empty' "pairing.json")
+            if [ -n "$cs_buddy" ]; then
+                buddy_source="pairing manifest"
+            fi
+        fi
+        if [ -z "$cs_buddy" ]; then
+            case "${cs_type}" in
+                "client") cs_buddy="server-${cs_id}" ;;
+                "server") cs_buddy="client-${cs_id}" ;;
+            esac
+        fi
+        echo "Engine buddy: $cs_buddy (source: $buddy_source)"
+    fi
+
     # Get the benchmark and tool commands
     cs_start_bench_cmds="$cs_label-start-bench.cmds"
     # Everyone gets the bench-start-cmds (the client's start cmds) because that tells everyone how many tests there are
@@ -537,11 +557,7 @@ function prepare_roadblock_user_msgs_file {
                 echo -n "${separator}" >> "${user_msgs_file}"
                 cat "${msg_file}" >> "${user_msgs_file}"
             else
-                local buddy=""
-                case "${cs_type}" in
-                    "client") buddy="server-${cs_id}" ;;
-                    "server") buddy="client-${cs_id}" ;;
-                esac
+                local buddy="${cs_buddy}"
                 echo "  Raw payload, wrapping with targeted addressing (endpoint=${endpoint_label}, buddy=${buddy})"
                 local payload
                 payload=$(cat "${msg_file}")
@@ -638,15 +654,6 @@ function evaluate_test_roadblock {
             local cs_buddy=""
             local count=0
             local roadblock_label=$(echo "${roadblock_name}" | awk -F: '{ print $2 }')
-
-            case "${cs_type}" in
-                "client")
-                    cs_buddy="server-${cs_id}"
-                    ;;
-                "server")
-                    cs_buddy="client-${cs_id}"
-                    ;;
-            esac
 
             echo "My cs_buddy=${cs_buddy}"
 
