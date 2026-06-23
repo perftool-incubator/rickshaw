@@ -836,7 +836,7 @@ class RunState:
                         "but none are defined", label)
                     sys.exit(1)
 
-                if server_ids and ratio != "1:N":
+                if server_ids and server_required and ratio != "1:N":
                     if len(client_ids) != len(server_ids):
                         logger.error(
                             "[ERROR] benchmark '%s' has %d client(s) and "
