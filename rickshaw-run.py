@@ -202,6 +202,7 @@ class RunState:
         self.split_benchmarks = {}
         self.benchmark_to_ids = {}
         self.ids_to_benchmark = {}
+        self.bench_instances = []
         self.endpoints = []
         self.image_ids = {}
         self.tools_configs = {}
@@ -778,6 +779,7 @@ class RunState:
             if len(parts) != 2:
                 continue
             bench, ids_str = parts
+            instance_ids = set()
             id_ranges = []
             for segment in ids_str.split(","):
                 for sub in segment.split("+"):
@@ -788,11 +790,126 @@ class RunState:
                     for i in range(int(m.group(1)), int(m.group(2)) + 1):
                         self.ids_to_benchmark[str(i)] = bench
                         self.benchmark_to_ids.setdefault(bench, []).append(str(i))
+                        instance_ids.add(str(i))
                 elif re.match(r'^\d+$', id_range):
                     self.ids_to_benchmark[id_range] = bench
                     self.benchmark_to_ids.setdefault(bench, []).append(id_range)
+                    instance_ids.add(id_range)
                 else:
                     logger.warning("ID range or number not recognized: %s", id_range)
+            if instance_ids:
+                self.bench_instances.append({"name": bench, "ids": instance_ids})
+
+    def validate_client_server_ids(self):
+        """Validate client/server ID allocation per benchmark instance."""
+        for idx, instance in enumerate(self.bench_instances):
+            bench_name = instance["name"]
+            instance_ids = instance["ids"]
+            bench_config = self.bench_configs.get(bench_name, {})
+
+            client_ids = {eid for eid in instance_ids
+                          if eid in self.clients_servers.get("client", {})}
+            server_ids = {eid for eid in instance_ids
+                          if eid in self.clients_servers.get("server", {})}
+
+            has_server_config = "server" in bench_config
+            server_required = (has_server_config
+                               and bench_config["server"].get("required", True))
+            ratio = bench_config.get("client", {}).get("client-server-ratio", "")
+
+            label = bench_name
+            name_count = sum(1 for i in self.bench_instances if i["name"] == bench_name)
+            if name_count > 1:
+                label = f"{bench_name}[{idx}]"
+
+            if not client_ids:
+                logger.error(
+                    "[ERROR] benchmark '%s' has no client engines "
+                    "(IDs %s are all server-only)",
+                    label, sorted(instance_ids, key=int))
+                sys.exit(1)
+
+            if has_server_config:
+                if server_required and not server_ids:
+                    logger.error(
+                        "[ERROR] benchmark '%s' requires server engines "
+                        "but none are defined", label)
+                    sys.exit(1)
+
+                if server_ids and server_required and ratio != "1:N":
+                    if len(client_ids) != len(server_ids):
+                        logger.error(
+                            "[ERROR] benchmark '%s' has %d client(s) and "
+                            "%d server(s); for 1:1 client-server-ratio "
+                            "these must be equal (set client-server-ratio "
+                            "to '1:N' in rickshaw.json to allow unequal "
+                            "counts)", label,
+                            len(client_ids), len(server_ids))
+                        sys.exit(1)
+            else:
+                if server_ids:
+                    logger.error(
+                        "[ERROR] benchmark '%s' does not use servers but "
+                        "server engine IDs %s are assigned to it",
+                        label, sorted(server_ids, key=int))
+                    sys.exit(1)
+
+            count_msg = f"{len(client_ids)} client(s)"
+            if server_ids:
+                count_msg += f", {len(server_ids)} server(s)"
+            if ratio:
+                count_msg += f" (client-server-ratio: {ratio})"
+            logger.info("Benchmark '%s': %s", label, count_msg)
+
+    def compute_engine_pairing(self):
+        """Compute server-client pairing per benchmark instance and write pairing.json."""
+        pairing = {}
+
+        for instance in self.bench_instances:
+            bench_name = instance["name"]
+            instance_ids = instance["ids"]
+            bench_config = self.bench_configs.get(bench_name, {})
+            ratio = bench_config.get("client", {}).get("client-server-ratio", "")
+
+            client_ids = sorted(
+                (eid for eid in instance_ids
+                 if eid in self.clients_servers.get("client", {})),
+                key=int)
+            server_ids = sorted(
+                (eid for eid in instance_ids
+                 if eid in self.clients_servers.get("server", {})),
+                key=int)
+
+            if not client_ids or not server_ids:
+                continue
+
+            if ratio == "1:N":
+                for i, sid in enumerate(server_ids):
+                    target_client = client_ids[i % len(client_ids)]
+                    pairing[f"server-{sid}"] = f"client-{target_client}"
+                for cid in client_ids:
+                    paired_servers = [sid for sid in server_ids
+                                     if pairing.get(f"server-{sid}") == f"client-{cid}"]
+                    if paired_servers:
+                        pairing[f"client-{cid}"] = f"server-{paired_servers[0]}"
+            else:
+                for cid, sid in zip(client_ids, server_ids):
+                    pairing[f"client-{cid}"] = f"server-{sid}"
+                    pairing[f"server-{sid}"] = f"client-{cid}"
+
+            ratio_label = f" (client-server-ratio: {ratio})" if ratio else ""
+            logger.info("Engine pairing for benchmark '%s'%s:", bench_name, ratio_label)
+            for cid in client_ids:
+                paired_servers = [sid for sid in server_ids
+                                  if pairing.get(f"server-{sid}") == f"client-{cid}"]
+                if paired_servers:
+                    server_list = ", ".join(f"server-{s}" for s in paired_servers)
+                    logger.info("  client-%s <-> %s", cid, server_list)
+
+        pairing_file = os.path.join(self.engine_config_dir, "pairing.json")
+        with open(pairing_file, "w") as fh:
+            json.dump(pairing, fh, indent=2, sort_keys=True)
+        logger.debug("Wrote engine pairing manifest to %s", pairing_file)
 
     def make_run_dirs(self):
         for dirtype in ("base-run-dir", "tools-dir"):
@@ -1014,6 +1131,8 @@ class RunState:
                 self.run["bench-ids"] = f"{bench_name}:{'+'.join(id_ranges)}"
 
         self.assign_bench_ids()
+        self.validate_client_server_ids()
+        self.compute_engine_pairing()
 
         for endpoint in self.endpoints:
             engine_userenvs = endpoint.get("engine-userenvs", {})
