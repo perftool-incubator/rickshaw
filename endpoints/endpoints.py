@@ -33,6 +33,13 @@ else:
         exit(2)
     sys.path.append(str(p))
 from toolbox.json import *
+from toolbox.messages import (
+    create_roadblock_msg as _tb_create_roadblock_msg,
+    prepare_user_msgs_file as _tb_prepare_user_msgs_file,
+    evaluate_roadblock_result as _tb_evaluate_roadblock_result,
+    save_received_messages as _tb_save_received_messages,
+    ROADBLOCK_EXITS,
+)
 
 ROADBLOCK_HOME = os.environ.get('ROADBLOCK_HOME')
 if ROADBLOCK_HOME is None:
@@ -49,12 +56,7 @@ else:
 from roadblock import roadblock
 from roadblock import VERBOSE_DEBUG_LEVEL
 
-roadblock_exits = {
-    "success": 0,
-    "timeout": 3,
-    "abort": 4,
-    "input": 2
-}
+roadblock_exits = ROADBLOCK_EXITS
 
 logger = logging.getLogger(__file__)
 
@@ -593,33 +595,11 @@ def get_controller_ip(host):
     return controller_ip
 
 def create_roadblock_msg(recipient_type, recipient_id, payload_type, payload):
+    """Create a user built roadblock message.
+
+    Delegates to toolbox.messages.create_roadblock_msg().
     """
-    Create a user built roadblock message
-
-    Args:
-        recipient_type (str): What type of roadblock participant ("leader" or "follower" or "all") is the message for
-        recipient_id (str): What is the specific name/ID of the intended message recipient
-
-    Globals:
-        logger: a logger instance
-
-    Returns:
-        msg (dict): The generated message
-    """
-    msg = [
-        {
-            "recipient": {
-                "type": recipient_type,
-                "id": recipient_id,
-            },
-            payload_type: payload
-        }
-    ]
-
-    json_msg = dump_json(msg)
-    logger.info("Creating new roadblock message for recipient type '%s' with recipient id '%s':\n%s" % (recipient_type, recipient_id, json_msg), stacklevel = 2)
-
-    return msg
+    return _tb_create_roadblock_msg(recipient_type, recipient_id, payload_type, payload)
 
 def do_roadblock(roadblock_id = None, label = None, timeout = None, messages = None, wait_for = None, abort = None, follower_id = None, redis_password = None, msgs_dir = None, connection_watchdog = None):
     """
@@ -730,121 +710,43 @@ def do_roadblock(roadblock_id = None, label = None, timeout = None, messages = N
     return rc
 
 def prepare_roadblock_user_msgs_file(iteration_sample_dir, engine_tx_msgs_dir, roadblock_name):
+    """Prepare queued messages for distribution via roadblock.
+
+    Delegates to toolbox.messages.prepare_user_msgs_file().
     """
-    Prepare queued messages for distribution via roadblock
-
-    Args:
-        iteration_sample_dir (str): The directory where the iteration sample's files are stored
-        engine_tx_msgs_dir (str): Where to write messages to send
-        roadblock_name (str): The name of the roadblock that the messages should be sent for
-
-    Globals:
-        logger: a logger instance
-
-    Returns:
-        user_msgs_file (str): The file containing the user messages if there are queued messages
-        or
-        None: If there are no queued messages
-    """
-    queued_msg_files = []
-    with os.scandir(engine_tx_msgs_dir) as tx_msgs_dir:
-        for entry in tx_msgs_dir:
-            queued_msg_files.append(entry.name)
-
-    if len(queued_msg_files) > 0:
-        logger.info("Found queued messages in %s, preparing them to send" % (engine_tx_msgs_dir))
-
-        tx_sent_dir = engine_tx_msgs_dir + "-sent"
-        my_make_dirs(tx_sent_dir)
-
-        user_msgs = []
-        for msg_file in queued_msg_files:
-            msg_file_full_path = engine_tx_msgs_dir + "/" + msg_file
-            logger.info("Importing %s" % (msg_file_full_path))
-            msg_file_json,err = load_json_file(msg_file_full_path)
-            if msg_file_json is None:
-                logger.error("Failed to load user messages from %s with error '%s'" % (msg_file_full_path, err))
-            else:
-                logger.info("Adding user messages from %s" % (msg_file_full_path))
-                user_msgs.extend(msg_file_json)
-
-                new_msg_file_full_path = tx_sent_dir + "/" + msg_file
-                logger.info("Moving user message file from %s to %s" % (msg_file_full_path, new_msg_file_full_path))
-                os.replace(msg_file_full_path, new_msg_file_full_path)
-        user_msgs_file = "%s/rb-msgs-%s.json" % (iteration_sample_dir, roadblock_name)
-        logger.info("Writing user messages to %s" % (user_msgs_file))
-        user_msgs_file_json = dump_json(user_msgs)
-        with open(user_msgs_file, "w", encoding = "ascii") as user_msgs_file_fp:
-            user_msgs_file_fp.write(user_msgs_file_json)
-        logger.info("Contents of %s:\n%s" % (user_msgs_file, user_msgs_file_json))
-
-        return user_msgs_file
-    else:
-        logger.info("No queued messages found in %s" % (engine_tx_msgs_dir))
-        return None
+    return _tb_prepare_user_msgs_file(engine_tx_msgs_dir, iteration_sample_dir, roadblock_name)
 
 def evaluate_roadblock(quit, abort, roadblock_name, roadblock_rc, iteration_sample, engine_rx_msgs_dir, max_sample_failures):
+    """Evaluate roadblock status and its effect on the test.
+
+    Delegates core evaluation to toolbox.messages.evaluate_roadblock_result()
+    and applies state mutations to iteration_sample.
     """
-    Evaluate the status of a completed roadblock and it's affect on the test
+    result = _tb_evaluate_roadblock_result(roadblock_rc, roadblock_name, engine_rx_msgs_dir)
 
-    Args:
-        quit (bool): Should the entire test be quit
-        abort (bool): Should the iteration be aborted
-        roadblock_name (str): The name of the roadblock being evaluated
-        iteration_sample (dict): The data structure representing the specific iteration sample being evaluated
-        engine_rx_msgs_dir (str): Where to look for received messages
-        max_sample_failures (int): The maximum number of sample failures that an iteration can have before it fails
+    if result["is_timeout"]:
+        quit = True
 
-    Globals:
-        logger: a logger instance
-        roadblock_exits (dict): A mapping of specific roadblock "events" to their associated return code
+    if result["is_abort"]:
+        iteration_sample["attempt-fail"] = 1
+        iteration_sample["failures"] += 1
+        logger.info("iteration sample failures is now %d", iteration_sample["failures"])
 
-    Returns:
-        abort (bool): The current abort value
-        quit (bool): The current quit value
-    """
-    if roadblock_rc != 0:
-        if roadblock_rc == roadblock_exits["timeout"]:
-            logger.error("Roadblock '%s' timed out, attempting to exit and cleanly finish the run" % (roadblock_name))
-            quit = True
-        elif roadblock_rc == roadblock_exits["abort"]:
-            logger.warning("Roadblock '%s' received an abort, stopping sample" % (roadblock_name))
+        if iteration_sample["failures"] >= max_sample_failures:
+            iteration_sample["complete"] = True
+            logger.error(
+                "A maximum of %d failures for iteration %d has been reached",
+                iteration_sample["failures"], iteration_sample["iteration-id"],
+            )
 
-            iteration_sample["attempt-fail"] = 1
-            iteration_sample["failures"] += 1
-            logger.info("iteration sample failures is now %d" % (iteration_sample["failures"]))
+        abort = True
 
-            if iteration_sample["failures"] >= max_sample_failures:
-                iteration_sample["complete"] = True
-                logger.error("A maximum of %d failures for iteration %d has been reached" % (iteration_sample["failures"], iteration_sample["iteration-id"]))
-
-            abort = True
-
-    msgs_log_file = engine_rx_msgs_dir + "/" + roadblock_name + ".json"
-    path = Path(msgs_log_file)
-    if path.exists() and path.is_file():
-        logger.info("Found received messages file: %s" % (msgs_log_file))
-
+    if result["messages"]:
         split_roadblock_name = roadblock_name.split(":")
         roadblock_label = split_roadblock_name[1]
+        _tb_save_received_messages(result["messages"], engine_rx_msgs_dir, roadblock_label)
 
-        msgs_json,err = load_json_file(msgs_log_file)
-        if not msgs_json is None:
-            if "received" in msgs_json:
-                counter = 0
-                for msg in msgs_json["received"]:
-                    if msg["payload"]["message"]["command"] == "user-object":
-                        counter += 1
-                        msg = "%s:%d" % (roadblock_label, counter)
-                        msg_outfile = engine_rx_msgs_dir + "/" + msg
-                        msg_outfile_json = dump_json(msg["paylod"]["message"]["user-object"])
-                        logger.info("Found user-object message and saved it to %s:\nmessage:\n%s" % (msg_outfile, msg_outfile_json))
-                        with open(msg_outfile, "w", encoding = "ascii") as msg_outfile_fp:
-                            msg_outfile_fp.write(msg_outfile_json)
-        else:
-            logger.error("Failed to load %s due to error '%s'" % (msgs_log_file, str(err)))
-
-    return quit,abort
+    return quit, abort
 
 def my_make_dirs(mydir):
     """
@@ -1645,6 +1547,7 @@ def process_bench_roadblocks(callbacks = None, roadblock_id = None, endpoint_lab
 
                 if quit:
                     logger.error("A quit signal has been encountered")
+
 
             logger.info("Completed iteration %d sample %d (test %d of %d) attempt number %d of %d %s" %
                      (
