@@ -2206,6 +2206,7 @@ class RunState:
                         logger.warning("[WARNING] An abort signal has been encountered!")
                     if quit_flag:
                         logger.error("[ERROR] A quit signal has been encountered!")
+                    abort = 0
 
                 logger.info(
                     "Completed iteration %d sample %d (test %d of %d) attempt number %d of %d %s",

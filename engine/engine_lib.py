@@ -704,7 +704,7 @@ class Engine:
 
         if result["is_timeout"]:
             self.quit = True
-        if result["is_abort"]:
+        if result["is_abort"] and not self.abort:
             sample_data[iter_idx]["attempt-fail"] = True
             sample_data[iter_idx]["failures"] += 1
             logger.info(
@@ -1079,6 +1079,7 @@ class Engine:
                         iter_id, samp_id, i + 1, total_tests,
                         sd["attempt-num"], self.max_sample_failures,
                     )
+                    self.abort = False
 
     def _copy_files_to_sample_dir(self, iter_samp_dir):
         for entry in os.listdir("."):

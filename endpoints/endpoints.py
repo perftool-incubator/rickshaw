@@ -727,7 +727,7 @@ def evaluate_roadblock(quit, abort, roadblock_name, roadblock_rc, iteration_samp
     if result["is_timeout"]:
         quit = True
 
-    if result["is_abort"]:
+    if result["is_abort"] and not abort:
         iteration_sample["attempt-fail"] = 1
         iteration_sample["failures"] += 1
         logger.info("iteration sample failures is now %d", iteration_sample["failures"])
@@ -1548,6 +1548,7 @@ def process_bench_roadblocks(callbacks = None, roadblock_id = None, endpoint_lab
                 if quit:
                     logger.error("A quit signal has been encountered")
 
+                abort = False
 
             logger.info("Completed iteration %d sample %d (test %d of %d) attempt number %d of %d %s" %
                      (
