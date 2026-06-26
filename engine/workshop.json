@@ -8,7 +8,29 @@
 	{
 	    "name": "default",
 	    "requirements": [
-		"engine-files"
+		"engine-files",
+		"engine-python-pip"
+	    ]
+	},
+	{
+	    "name": "fedora42",
+	    "requirements": [
+		"engine-files",
+		"engine-python-distro"
+	    ]
+	},
+	{
+	    "name": "fedora43",
+	    "requirements": [
+		"engine-files",
+		"engine-python-distro"
+	    ]
+	},
+	{
+	    "name": "fedora-latest",
+	    "requirements": [
+		"engine-files",
+		"engine-python-distro"
 	    ]
 	}
     ],
@@ -19,7 +41,7 @@
 	    "files_info": {
 		"files": [
 		    {
-			"src": "%rickshaw-dir%/engine/bootstrap",
+			"src": "%rickshaw-dir%/engine/bootstrap.py",
 			"dst": "/usr/local/bin"
 		    },
 		    {
@@ -30,6 +52,26 @@
 			"src": "%rickshaw-dir%/engine/partition-cpus.py",
 			"dst": "/usr/local/bin"
 		    }
+		]
+	    }
+	},
+	{
+	    "name": "engine-python-distro",
+	    "type": "distro",
+	    "distro_info": {
+		"packages": [
+		    "python3-invoke",
+		    "python3-fabric"
+		]
+	    }
+	},
+	{
+	    "name": "engine-python-pip",
+	    "type": "python3",
+	    "python3_info": {
+		"packages": [
+		    "invoke",
+		    "fabric"
 		]
 	    }
 	}
