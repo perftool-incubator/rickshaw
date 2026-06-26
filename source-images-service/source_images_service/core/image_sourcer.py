@@ -52,7 +52,7 @@ def _write_cs_conf(
     cs_conf: dict[str, Any] = {
         "workshop": {"schema": {"version": "2020.04.30"}},
         "config": {
-            "entrypoint": ["/bin/sh", "-c", "/usr/local/bin/bootstrap"],
+            "entrypoint": ["python3", "/usr/local/bin/bootstrap.py"],
             "envs": ["TOOLBOX_HOME=/opt/toolbox"],
         },
     }

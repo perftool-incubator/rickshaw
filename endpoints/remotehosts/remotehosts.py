@@ -1160,7 +1160,7 @@ def start_chroot(thread_name, remote_name, engine_name, container_name, connecti
         ])
 
     start_cmd.extend([
-        "/usr/local/bin/bootstrap",
+        "python3", "/usr/local/bin/bootstrap.py",
         "--base-run-dir=" + settings["dirs"]["local"]["base"],
         "--cpu-partitioning=" + str(cpu_partitioning),
         "--cs-label=" + engine_name,
@@ -1187,6 +1187,7 @@ def start_chroot(thread_name, remote_name, engine_name, container_name, connecti
 
     start_cmd.extend([
         ">" + settings["dirs"]["remote"]["logs"] + "/" + engine_name + ".txt",
+        "2>&1",
         "&"
     ])
 

@@ -939,8 +939,8 @@ class RunState:
         self.engine_archives_dir = os.path.join(self.engine_run_dir, "archives")
         os.makedirs(self.engine_archives_dir, exist_ok=True)
 
-        self.engine_run_script = os.path.join(self.engine_config_dir, "engine-script")
-        self.engine_library_script = os.path.join(self.engine_config_dir, "engine-script-library")
+        self.engine_run_script = os.path.join(self.engine_config_dir, "engine.py")
+        self.engine_library_script = os.path.join(self.engine_config_dir, "engine_lib.py")
         self.engine_roadblock_script = os.path.join(self.engine_config_dir, "roadblocker.py")
         self.engine_roadblock_config = os.path.join(self.engine_config_dir, "roadblocker_config.py")
         self.engine_roadblock_module = os.path.join(self.engine_config_dir, "roadblock.py")
@@ -1454,8 +1454,8 @@ class RunState:
                     sys.exit(rc)
 
         for src, dst in [
-            (os.path.join(self.rickshaw_project_dir, "engine", "engine-script"), self.engine_run_script),
-            (os.path.join(self.rickshaw_project_dir, "engine", "engine-script-library"), self.engine_library_script),
+            (os.path.join(self.rickshaw_project_dir, "engine", "engine.py"), self.engine_run_script),
+            (os.path.join(self.rickshaw_project_dir, "engine", "engine_lib.py"), self.engine_library_script),
             (os.path.join(self.run["roadblock-dir"], "roadblocker.py"), self.engine_roadblock_script),
             (os.path.join(self.run["roadblock-dir"], "roadblocker_config.py"), self.engine_roadblock_config),
             (os.path.join(self.run["roadblock-dir"], "roadblock.py"), self.engine_roadblock_module),
