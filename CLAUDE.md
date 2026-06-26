@@ -15,9 +15,13 @@ Rickshaw is a benchmark orchestration framework that manages container image bui
 
 ## Languages
 
-- **Python 3.10+**: `rickshaw-run.py`, `rickshaw-post-process-bench.py`, `rickshaw-post-process-tools.py`, `rickshaw-gen-docs.py`, `rickshaw-source-images-client.py`, `source-images-service/`, `endpoints/`, `util/`
-- **Bash**: `engine/` scripts
+- **Python 3.10+**: `rickshaw-run.py`, `rickshaw-post-process-bench.py`, `rickshaw-post-process-tools.py`, `rickshaw-gen-docs.py`, `rickshaw-source-images-client.py`, `source-images-service/`, `endpoints/`, `engine/` (engine.py, engine_lib.py, bootstrap.py), `util/`
+- **Bash**: `engine/bootstrap` (legacy, retained for fallback), `engine/engine-script` + `engine/engine-script-library` (legacy, retained for fallback). Benchmark and tool scripts called by the engine remain Bash.
 - **JSON**: Schema definitions, configuration files
+
+### Engine runtime
+
+The engine scripts that run inside benchmark/tool containers are Python (`engine.py`, `engine_lib.py`). The `engine.runtime` setting in `rickshaw-settings.json` controls which files are staged (`"python"` or `"bash"`, default `"python"`). The bash bootstrap auto-detects which files were staged and execs the appropriate entry point. The Engine class in `engine_lib.py` uses Fabric/paramiko for SSH file transfer and Invoke for local command execution. Benchmark and tool scripts remain Bash — the Python engine runs them as subprocesses.
 
 ## Key Conventions
 
