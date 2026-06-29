@@ -651,7 +651,6 @@ function evaluate_test_roadblock {
         if [ "${cs_type}" == "client" -o "${cs_type}" == "server" ]; then
             echo "Processing message file:"
 
-            local cs_buddy=""
             local count=0
             local roadblock_label=$(echo "${roadblock_name}" | awk -F: '{ print $2 }')
 
