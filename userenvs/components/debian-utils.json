@@ -3,7 +3,7 @@
       "type": "distro",
       "distro_info": {
         "packages": [
-          "curl", "tar", "cpio", "xz-utils", "gzip", "jq", "git", "cpio", "findutils", "hostname", "iputils-ping", "numactl"
+          "curl", "tar", "cpio", "xz-utils", "gzip", "jq", "git", "findutils", "hostname", "iputils-ping", "numactl"
         ]
       }
     }

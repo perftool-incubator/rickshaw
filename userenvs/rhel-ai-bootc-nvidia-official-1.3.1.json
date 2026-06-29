@@ -31,10 +31,12 @@
   },
   "requirements": [
     {
-          "name": "rm-rhel-ai-repo",
-        "type": "manual",
+      "name": "rm-rhel-ai-repo",
+      "type": "manual",
       "manual_info": {
-        "commands": [ "/bin/rm -f /etc/yum.repos.d/rhelai.repo" ]
+        "commands": [
+          "/bin/rm -f /etc/yum.repos.d/rhelai.repo"
+        ]
       }
     },
     {
@@ -59,7 +61,6 @@
           "gzip",
           "jq",
           "git",
-          "cpio",
           "findutils",
           "hostname",
           "iputils",
