@@ -262,7 +262,7 @@ function process_opts() {
 }
 if [ -z "$max_sample_failures" ]; then
     max_sample_failures=3
-    if [ "do_validate" == "0" ]; then
+    if [ "$do_validate" == "0" ]; then
         echo "[WARNING] --max-sample-failures was not used, so setting to default of $max_sample_failures"
     fi
 fi
@@ -628,7 +628,7 @@ function do_roadblock() {
     fi
     if [ -n "${wait_for_log}" -a -f "${wait_for_log}" ]; then
         echo "wait-for log:"
-        cat ${wait_fir_log}
+        cat ${wait_for_log}
         rm ${wait_for_log}
     fi
 
@@ -686,7 +686,7 @@ function evaluate_test_roadblock {
             sample_data_attempt_fail[${iter_array_idx}]=1;
 
             (( sample_data_failures[${iter_array_idx}]++ ))
-            printf "sample failures is now: %d\n", ${sample_data_failures[${iter_array_idx}]}
+            printf "sample failures is now: %d\n" ${sample_data_failures[${iter_array_idx}]}
 
             if [ ${sample_data_failures[${iter_array_idx}]} -ge ${max_sample_failures} ]; then
                 sample_data_complete[${iter_array_idx}]=1
@@ -1225,8 +1225,8 @@ function call_endpoint_specific_function() {
 }
 
 get_benchmark_from_id() {
-    local this_id = $1; shift
-    echo ${ids_to_bench[$this_id]}
+    local this_id=$1; shift
+    echo ${id_to_bench[$this_id]}
 }
 
 function make_osruntime_boostrap_script() {
