@@ -323,6 +323,21 @@ def validate_error(msg):
     """
     return print("ERROR: " + msg)
 
+def validate_warning(msg):
+    """
+    Log a validation warning message
+
+    Args:
+        msg (str): The message to log
+
+    Globals:
+        None
+
+    Returns:
+        None
+    """
+    return print("# WARNING: " + msg)
+
 def validate_debug(msg):
     """
     Log a vlidation debug message
