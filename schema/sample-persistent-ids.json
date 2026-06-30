@@ -73,12 +73,12 @@
         "additionalProperties": false
       },
       "additionalItems": false
-    },
-    "required": [
-      "sample-persistent-ids",
-      "samples",
-      "periods"
-    ],
-    "additionalProperties": false
-  }
+    }
+  },
+  "required": [
+    "sample-persistent-ids",
+    "samples",
+    "periods"
+  ],
+  "additionalProperties": false
 }
