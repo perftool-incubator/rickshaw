@@ -102,8 +102,7 @@
           "libcap-devel",
           "libnl3-devel",
           "numactl-devel",
-          "libpfm",
-          "glibc-gconv-extra"
+          "libpfm"
         ]
       }
     },
