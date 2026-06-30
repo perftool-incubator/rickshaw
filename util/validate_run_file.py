@@ -4,6 +4,7 @@
 
 from blockbreaker import load_json_file,validate_schema
 import argparse
+import sys
 
 def process_options():
     """Handle the CLI argument parsing options"""
@@ -26,6 +27,8 @@ def validate(filename):
     if input_json is None:
         err_msg=f"Failed to load run-file JSON { filename }"
         rc=1
+        print(f"ERROR: { err_msg }", file=sys.stderr)
+        return rc
 
     if not validate_schema(input_json):
         err_msg=f"Failed to validate run-file JSON { filename } against schema."

@@ -485,7 +485,7 @@ def get_userenvs(logger):
         logger.info("Creating final userenvs through rickshaw userenv PR process")
 
         for userenv in userenvs:
-            logger.info("Adding '%s' userenv")
+            logger.info("Adding '%s' userenv", userenv)
             final_userenvs.append(userenv)
 
         logger.info("Total userenvs added: %d" % (len(final_userenvs)))
