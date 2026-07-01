@@ -103,13 +103,13 @@ def load_json_file(json_file):
     except FileNotFoundError as err:
          err_msg = f"Could not find JSON file { json_file }:{ err }"
     except IOError as err:
-         err_msg = "Could not open/read JSON file { json_file }:{ err }"
-    except Exception as err:
-         err_msg = f"Unexpected error opening JSON file { json_file }:{ err }"
+         err_msg = f"Could not open/read JSON file { json_file }:{ err }"
     except JSONDecodeError as err:
-         err_msg = f"Decoding JSON file %s has failed: { json_file }:{ err }"
+         err_msg = f"Decoding JSON file has failed: { json_file }:{ err }"
     except TypeError as err:
          err_msg = f"JSON object type error: { err }"
+    except Exception as err:
+         err_msg = f"Unexpected error opening JSON file { json_file }:{ err }"
     if err_msg is not None:
          print(err_msg, file=sys.stderr)
     return None   

@@ -2089,7 +2089,7 @@ def create_tools_pods(abort_event):
             endpoints.log_result(result)
             if result.exited != 0:
                 logger.error("Did not create CRD for pod '%s'" % (pod_name))
-                failed_crds.append(engine_name)
+                failed_crds.append(pod_name)
             else:
                 logger.info("Created CRD for pod '%s'" % (pod_name))
                 created_crds.append(pod_name)
@@ -2824,9 +2824,9 @@ def test_start(msgs_dir, test_id, tx_msgs_dir):
                                         logger.info("Building ingress-lb using MetalLB pool '%s'" % (endpoint["metallb-pool"]))
 
                                         crd = build_network_crd_obj("ingress-lb",
-                                                                    build_metallb_crd(obj["server-engine"]),
+                                                                    build_metallb_crd(obj["server-engine"],
                                                                                       obj["ports"],
-                                                                                      endpoint["metallb-pool"])
+                                                                                      endpoint["metallb-pool"]))
 
                                         logger.info("Created ingress-lb CRD:\n%s" % (endpoints.dump_json(crd)))
                                         obj["crds"].append(crd)

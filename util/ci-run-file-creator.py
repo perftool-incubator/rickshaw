@@ -169,7 +169,7 @@ def update_endpoint_sub_type():
             if args.endpoint_sub_type == "NONE":
                 msg = "%s endpoint expected sub-type of either 'GENERIC', 'MICROK8S', or 'OCP' (not 'NONE')"
                 log.error(msg)
-                raise VelueError(msg)
+                raise ValueError(msg)
 
     return
 

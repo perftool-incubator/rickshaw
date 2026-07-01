@@ -14,11 +14,11 @@
                         "user": {
                             "description": "This parameter controls the default username that is used to connect to an endpoint",
                             "type": "string",
-                            "minLemgth": 1,
+                            "minLength": 1,
                             "default": "root"
                         }
                     },
-                    "additionalProperies": false,
+                    "additionalProperties": false,
                     "required": [
                         "user"
                     ]
@@ -105,11 +105,11 @@
             "type": "object",
             "properties": {
                 "default": {
-                    "decsription": "This object contains the default userenv definition for different engine types",
+                    "description": "This object contains the default userenv definition for different engine types",
                     "type": "object",
                     "properties": {
                         "benchmarks": {
-                            "descrition": "This parameter defines the default userenv for the client/server engines",
+                            "description": "This parameter defines the default userenv for the client/server engines",
                             "type": "string",
                             "minLength": 1
                         },

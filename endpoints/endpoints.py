@@ -156,7 +156,7 @@ def run_remote(connection, command, validate = False, debug = False, stdin = Non
 
         msg = "Modified command: %s" % (command)
         if validate:
-            valiate_debug(msg)
+            validate_debug(msg)
         else:
             logger.debug(msg)
 
@@ -322,6 +322,21 @@ def validate_error(msg):
         None
     """
     return print("ERROR: " + msg)
+
+def validate_warning(msg):
+    """
+    Log a validation warning message
+
+    Args:
+        msg (str): The message to log
+
+    Globals:
+        None
+
+    Returns:
+        None
+    """
+    return print("# WARNING: " + msg)
 
 def validate_debug(msg):
     """
@@ -571,7 +586,7 @@ def get_controller_ip(host):
                     remote_ip = split_line[1]
                     break
         if remote_ip is None or not is_ip(remote_ip):
-            raise ValueError("Failed to determine remote IP address (got '%s')" % (endpoint_ip))
+            raise ValueError("Failed to determine remote IP address (got '%s')" % (remote_ip))
 
     # now that we have the remote's ip address, figure out what
     # controller ip this remote will need to use to contact the
@@ -646,9 +661,9 @@ def do_roadblock(roadblock_id = None, label = None, timeout = None, messages = N
         logger.info("[%s] No roadblock wait-for" % (label))
     else:
         wait_for_log = tempfile.mkstemp(suffix = "log")
-        wait_for_log[0].close()
+        os.close(wait_for_log[0])
         wait_for_log = wait_for_log[1]
-        logger.info("[%s] Going to run this wait-for command: %s" % (label, wait_For))
+        logger.info("[%s] Going to run this wait-for command: %s" % (label, wait_for))
         logger.info("[%s] Going to log wait-for to this file: %s" % (label, wait_for_log))
 
     if not abort is None and not abort is False:
@@ -663,7 +678,7 @@ def do_roadblock(roadblock_id = None, label = None, timeout = None, messages = N
     result = run_local("ping -w 10 -c 4 " + redis_server)
     ping_log_msg = "[%s] Pinged redis server '%s' with return code %d:\nstdout:\n%sstderr:\n%s" % (label, redis_server, result.exited, result.stdout, result.stderr)
     if result.exited != 0:
-        logger.error(ping_log_mesg)
+        logger.error(ping_log_msg)
     else:
         logger.info(ping_log_msg)
 
