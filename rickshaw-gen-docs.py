@@ -192,6 +192,13 @@ def generate_metrics(cdm, result, metr_dir, metr_file, cstype, csid, base_doc,
     eng_env_file = os.path.join(metr_dir, "engine-env.txt")
     if not os.path.exists(eng_env_file):
         eng_env_file += ".xz"
+    if not os.path.exists(eng_env_file):
+        # When metric files are in a postprocess/ subdirectory,
+        # engine-env.txt is in the parent directory
+        parent_dir = os.path.dirname(metr_dir)
+        eng_env_file = os.path.join(parent_dir, "engine-env.txt")
+        if not os.path.exists(eng_env_file):
+            eng_env_file += ".xz"
     if os.path.exists(eng_env_file):
         varnames = ["HOSTNAME", "tool_name", "engine_type", "engine_role",
                      "benchmark_group", "benchmark_role", "hosted_by",
