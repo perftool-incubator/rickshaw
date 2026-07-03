@@ -5,11 +5,11 @@
     }
   },
   "userenv": {
-    "name": "fedora42",
-    "label": "Fedora 42",
+    "name": "fedora44",
+    "label": "Fedora 44",
     "origin": {
       "image": "registry.fedoraproject.org/fedora",
-      "tag": "42",
+      "tag": "44",
       "build-policy": "missing"
     },
     "properties": {
@@ -29,11 +29,11 @@
   },
   "requirements": [
     {
-      "name": "python310",
+      "name": "python3",
       "type": "distro",
       "distro_info": {
         "packages": [
-          "python310",
+          "python3",
           "python3-pip",
           "python3-devel"
         ]
