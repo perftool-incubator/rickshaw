@@ -229,7 +229,6 @@ class RunState:
 
         self.messages_ref = None
         self.abort_via_roadblock = False
-        self.abort_test_id = None
         self.endpoint_processes = []
 
         self.arch = platform.machine()
@@ -2422,14 +2421,6 @@ def main():
     state.run["max-sample-failures"] = int(state.run.get("max-sample-failures", 1))
     state.run["num-samples"] = int(state.run.get("num-samples", 1))
     save_json_file(run_file, state.run)
-
-    if state.abort_test_id is not None:
-        logger.warning(
-            "WARNING: test %s was aborted. and all subsequent tests were not attempted. Run is incomplete",
-            state.abort_test_id
-        )
-        sys.exit(1)
-
 
 if __name__ == "__main__":
     main()
