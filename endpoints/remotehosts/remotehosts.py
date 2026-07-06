@@ -390,7 +390,7 @@ def build_unique_remote_configs():
 
         start_tools,err = load_json_file(settings["dirs"]["local"]["tool-cmds"] + "/profiler/start.json.xz", uselzma = True)
         if start_tools is None:
-            logger.error("Failed to load the start tools command file from %s" % (tool_cmd_dir))
+            logger.error("Failed to load the start tools command file from %s" % (settings["dirs"]["local"]["tool-cmds"]))
             return 1
 
         profiler_count += 1
