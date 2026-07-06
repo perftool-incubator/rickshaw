@@ -2372,7 +2372,18 @@ def main():
         if e in os.environ:
             var = e.replace("RS_", "").lower().replace("_", "-")
             logger.debug("Found environment variable: %s, assigning '%s' to %s", e, os.environ[e], var)
-            state.run[var] = os.environ[e]
+            if var == "tags":
+                if "tags" not in state.run:
+                    state.run["tags"] = []
+                for this_tag in os.environ[e].split(","):
+                    m = re.match(r'(\S+):(\S+)', this_tag)
+                    if m:
+                        state.run["tags"].append({"name": m.group(1), "val": m.group(2)})
+                    else:
+                        logger.error("ERROR: format for RS_TAGS value is not valid: %s", this_tag)
+                        sys.exit(1)
+            else:
+                state.run[var] = os.environ[e]
 
     state.process_cmdline()
     state.load_settings_info()
