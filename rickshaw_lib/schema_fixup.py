@@ -57,6 +57,17 @@ def rickshaw_run_schema_fixup(result_file, result_schema_file):
             except (ValueError, TypeError):
                 pass
 
+    # Convert tls-verify fields from string to boolean
+    if "reg-tls-verify" in result_data and isinstance(result_data["reg-tls-verify"], str):
+        result_data["reg-tls-verify"] = result_data["reg-tls-verify"].lower() == "true"
+
+    if "registries" in result_data:
+        for reg_type in ("public", "private"):
+            if reg_type in result_data["registries"]:
+                tv = result_data["registries"][reg_type].get("tls-verify")
+                if isinstance(tv, str):
+                    result_data["registries"][reg_type]["tls-verify"] = tv.lower() == "true"
+
     valid, err = validate_schema(result_data, result_schema_file)
     if not valid:
         logger.error(

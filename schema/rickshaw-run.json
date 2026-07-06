@@ -122,7 +122,7 @@
     },
     "reg-tls-verify": {
       "description": "Legacy field: registry TLS verification setting.",
-      "type": "string"
+      "type": "boolean"
     },
     "registries": {
       "description": "Container registry configuration for private and public registries used for engine image storage.",
@@ -398,11 +398,7 @@
         },
         "tls-verify": {
           "description": "Whether TLS certificate verification is enabled for this registry.",
-          "type": "string",
-          "enum": [
-            "false",
-            "true"
-          ]
+          "type": "boolean"
         },
         "url-details": {
           "description": "Decoded components of the repository URL, populated by rickshaw-run after parsing the repo URL.",
