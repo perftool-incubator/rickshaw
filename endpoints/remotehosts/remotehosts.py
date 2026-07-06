@@ -661,7 +661,8 @@ def create_thread_pool(description, acronym, work, worker_threads_count, worker_
 
     rc = 0
     for thread_rc in worker_threads_rcs:
-        rc += thread_rc
+        if thread_rc is not None:
+            rc += thread_rc
     thread_logger("Aggregate return code for %s: %d" % (acronym, rc))
 
     return rc
