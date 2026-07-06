@@ -702,7 +702,7 @@ def remotes_pull_images():
 
                 if userenv is None:
                     logger.error("Cound not find userenv for remote %s with role %s and id %s" % (remote, role, str(id)))
-                    print("could not find userenv for " + endpoint)
+                    print("could not find userenv for " + remote)
                 else:
                     remote_arch = settings["engines"]["remotes"][remote].get("arch")
                     image_info = endpoints.get_engine_id_image(settings, role, id, userenv, arch=remote_arch)
