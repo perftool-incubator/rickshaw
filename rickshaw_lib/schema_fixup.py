@@ -68,6 +68,10 @@ def rickshaw_run_schema_fixup(result_file, result_schema_file):
                 if isinstance(tv, str):
                     result_data["registries"][reg_type]["tls-verify"] = tv.lower() == "true"
 
+                qr = result_data["registries"][reg_type].get("quay-refresh-expiration-require-success")
+                if isinstance(qr, str):
+                    result_data["registries"][reg_type]["quay-refresh-expiration-require-success"] = qr.lower() == "true"
+
     valid, err = validate_schema(result_data, result_schema_file)
     if not valid:
         logger.error(

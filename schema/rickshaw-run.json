@@ -378,11 +378,7 @@
         },
         "quay-refresh-expiration-require-success": {
           "description": "Whether a successful image push is required before refreshing the expiration timer.",
-          "type": "string",
-          "enum": [
-            "false",
-            "true"
-          ]
+          "type": "boolean"
         },
         "quay-refresh-expiration-api-url": {
           "description": "The Quay API URL used for refreshing image tag expirations.",
