@@ -43,16 +43,9 @@ def rickshaw_run_schema_fixup(result_file, result_schema_file):
 
     logger.info("Checking if the rickshaw-run data matches the current JSON schema")
 
-    schema_data, schema_err = load_json_file(result_schema_file)
-    if schema_data is None:
-        logger.error("Could not load schema: %s", schema_err)
-        return 1
-
-    try:
-        validate_schema(schema_data, result_data)
+    valid, err = validate_schema(result_data, result_schema_file)
+    if valid:
         return 0
-    except Exception:
-        pass
 
     logger.info("Attempting to update the rickshaw-run data to match the current JSON schema")
 
@@ -64,11 +57,25 @@ def rickshaw_run_schema_fixup(result_file, result_schema_file):
             except (ValueError, TypeError):
                 pass
 
-    try:
-        validate_schema(schema_data, result_data)
-    except Exception as e:
+    # Convert tls-verify fields from string to boolean
+    if "reg-tls-verify" in result_data and isinstance(result_data["reg-tls-verify"], str):
+        result_data["reg-tls-verify"] = result_data["reg-tls-verify"].lower() == "true"
+
+    if "registries" in result_data:
+        for reg_type in ("public", "private"):
+            if reg_type in result_data["registries"]:
+                tv = result_data["registries"][reg_type].get("tls-verify")
+                if isinstance(tv, str):
+                    result_data["registries"][reg_type]["tls-verify"] = tv.lower() == "true"
+
+                qr = result_data["registries"][reg_type].get("quay-refresh-expiration-require-success")
+                if isinstance(qr, str):
+                    result_data["registries"][reg_type]["quay-refresh-expiration-require-success"] = qr.lower() == "true"
+
+    valid, err = validate_schema(result_data, result_schema_file)
+    if not valid:
         logger.error(
-            "Unable to validate rickshaw-run data after schema fixup: %s", e
+            "Unable to validate rickshaw-run data after schema fixup: %s", err
         )
         return 1
 

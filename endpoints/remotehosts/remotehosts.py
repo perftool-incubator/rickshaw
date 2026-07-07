@@ -390,7 +390,7 @@ def build_unique_remote_configs():
 
         start_tools,err = load_json_file(settings["dirs"]["local"]["tool-cmds"] + "/profiler/start.json.xz", uselzma = True)
         if start_tools is None:
-            logger.error("Failed to load the start tools command file from %s" % (tool_cmd_dir))
+            logger.error("Failed to load the start tools command file from %s" % (settings["dirs"]["local"]["tool-cmds"]))
             return 1
 
         profiler_count += 1
@@ -535,7 +535,7 @@ def image_pull_worker_thread(thread_id, work_queue, threads_rcs):
                 loglevel = "info"
                 if result.exited != 0:
                     loglevel = "error"
-                thread_logger("Attempted to pull %s with return code %d:\nstdout:\n%sstderr:\n%s" % (image_info["image"], result.exited, result.stdout, result.stderr), log_level = loglevel, remote_name = remote)
+                thread_logger("Attempted to pull %s with return code %d:\nstdout:\n%s\nstderr:\n%s" % (image_info["image"], result.exited, result.stdout, result.stderr), log_level = loglevel, remote_name = remote)
                 rc += result.exited
 
                 if "auth-file" in image_info:
@@ -543,13 +543,13 @@ def image_pull_worker_thread(thread_id, work_queue, threads_rcs):
                     log_level = "info"
                     if result.exited != 0:
                         loglevel = "error"
-                    thread_logger("Attempted to remove %s with return code %d:\nstdout:\n%sstderr:\n%s" % (remote_auth_file, result.exited, result.stdout, result.stderr), log_level = loglevel, remote_name = remote)
+                    thread_logger("Attempted to remove %s with return code %d:\nstdout:\n%s\nstderr:\n%s" % (remote_auth_file, result.exited, result.stdout, result.stderr), log_level = loglevel, remote_name = remote)
 
                 result = endpoints.run_remote(c, "echo '" + image_info["image"] + " " + str(int(time.time())) + " " + settings["misc"]["run-id"] + "' >> " + settings["dirs"]["remote"]["base"] + "/remotehosts-container-image-census")
                 loglevel = "info"
                 if result.exited != 0:
                     loglevel = "error"
-                thread_logger("Recorded usage for %s in the census with return code %d:\nstdout:\n%sstderr:\n%s" % (image_info["image"], result.exited, result.stdout, result.stderr), log_level = loglevel, remote_name = remote)
+                thread_logger("Recorded usage for %s in the census with return code %d:\nstdout:\n%s\nstderr:\n%s" % (image_info["image"], result.exited, result.stdout, result.stderr), log_level = loglevel, remote_name = remote)
                 rc += result.exited
 
         thread_logger("Notifying work queue that job processing is complete", remote_name = remote)
@@ -661,7 +661,8 @@ def create_thread_pool(description, acronym, work, worker_threads_count, worker_
 
     rc = 0
     for thread_rc in worker_threads_rcs:
-        rc += thread_rc
+        if thread_rc is not None:
+            rc += thread_rc
     thread_logger("Aggregate return code for %s: %d" % (acronym, rc))
 
     return rc
@@ -702,7 +703,7 @@ def remotes_pull_images():
 
                 if userenv is None:
                     logger.error("Cound not find userenv for remote %s with role %s and id %s" % (remote, role, str(id)))
-                    print("could not find userenv for " + endpoint)
+                    print("could not find userenv for " + remote)
                 else:
                     remote_arch = settings["engines"]["remotes"][remote].get("arch")
                     image_info = endpoints.get_engine_id_image(settings, role, id, userenv, arch=remote_arch)
@@ -769,7 +770,7 @@ def remote_mkdirs_worker_thread(thread_id, work_queue, threads_rcs):
         with endpoints.remote_connection(remote, my_run_file_remote["config"]["settings"]["remote-user"]) as con:
             for remote_dir in settings["dirs"]["remote"].keys():
                 result = endpoints.run_remote(con, "mkdir --parents --verbose " + settings["dirs"]["remote"][remote_dir])
-                thread_logger("Remote attempted to mkdir %s with return code %d:\nstdout:\n%sstderr:\n%s" % (settings["dirs"]["remote"][remote_dir], result.exited, result.stdout, result.stderr), log_level = endpoints.get_result_log_level(result), remote_name = remote)
+                thread_logger("Remote attempted to mkdir %s with return code %d:\nstdout:\n%s\nstderr:\n%s" % (settings["dirs"]["remote"][remote_dir], result.exited, result.stdout, result.stderr), log_level = endpoints.get_result_log_level(result), remote_name = remote)
                 rc += result.exited
 
         thread_logger("Notifying work queue that job processing is complete", remote_name = remote)
@@ -946,7 +947,7 @@ def create_podman(thread_name, remote_name, engine_name, container_name, connect
     thread_logger("Podman create command is:\n%s" % (endpoints.dump_json(create_cmd)), remote_name = remote_name, engine_name = engine_name)
 
     result = endpoints.run_remote(connection, " ".join(create_cmd))
-    thread_logger("Creating container with name '%s' resulted in return code %d:\nstdout:\n%sstderr:\n%s" % (container_name, result.exited, result.stdout, result.stderr), log_level = endpoints.get_result_log_level(result), remote_name = remote_name, engine_name = engine_name)
+    thread_logger("Creating container with name '%s' resulted in return code %d:\nstdout:\n%s\nstderr:\n%s" % (container_name, result.exited, result.stdout, result.stderr), log_level = endpoints.get_result_log_level(result), remote_name = remote_name, engine_name = engine_name)
 
     return
 
@@ -989,7 +990,7 @@ def create_chroot(thread_name, remote_name, engine_name, container_name, connect
     thread_logger("Podman create command is:\n%s" % (endpoints.dump_json(create_cmd)), remote_name = remote_name, engine_name = engine_name)
 
     result = endpoints.run_remote(connection, " ".join(create_cmd))
-    thread_logger("Creating container with name '%s' resulted in return code %d:\nstdout:\n%sstderr:\n%s" % (container_name, result.exited, result.stdout, result.stderr), log_level = endpoints.get_result_log_level(result), remote_name = remote_name, engine_name = engine_name)
+    thread_logger("Creating container with name '%s' resulted in return code %d:\nstdout:\n%s\nstderr:\n%s" % (container_name, result.exited, result.stdout, result.stderr), log_level = endpoints.get_result_log_level(result), remote_name = remote_name, engine_name = engine_name)
     if result.exited == 0:
         create_info["id"] = result.stdout.rstrip('\n')
     else:
@@ -1000,7 +1001,7 @@ def create_chroot(thread_name, remote_name, engine_name, container_name, connect
                   container_name ]
 
     result = endpoints.run_remote(connection, " ".join(mount_cmd))
-    thread_logger("Mounting container with name '%s' resulted in return code %d:\nstdout:\n%sstderr:\n%s" % (container_name, result.exited, result.stdout, result.stderr), log_level = endpoints.get_result_log_level(result), remote_name = remote_name, engine_name = engine_name)
+    thread_logger("Mounting container with name '%s' resulted in return code %d:\nstdout:\n%s\nstderr:\n%s" % (container_name, result.exited, result.stdout, result.stderr), log_level = endpoints.get_result_log_level(result), remote_name = remote_name, engine_name = engine_name)
     if result.exited == 0:
         create_info["mount"] = result.stdout.rstrip('\n')
     else:
@@ -1060,19 +1061,19 @@ def create_chroot(thread_name, remote_name, engine_name, container_name, connect
         thread_logger("Procesing mount:\n%s" % (endpoints.dump_json(mount)), remote_name = remote_name, engine_name = engine_name)
 
         result = endpoints.run_remote(connection, "mkdir --parents --verbose " + mount["dest"])
-        thread_logger("Creating '%s' resulted in return code %d:\nstdout:\n%sstderr:\n%s" % (mount["dest"], result.exited, result.stdout, result.stderr), log_level = endpoints.get_result_log_level(result), remote_name = remote_name, engine_name = engine_name)
+        thread_logger("Creating '%s' resulted in return code %d:\nstdout:\n%s\nstderr:\n%s" % (mount["dest"], result.exited, result.stdout, result.stderr), log_level = endpoints.get_result_log_level(result), remote_name = remote_name, engine_name = engine_name)
 
         if mount["rbind"]:
             result = endpoints.run_remote(connection, "mount --verbose --options rbind " + mount["src"] + " " + mount["dest"])
-            thread_logger("rbind mounting '%s' to '%s' resulted in return code %d:\nstdout:\n%sstderr:\n%s" % (mount["src"], mount["dest"], result.exited, result.stdout, result.stderr), log_level = endpoints.get_result_log_level(result), remote_name = remote_name, engine_name = engine_name)
+            thread_logger("rbind mounting '%s' to '%s' resulted in return code %d:\nstdout:\n%s\nstderr:\n%s" % (mount["src"], mount["dest"], result.exited, result.stdout, result.stderr), log_level = endpoints.get_result_log_level(result), remote_name = remote_name, engine_name = engine_name)
 
             result = endpoints.run_remote(connection, "mount --verbose --make-rslave " + mount["dest"])
-            thread_logger("making rslave '%s' resulted in return code %d:\nstdout:\n%sstderr:\n%s" % (mount["dest"], result.exited, result.stdout, result.stderr), log_level = endpoints.get_result_log_level(result), remote_name = remote_name, engine_name = engine_name)
+            thread_logger("making rslave '%s' resulted in return code %d:\nstdout:\n%s\nstderr:\n%s" % (mount["dest"], result.exited, result.stdout, result.stderr), log_level = endpoints.get_result_log_level(result), remote_name = remote_name, engine_name = engine_name)
 
             create_info["mounts"]["rbind"].append(mount["dest"])
         else:
             result = endpoints.run_remote(connection, "mount --verbose --options bind " + mount["src"] + " " + mount["dest"])
-            thread_logger("bind mounting '%s' to '%s' resulted in return code %d:\nstdout:\n%sstderr:\n%s" % (mount["src"], mount["dest"], result.exited, result.stdout, result.stderr), log_level = endpoints.get_result_log_level(result), remote_name = remote_name, engine_name = engine_name)
+            thread_logger("bind mounting '%s' to '%s' resulted in return code %d:\nstdout:\n%s\nstderr:\n%s" % (mount["src"], mount["dest"], result.exited, result.stdout, result.stderr), log_level = endpoints.get_result_log_level(result), remote_name = remote_name, engine_name = engine_name)
 
             create_info["mounts"]["regular"].append(mount["dest"])
 
@@ -1117,7 +1118,7 @@ def start_podman(thread_name, remote_name, engine_name, container_name, connecti
     ]
 
     result = endpoints.run_remote(connection, " ".join(start_cmd))
-    thread_logger("Starting container with name '%s' resulted in return code %d:\nstdout:\n%sstderr:\n%s" % (container_name, result.exited, result.stdout, result.stderr), log_level = endpoints.get_result_log_level(result), remote_name = remote_name, engine_name = engine_name)
+    thread_logger("Starting container with name '%s' resulted in return code %d:\nstdout:\n%s\nstderr:\n%s" % (container_name, result.exited, result.stdout, result.stderr), log_level = endpoints.get_result_log_level(result), remote_name = remote_name, engine_name = engine_name)
 
     return
 
@@ -1194,7 +1195,7 @@ def start_chroot(thread_name, remote_name, engine_name, container_name, connecti
     thread_logger("chroot start command is:\n%s" % (endpoints.dump_json(start_cmd)), remote_name = remote_name, engine_name = engine_name)
 
     result = endpoints.run_remote(connection, " ".join(start_cmd))
-    thread_logger("Starting chroot with name '%s' resulted in return code %d:\nstdout:\n%sstderr:\n%s" % (container_name, result.exited, result.stdout, result.stderr), log_level = endpoints.get_result_log_level(result), remote_name = remote_name, engine_name = engine_name)
+    thread_logger("Starting chroot with name '%s' resulted in return code %d:\nstdout:\n%s\nstderr:\n%s" % (container_name, result.exited, result.stdout, result.stderr), log_level = endpoints.get_result_log_level(result), remote_name = remote_name, engine_name = engine_name)
 
     return
 
@@ -1272,14 +1273,14 @@ def launch_engines_worker_thread(thread_id, work_queue, threads_rcs):
                     thread_logger("host-mounts is %s" % (remote["config"]["settings"]["host-mounts"]), remote_name = remote_name, engine_name = engine_name)
 
                     result = endpoints.run_remote(con, "podman ps --all --filter 'name=" + container_name + "' --format '{{.Names}}'")
-                    thread_logger("Check for existing container with name '%s' resulted in return code %d:\nstdout:\n%sstderr:\n%s" % (container_name, result.exited, result.stdout, result.stderr), remote_name = remote_name, engine_name = engine_name)
+                    thread_logger("Check for existing container with name '%s' resulted in return code %d:\nstdout:\n%s\nstderr:\n%s" % (container_name, result.exited, result.stdout, result.stderr), remote_name = remote_name, engine_name = engine_name)
                     if result.exited != 0:
                         thread_logger("Check for existing container exited with non-zero return code %d" % (result.exited), log_level = "error", remote_name = remote_name, engine_name = engine_name)
                     if result.stdout.rstrip('\n') == container_name:
                         thread_logger("Found existing container '%s'" % (container_name), log_level = "warning", remote_name = remote_name, engine_name = engine_name)
 
                         result = endpoints.run_remote(con, "podman rm --force " + container_name)
-                        thread_logger("Forced removal of existing container with name '%s' resulted in return code %d:\nstdout:\n%sstderr:\n%s" % (container_name, result.exited, result.stdout, result.stderr), remote_name = remote_name, engine_name = engine_name)
+                        thread_logger("Forced removal of existing container with name '%s' resulted in return code %d:\nstdout:\n%s\nstderr:\n%s" % (container_name, result.exited, result.stdout, result.stderr), remote_name = remote_name, engine_name = engine_name)
                         if result.exited != 0:
                             thread_logger("Forced removal of existing container exited with non-zero return code %d" % (result.exited), log_level = 'error', remote_name = remote_name, engine_name = engine_name)
 
@@ -1552,7 +1553,7 @@ def collect_podman_log(thread_name, remote_name, engine_name, container_name, co
     while cmd_rc != 0 and cmd_attempt <= cmd_retries:
         result = endpoints.run_remote(connection, "podman logs --timestamps " + container_name + " | xz -c | base64")
         if result.exited != 0:
-            thread_logger("Collecting podman log for %s failed with return code %d on attempt %d of %d:\nstdout:\n%sstderr:\n%s" %
+            thread_logger("Collecting podman log for %s failed with return code %d on attempt %d of %d:\nstdout:\n%s\nstderr:\n%s" %
                         (
                             engine_name,
                             result.exited,
@@ -1599,7 +1600,7 @@ def collect_chroot_log(thread_name, remote_name, engine_name, container_name, co
     remote_log_file = settings["dirs"]["remote"]["logs"] + "/" + engine_name + ".txt"
     result = endpoints.run_remote(connection, "cat " + remote_log_file + " | xz -c | base64")
     if result.exited != 0:
-        thread_logger("Collecting chroot log for %s failed with return code %d:\nstdout:\n%sstderr:\n%s" %
+        thread_logger("Collecting chroot log for %s failed with return code %d:\nstdout:\n%s\nstderr:\n%s" %
                       (
                           engine_name,
                           result.exited,
@@ -1641,7 +1642,7 @@ def remove_rickshaw_settings(connection, thread_name, remote_name, engine_name):
     """
     remote_rickshaw_settings = settings["dirs"]["remote"]["data"] + "/rickshaw-settings.json.xz"
     result = endpoints.run_remote(connection, "if [ -e \"" + remote_rickshaw_settings + "\" ]; then rm --verbose \"" + remote_rickshaw_settings + "\"; else echo \"rickshaw settings already removed\"; fi")
-    thread_logger("Removal of rickshaw settings '%s' resulted in return code %d:\nstdout:\n%sstderr:\n%s" % (remote_rickshaw_settings, result.exited, result.stdout, result.stderr), log_level = endpoints.get_result_log_level(result), remote_name = remote_name, engine_name = engine_name)
+    thread_logger("Removal of rickshaw settings '%s' resulted in return code %d:\nstdout:\n%s\nstderr:\n%s" % (remote_rickshaw_settings, result.exited, result.stdout, result.stderr), log_level = endpoints.get_result_log_level(result), remote_name = remote_name, engine_name = engine_name)
 
     return
 
@@ -1663,7 +1664,7 @@ def remove_ssh_private_key(connection, thread_name, remote_name, engine_name):
     """
     remote_ssh_private_key = settings["dirs"]["remote"]["data"] + "/rickshaw_ssh_id"
     result = endpoints.run_remote(connection, "if [ -e \"" + remote_ssh_private_key + "\" ]; then rm --verbose \"" + remote_ssh_private_key + "\"; else echo \"ssh private key already removed\"; fi")
-    thread_logger("Removal of ssh private key '%s' resulted in return code %d:\nstdout:\n%sstderr:\n%s" % (remote_ssh_private_key, result.exited, result.stdout, result.stderr), log_level = endpoints.get_result_log_level(result), remote_name = remote_name, engine_name = engine_name)
+    thread_logger("Removal of ssh private key '%s' resulted in return code %d:\nstdout:\n%s\nstderr:\n%s" % (remote_ssh_private_key, result.exited, result.stdout, result.stderr), log_level = endpoints.get_result_log_level(result), remote_name = remote_name, engine_name = engine_name)
 
     return
 
@@ -1687,11 +1688,11 @@ def destroy_podman(thread_name, remote_name, engine_name, container_name, connec
     thread_logger("Destroying podman", remote_name = remote_name, engine_name = engine_name)
 
     result = endpoints.run_remote(connection, "podman rm --force " + container_name)
-    thread_logger("Removal of pod '%s' resulted in return code %d:\nstdout:\n%sstderr:\n%s" % (engine_name, result.exited, result.stdout, result.stderr), log_level = endpoints.get_result_log_level(result), remote_name = remote_name, engine_name = engine_name)
+    thread_logger("Removal of pod '%s' resulted in return code %d:\nstdout:\n%s\nstderr:\n%s" % (engine_name, result.exited, result.stdout, result.stderr), log_level = endpoints.get_result_log_level(result), remote_name = remote_name, engine_name = engine_name)
 
     remote_env_file = settings["dirs"]["remote"]["cfg"] + "/" + engine_name + "_env.txt"
     result = endpoints.run_remote(connection, "rm --verbose " + remote_env_file)
-    thread_logger("Removal of env file  '%s' resulted in return code %d:\nstdout:\n%sstderr:\n%s" % (remote_env_file, result.exited, result.stdout, result.stderr), log_level = endpoints.get_result_log_level(result), remote_name = remote_name, engine_name = engine_name)
+    thread_logger("Removal of env file  '%s' resulted in return code %d:\nstdout:\n%s\nstderr:\n%s" % (remote_env_file, result.exited, result.stdout, result.stderr), log_level = endpoints.get_result_log_level(result), remote_name = remote_name, engine_name = engine_name)
 
     remove_ssh_private_key(connection, thread_name, remote_name, engine_name)
 
@@ -1721,14 +1722,14 @@ def destroy_chroot(thread_name, remote_name, engine_name, container_name, connec
 
     for mount in chroot_info["mounts"]["regular"]:
         result = endpoints.run_remote(connection, "umount --verbose " + mount)
-        thread_logger("regular unmounting of '%s' resulted in record code %d:\nstdout:\n%sstderr:\n%s" % (mount, result.exited, result.stdout, result.stderr), log_level = endpoints.get_result_log_level(result), remote_name = remote_name, engine_name = engine_name)
+        thread_logger("regular unmounting of '%s' resulted in record code %d:\nstdout:\n%s\nstderr:\n%s" % (mount, result.exited, result.stdout, result.stderr), log_level = endpoints.get_result_log_level(result), remote_name = remote_name, engine_name = engine_name)
 
     for mount in chroot_info["mounts"]["rbind"]:
         result = endpoints.run_remote(connection, "umount --verbose --recursive " + mount)
-        thread_logger("recursive unmounting of '%s' resulted in record code %d:\nstdout:\n%sstderr:\n%s" % (mount, result.exited, result.stdout, result.stderr), log_level = endpoints.get_result_log_level(result), remote_name = remote_name, engine_name = engine_name)
+        thread_logger("recursive unmounting of '%s' resulted in record code %d:\nstdout:\n%s\nstderr:\n%s" % (mount, result.exited, result.stdout, result.stderr), log_level = endpoints.get_result_log_level(result), remote_name = remote_name, engine_name = engine_name)
 
     result = endpoints.run_remote(connection, "podman rm --force " + container_name)
-    thread_logger("Removal of pod '%s' resulted in return code %d:\nstdout:\n%sstderr:\n%s" % (engine_name, result.exited, result.stdout, result.stderr), log_level = endpoints.get_result_log_level(result), remote_name = remote_name, engine_name = engine_name)
+    thread_logger("Removal of pod '%s' resulted in return code %d:\nstdout:\n%s\nstderr:\n%s" % (engine_name, result.exited, result.stdout, result.stderr), log_level = endpoints.get_result_log_level(result), remote_name = remote_name, engine_name = engine_name)
 
     remove_ssh_private_key(connection, thread_name, remote_name, engine_name)
 
@@ -1755,7 +1756,7 @@ def remove_image(thread_name, remote_name, log_prefix, connection, image):
     thread_logger("Removing image '%s'" % (image), remote_name = remote_name, log_prefix = log_prefix)
 
     result = endpoints.run_remote(connection, "podman rmi " + image)
-    thread_logger("Removing podman image '%s' gave return code %d:\nstdout:\n%sstderr:\n%s" % (image, result.exited, result.stdout, result.stderr), log_level = endpoints.get_result_log_level(result), remote_name = remote_name, log_prefix = log_prefix)
+    thread_logger("Removing podman image '%s' gave return code %d:\nstdout:\n%s\nstderr:\n%s" % (image, result.exited, result.stdout, result.stderr), log_level = endpoints.get_result_log_level(result), remote_name = remote_name, log_prefix = log_prefix)
 
     return
 
@@ -1781,7 +1782,7 @@ def remote_image_manager(thread_name, remote_name, connection, image_max_cache_s
     thread_logger("Performing container image management", remote_name = remote_name, log_prefix = log_prefix)
 
     result = endpoints.run_remote(connection, "podman images --all")
-    thread_logger("All podman images on this remote host before running image manager:\nstdout:\n%sstderr:\n%s" % (result.stdout, result.stderr), remote_name = remote_name)
+    thread_logger("All podman images on this remote host before running image manager:\nstdout:\n%s\nstderr:\n%s" % (result.stdout, result.stderr), remote_name = remote_name)
 
     images = dict()
     images["rickshaw"] = dict()
@@ -1790,7 +1791,7 @@ def remote_image_manager(thread_name, remote_name, connection, image_max_cache_s
 
     result = endpoints.run_remote(connection, "cat /var/lib/crucible/remotehosts-container-image-census")
     if result.exited != 0:
-        thread_logger("Reading image census returned %d:\nstdout:\n%sstderr:\n%s" % (result.exited, result.stdout, result.stderr), log_level = "error", remote_name = remote_name, log_prefix = log_prefix)
+        thread_logger("Reading image census returned %d:\nstdout:\n%s\nstderr:\n%s" % (result.exited, result.stdout, result.stderr), log_level = "error", remote_name = remote_name, log_prefix = log_prefix)
         return
     for line in result.stdout.splitlines():
         fields = line.split(" ")
@@ -1813,7 +1814,7 @@ def remote_image_manager(thread_name, remote_name, connection, image_max_cache_s
 
     result = endpoints.run_remote(connection, "podman images --format='{{.Repository}}:{{.Tag}}|{{.CreatedAt}}'")
     if result.exited != 0:
-        thread_logger("Getting podman images returned %d:\nstdout:\n%sstderr:\n%s" % (result.exited, result.stdout, result.stderr), log_level = "error", remote_name = remote_name, log_prefix = log_prefix)
+        thread_logger("Getting podman images returned %d:\nstdout:\n%s\nstderr:\n%s" % (result.exited, result.stdout, result.stderr), log_level = "error", remote_name = remote_name, log_prefix = log_prefix)
         return
     for line in result.stdout.splitlines():
         fields = line.split("|")
@@ -2066,10 +2067,10 @@ def remote_image_manager(thread_name, remote_name, connection, image_max_cache_s
         thread_logger("All rickshaw images are cached", remote_name = remote_name, log_prefix = log_prefix)
 
     result = endpoints.run_remote(connection, "podman image prune -f")
-    thread_logger("Pruning dangling images resulted in return code %d:\nstdout:\n%sstderr:\n%s" % (result.exited, result.stdout, result.stderr), log_level = endpoints.get_result_log_level(result), remote_name = remote_name, log_prefix = log_prefix)
+    thread_logger("Pruning dangling images resulted in return code %d:\nstdout:\n%s\nstderr:\n%s" % (result.exited, result.stdout, result.stderr), log_level = endpoints.get_result_log_level(result), remote_name = remote_name, log_prefix = log_prefix)
 
     result = endpoints.run_remote(connection, "podman images --all")
-    thread_logger("All podman images on this remote host after running image manager:\nstdout:\n%sstderr:\n%s" % (result.stdout, result.stderr), remote_name = remote_name)
+    thread_logger("All podman images on this remote host after running image manager:\nstdout:\n%s\nstderr:\n%s" % (result.stdout, result.stderr), remote_name = remote_name)
 
     return
 
@@ -2117,13 +2118,13 @@ def shutdown_engines_worker_thread(thread_id, work_queue, threads_rcs):
 
         with endpoints.remote_connection(remote["config"]["host"], remote["config"]["settings"]["remote-user"]) as con:
             result = endpoints.run_remote(con, "mount")
-            thread_logger("All mounts on this remote host:\nstdout:\n%sstderr:\n%s" % (result.stdout, result.stderr), remote_name = remote_name)
+            thread_logger("All mounts on this remote host:\nstdout:\n%s\nstderr:\n%s" % (result.stdout, result.stderr), remote_name = remote_name)
 
             result = endpoints.run_remote(con, "podman ps --all")
-            thread_logger("All podman pods on this remote host:\nstdout:\n%sstderr:\n%s" % (result.stdout, result.stderr), remote_name = remote_name)
+            thread_logger("All podman pods on this remote host:\nstdout:\n%s\nstderr:\n%s" % (result.stdout, result.stderr), remote_name = remote_name)
 
             result = endpoints.run_remote(con, "podman mount")
-            thread_logger("All podman container mounts on this remote host:\nstdout:\n%sstderr:\n%s" % (result.stdout, result.stderr), remote_name = remote_name)
+            thread_logger("All podman container mounts on this remote host:\nstdout:\n%s\nstderr:\n%s" % (result.stdout, result.stderr), remote_name = remote_name)
 
             for engine in remote["engines"]:
                 for engine_id in engine["ids"]:
@@ -2150,13 +2151,13 @@ def shutdown_engines_worker_thread(thread_id, work_queue, threads_rcs):
                                 destroy_chroot(thread_name, remote_name, engine_name, container_name, con, remote["chroots"][engine_name])
 
             result = endpoints.run_remote(con, "mount")
-            thread_logger("All mounts on this remote host:\nstdout:\n%sstderr:\n%s" % (result.stdout, result.stderr), remote_name = remote_name)
+            thread_logger("All mounts on this remote host:\nstdout:\n%s\nstderr:\n%s" % (result.stdout, result.stderr), remote_name = remote_name)
 
             result = endpoints.run_remote(con, "podman ps --all")
-            thread_logger("All podman pods on this remote host:\nstdout:\n%sstderr:\n%s" % (result.stdout, result.stderr), remote_name = remote_name)
+            thread_logger("All podman pods on this remote host:\nstdout:\n%s\nstderr:\n%s" % (result.stdout, result.stderr), remote_name = remote_name)
 
             result = endpoints.run_remote(con, "podman mount")
-            thread_logger("All podman container mounts on this remote host:\nstdout:\n%sstderr:\n%s" % (result.stdout, result.stderr), remote_name = remote_name)
+            thread_logger("All podman container mounts on this remote host:\nstdout:\n%s\nstderr:\n%s" % (result.stdout, result.stderr), remote_name = remote_name)
 
         thread_logger("Notifying work queue that job processing is complete", remote_name = remote_name)
         work_queue.task_done()
@@ -2336,7 +2337,7 @@ def collect_sysinfo_worker_thread(thread_id, work_queue, threads_rcs):
             thread_logger("Copied %s to %s:%s" % (local_packrat_file, remote, remote_packrat_file), remote_name = remote)
 
             result = endpoints.run_remote(con, remote_packrat_file + " " + settings["dirs"]["remote"]["sysinfo"])
-            thread_logger("Running packrat resulted in return code %d:\nstdout:\n%sstderr:\n%s" % (result.exited, result.stdout, result.stderr), log_level = endpoints.get_result_log_level(result), remote_name = remote)
+            thread_logger("Running packrat resulted in return code %d:\nstdout:\n%s\nstderr:\n%s" % (result.exited, result.stdout, result.stderr), log_level = endpoints.get_result_log_level(result), remote_name = remote)
 
             result = endpoints.run_remote(con, "tar --create --directory " + settings["dirs"]["remote"]["sysinfo"]  + " packrat-archive | xz --stdout | base64")
             thread_logger("Transferring packrat files resulted in return code %d:\nstderr:\n%s" % (result.exited, result.stderr), log_level = endpoints.get_result_log_level(result), remote_name = remote)
@@ -2347,14 +2348,14 @@ def collect_sysinfo_worker_thread(thread_id, work_queue, threads_rcs):
             thread_logger("Wrote packrat archive to '%s'" % (archive_file), remote_name = remote)
 
             result = endpoints.run_local("xz --decompress --stdout " + archive_file + " | tar --extract --verbose --directory " + local_dir)
-            thread_logger("Unpacking packrat archive resulted in return code %d:\nstdout:\n%sstderr:\n%s" % (result.exited, result.stdout, result.stderr), log_level = endpoints.get_result_log_level(result), remote_name = remote)
+            thread_logger("Unpacking packrat archive resulted in return code %d:\nstdout:\n%s\nstderr:\n%s" % (result.exited, result.stdout, result.stderr), log_level = endpoints.get_result_log_level(result), remote_name = remote)
 
             path = Path(archive_file)
             path.unlink()
             thread_logger("Removed packrat archive '%s'" % (archive_file), remote_name = remote)
 
             result = endpoints.run_remote(con, "rm --recursive --force " + remote_packrat_file + " " + settings["dirs"]["remote"]["sysinfo"] + "/packrat-archive")
-            thread_logger("Removing remote packrat files resulted in return code %d:\nstdout:\n%sstderr:\n%s" % (result.exited, result.stdout, result.stderr), log_level = endpoints.get_result_log_level(result), remote_name = remote)
+            thread_logger("Removing remote packrat files resulted in return code %d:\nstdout:\n%s\nstderr:\n%s" % (result.exited, result.stdout, result.stderr), log_level = endpoints.get_result_log_level(result), remote_name = remote)
 
         thread_logger("Notifying work queue that job processing is complete", remote_name = remote)
         work_queue.task_done()

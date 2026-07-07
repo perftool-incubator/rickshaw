@@ -229,7 +229,6 @@ class RunState:
 
         self.messages_ref = None
         self.abort_via_roadblock = False
-        self.abort_test_id = None
         self.endpoint_processes = []
 
         self.arch = platform.machine()
@@ -2372,7 +2371,18 @@ def main():
         if e in os.environ:
             var = e.replace("RS_", "").lower().replace("_", "-")
             logger.debug("Found environment variable: %s, assigning '%s' to %s", e, os.environ[e], var)
-            state.run[var] = os.environ[e]
+            if var == "tags":
+                if "tags" not in state.run:
+                    state.run["tags"] = []
+                for this_tag in os.environ[e].split(","):
+                    m = re.match(r'(\S+):(\S+)', this_tag)
+                    if m:
+                        state.run["tags"].append({"name": m.group(1), "val": m.group(2)})
+                    else:
+                        logger.error("ERROR: format for RS_TAGS value is not valid: %s", this_tag)
+                        sys.exit(1)
+            else:
+                state.run[var] = os.environ[e]
 
     state.process_cmdline()
     state.load_settings_info()
@@ -2411,14 +2421,6 @@ def main():
     state.run["max-sample-failures"] = int(state.run.get("max-sample-failures", 1))
     state.run["num-samples"] = int(state.run.get("num-samples", 1))
     save_json_file(run_file, state.run)
-
-    if state.abort_test_id is not None:
-        logger.warning(
-            "WARNING: test %s was aborted. and all subsequent tests were not attempted. Run is incomplete",
-            state.abort_test_id
-        )
-        sys.exit(1)
-
 
 if __name__ == "__main__":
     main()
