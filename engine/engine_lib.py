@@ -704,7 +704,7 @@ class Engine:
 
         if result["is_timeout"]:
             self.quit = True
-        if result["is_abort"] and not self.abort:
+        if result["is_abort"] and not sample_data[iter_idx]["attempt-fail"]:
             sample_data[iter_idx]["attempt-fail"] = True
             sample_data[iter_idx]["failures"] += 1
             logger.info(
