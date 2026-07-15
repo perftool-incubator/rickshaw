@@ -2134,6 +2134,63 @@ def create_tools_pods(abort_event):
             
     return 0
 
+def rescue_engine_logs():
+    """
+    Rescue engine container logs from all pods during error state without deleting the namespace or cleaning up the environment
+
+    Args:
+        None
+
+    Globals:
+        args (namespace): the script's CLI parameters
+        logger: a logger instance
+        settings (dict): the one data structure to rule then all
+
+    Returns:
+        0
+    """
+    logger.warning("Rescuing engine logs")
+
+    endpoint = settings["run-file"]["endpoints"][args.endpoint_index]
+
+    if "pods" not in settings["engines"]["endpoint"] or not settings["engines"]["endpoint"]["pods"]:
+        logger.warning("No pods to rescue engine logs from")
+        return 0
+
+    try:
+        with endpoints.remote_connection(settings["run-file"]["endpoints"][args.endpoint_index]["host"],
+                                         settings["run-file"]["endpoints"][args.endpoint_index]["user"]) as con:
+            processed_log_pods = set()
+            pods = list(settings["engines"]["endpoint"]["pods"].keys())
+            pods.sort()
+            for pod in pods:
+                pod_name = settings["engines"]["endpoint"]["pods"][pod]["name"]
+                if pod_name in processed_log_pods:
+                    continue
+                processed_log_pods.add(pod_name)
+                node_name = settings["engines"]["endpoint"]["pods"][pod]["node"]
+                logger.warning("Rescuing logs from pod '%s' on node '%s'" % (pod_name, node_name))
+                for engine in settings["engines"]["endpoint"]["pods"][pod]["containers"]:
+                    logger.warning("Rescuing log for engine '%s'" % (engine))
+                    k8s_pod_name = settings["engines"]["endpoint"]["pods"][pod].get("k8s-pod-name", "%s-%s" % (endpoint_default_settings["prefix"]["pod"], pod_name))
+                    cmd = "%s logs %s --namespace %s --container %s" % (settings["misc"]["k8s-bin"],
+                                                                         k8s_pod_name,
+                                                                         endpoint["namespace"]["name"],
+                                                                         engine)
+                    result = endpoints.run_remote(con, cmd, debug = settings["misc"]["debug-output"], env = settings["misc"]["remote-env"])
+                    if result.exited == 0:
+                        log_file = "%s/%s.txt.xz" % (settings["dirs"]["local"]["engine-logs"], engine)
+                        with lzma.open(log_file, "wt", encoding="utf-8") as lfh:
+                            lfh.write(result.stdout)
+                        logger.warning("Wrote rescued log for engine '%s' in pod '%s' to '%s'" % (engine, pod, log_file))
+                    else:
+                        logger.error("Failed to rescue log for engine '%s' in pod '%s'" % (engine, pod))
+                        endpoints.log_result(result)
+    except Exception as err:
+        logger.error("Failed to rescue engine logs: %s" % (err))
+
+    return 0
+
 def kube_cleanup():
     """
     Attempt to cleanup the K8S namespace by collecting logs from the pods and then deleting everything
@@ -3348,7 +3405,8 @@ def main():
                 "collect-sysinfo": collect_sysinfo,
                 "test-start": test_start,
                 "test-stop": test_stop,
-                "remote-cleanup": kube_cleanup
+                "remote-cleanup": kube_cleanup,
+                "rescue-engine-logs": rescue_engine_logs
             }
             if early_abort and not "new-followers" in settings["engines"]:
                 # in the case of an early abort the new-followers list may not
