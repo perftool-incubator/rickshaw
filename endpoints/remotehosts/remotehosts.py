@@ -2118,48 +2118,51 @@ def shutdown_engines_worker_thread(thread_id, work_queue, threads_rcs):
         thread_logger("Processing remote '%s' at index %d" % (remote["config"]["host"], remote_idx), remote_name = remote_name)
         thread_logger("Remote user is %s" % (remote["config"]["settings"]["remote-user"]), remote_name = remote_name)
 
-        with endpoints.remote_connection(remote["config"]["host"], remote["config"]["settings"]["remote-user"]) as con:
-            result = endpoints.run_remote(con, "mount")
-            thread_logger("All mounts on this remote host:\nstdout:\n%s\nstderr:\n%s" % (result.stdout, result.stderr), remote_name = remote_name)
+        try:
+            with endpoints.remote_connection(remote["config"]["host"], remote["config"]["settings"]["remote-user"]) as con:
+                result = endpoints.run_remote(con, "mount")
+                thread_logger("All mounts on this remote host:\nstdout:\n%s\nstderr:\n%s" % (result.stdout, result.stderr), remote_name = remote_name)
 
-            result = endpoints.run_remote(con, "podman ps --all")
-            thread_logger("All podman pods on this remote host:\nstdout:\n%s\nstderr:\n%s" % (result.stdout, result.stderr), remote_name = remote_name)
+                result = endpoints.run_remote(con, "podman ps --all")
+                thread_logger("All podman pods on this remote host:\nstdout:\n%s\nstderr:\n%s" % (result.stdout, result.stderr), remote_name = remote_name)
 
-            result = endpoints.run_remote(con, "podman mount")
-            thread_logger("All podman container mounts on this remote host:\nstdout:\n%s\nstderr:\n%s" % (result.stdout, result.stderr), remote_name = remote_name)
+                result = endpoints.run_remote(con, "podman mount")
+                thread_logger("All podman container mounts on this remote host:\nstdout:\n%s\nstderr:\n%s" % (result.stdout, result.stderr), remote_name = remote_name)
 
-            for engine in remote["engines"]:
-                for engine_id in engine["ids"]:
-                    engine_name = "%s-%s" % (engine["role"], str(engine_id))
-                    container_name = "%s_%s" % (settings["misc"]["run-id"], engine_name)
-                    thread_logger("Processing engine '%s'" % (engine_name), remote_name = remote_name, engine_name = engine_name)
-                    thread_logger("Container name is '%s'" % (container_name), remote_name = remote_name, engine_name = engine_name)
+                for engine in remote["engines"]:
+                    for engine_id in engine["ids"]:
+                        engine_name = "%s-%s" % (engine["role"], str(engine_id))
+                        container_name = "%s_%s" % (settings["misc"]["run-id"], engine_name)
+                        thread_logger("Processing engine '%s'" % (engine_name), remote_name = remote_name, engine_name = engine_name)
+                        thread_logger("Container name is '%s'" % (container_name), remote_name = remote_name, engine_name = engine_name)
 
-                    osruntime = None
-                    if engine["role"] == "profiler":
-                        osruntime = "podman"
-                    else:
-                        osruntime = remote["config"]["settings"]["osruntime"]
-                    thread_logger("osruntime is '%s'" % (osruntime), remote_name = remote_name, engine_name = engine_name)
+                        osruntime = None
+                        if engine["role"] == "profiler":
+                            osruntime = "podman"
+                        else:
+                            osruntime = remote["config"]["settings"]["osruntime"]
+                        thread_logger("osruntime is '%s'" % (osruntime), remote_name = remote_name, engine_name = engine_name)
 
-                    match osruntime:
-                        case "podman":
-                            success = collect_podman_log(thread_name, remote_name, engine_name, container_name, con)
-                            if success:
-                                destroy_podman(thread_name, remote_name, engine_name, container_name, con)
-                        case "chroot":
-                            success = collect_chroot_log(thread_name, remote_name, engine_name, container_name, con)
-                            if success:
-                                destroy_chroot(thread_name, remote_name, engine_name, container_name, con, remote["chroots"][engine_name])
+                        match osruntime:
+                            case "podman":
+                                success = collect_podman_log(thread_name, remote_name, engine_name, container_name, con)
+                                if success:
+                                    destroy_podman(thread_name, remote_name, engine_name, container_name, con)
+                            case "chroot":
+                                success = collect_chroot_log(thread_name, remote_name, engine_name, container_name, con)
+                                if success:
+                                    destroy_chroot(thread_name, remote_name, engine_name, container_name, con, remote["chroots"][engine_name])
 
-            result = endpoints.run_remote(con, "mount")
-            thread_logger("All mounts on this remote host:\nstdout:\n%s\nstderr:\n%s" % (result.stdout, result.stderr), remote_name = remote_name)
+                result = endpoints.run_remote(con, "mount")
+                thread_logger("All mounts on this remote host:\nstdout:\n%s\nstderr:\n%s" % (result.stdout, result.stderr), remote_name = remote_name)
 
-            result = endpoints.run_remote(con, "podman ps --all")
-            thread_logger("All podman pods on this remote host:\nstdout:\n%s\nstderr:\n%s" % (result.stdout, result.stderr), remote_name = remote_name)
+                result = endpoints.run_remote(con, "podman ps --all")
+                thread_logger("All podman pods on this remote host:\nstdout:\n%s\nstderr:\n%s" % (result.stdout, result.stderr), remote_name = remote_name)
 
-            result = endpoints.run_remote(con, "podman mount")
-            thread_logger("All podman container mounts on this remote host:\nstdout:\n%s\nstderr:\n%s" % (result.stdout, result.stderr), remote_name = remote_name)
+                result = endpoints.run_remote(con, "podman mount")
+                thread_logger("All podman container mounts on this remote host:\nstdout:\n%s\nstderr:\n%s" % (result.stdout, result.stderr), remote_name = remote_name)
+        except Exception as err:
+            thread_logger("Failed to shutdown engines on remote '%s': %s" % (remote["config"]["host"], err), log_level = "error", remote_name = remote_name)
 
         thread_logger("Notifying work queue that job processing is complete", remote_name = remote_name)
         work_queue.task_done()
