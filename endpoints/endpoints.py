@@ -983,6 +983,7 @@ def process_roadblocks(callbacks = None, roadblock_id = None, endpoint_label = N
                           test-start
                           test-stop
                           remote-cleanup
+                          rescue-engine-logs
         roadblock_id (str): The base ID to use as part of a roadblock's name
         endpoint_label (str): The name of the calling endpoint
         endpoint_deploy_timeout (int): The computed timeout value for endpoint engine deployment
@@ -1020,130 +1021,145 @@ def process_roadblocks(callbacks = None, roadblock_id = None, endpoint_label = N
     else:
         logger.info("No new followers to inform the roadblock leader about")
 
-    rc = do_roadblock(roadblock_id = roadblock_id,
-                      follower_id = endpoint_label,
-                      label = "endpoint-deploy-begin",
-                      timeout = endpoint_deploy_timeout,
-                      messages = new_followers_msg_file,
-                      redis_password = roadblock_password,
-                      msgs_dir = roadblock_messages_dir,
-                      connection_watchdog = roadblock_connection_watchdog)
-    if rc != 0:
-        return rc
-    rc = do_roadblock(roadblock_id = roadblock_id,
-                      follower_id = endpoint_label,
-                      label = "endpoint-deploy-end",
-                      timeout = endpoint_deploy_timeout,
-                      redis_password = roadblock_password,
-                      msgs_dir = roadblock_messages_dir,
-                      abort = early_abort,
-                      connection_watchdog = roadblock_connection_watchdog)
-    if rc != 0:
-        return rc
+    # Separate flag because finally also fires on uncaught exceptions, not just rc != 0 returns
+    roadblocks_completed = False
 
-    rc = do_roadblock(roadblock_id = roadblock_id,
-                      follower_id = endpoint_label,
-                      label = "engine-init-begin",
-                      timeout = roadblock_timeouts["engine-start"],
-                      redis_password = roadblock_password,
-                      msgs_dir = roadblock_messages_dir,
-                      connection_watchdog = roadblock_connection_watchdog)
-    if rc != 0:
-        return rc
-    callback = "engine-init"
-    engine_init_msgs = None
-    if callback in callbacks and callbacks[callback] is not None:
-        logger.info("Calling endpoint specified callback for '%s'" % (callback))
-        engine_init_msgs = callbacks[callback]()
-    else:
-        logger.info("Calling endpoint did not specify a callback for '%s'" % (callback))
-    rc = do_roadblock(roadblock_id = roadblock_id,
-                      follower_id = endpoint_label,
-                      label = "engine-init-end",
-                      timeout = roadblock_timeouts["engine-start"],
-                      messages = engine_init_msgs,
-                      redis_password = roadblock_password,
-                      msgs_dir = roadblock_messages_dir,
-                      connection_watchdog = roadblock_connection_watchdog)
-    if rc != 0:
-        return rc
+    try:
+        rc = do_roadblock(roadblock_id = roadblock_id,
+                          follower_id = endpoint_label,
+                          label = "endpoint-deploy-begin",
+                          timeout = endpoint_deploy_timeout,
+                          messages = new_followers_msg_file,
+                          redis_password = roadblock_password,
+                          msgs_dir = roadblock_messages_dir,
+                          connection_watchdog = roadblock_connection_watchdog)
+        if rc != 0:
+            return rc
+        rc = do_roadblock(roadblock_id = roadblock_id,
+                          follower_id = endpoint_label,
+                          label = "endpoint-deploy-end",
+                          timeout = endpoint_deploy_timeout,
+                          redis_password = roadblock_password,
+                          msgs_dir = roadblock_messages_dir,
+                          abort = early_abort,
+                          connection_watchdog = roadblock_connection_watchdog)
+        if rc != 0:
+            return rc
 
-    rc = do_roadblock(roadblock_id = roadblock_id,
-                      follower_id = endpoint_label,
-                      label = "get-data-begin",
-                      timeout = roadblock_timeouts["default"],
-                      redis_password = roadblock_password,
-                      msgs_dir = roadblock_messages_dir,
-                      connection_watchdog = roadblock_connection_watchdog)
-    if rc != 0:
-        return rc
-    rc = do_roadblock(roadblock_id = roadblock_id,
-                      follower_id = endpoint_label,
-                      label = "get-data-end",
-                      timeout = roadblock_timeouts["default"],
-                      redis_password = roadblock_password,
-                      msgs_dir = roadblock_messages_dir,
-                      connection_watchdog = roadblock_connection_watchdog)
-    if rc != 0:
-        return rc
+        rc = do_roadblock(roadblock_id = roadblock_id,
+                          follower_id = endpoint_label,
+                          label = "engine-init-begin",
+                          timeout = roadblock_timeouts["engine-start"],
+                          redis_password = roadblock_password,
+                          msgs_dir = roadblock_messages_dir,
+                          connection_watchdog = roadblock_connection_watchdog)
+        if rc != 0:
+            return rc
+        callback = "engine-init"
+        engine_init_msgs = None
+        if callback in callbacks and callbacks[callback] is not None:
+            logger.info("Calling endpoint specified callback for '%s'" % (callback))
+            engine_init_msgs = callbacks[callback]()
+        else:
+            logger.info("Calling endpoint did not specify a callback for '%s'" % (callback))
+        rc = do_roadblock(roadblock_id = roadblock_id,
+                          follower_id = endpoint_label,
+                          label = "engine-init-end",
+                          timeout = roadblock_timeouts["engine-start"],
+                          messages = engine_init_msgs,
+                          redis_password = roadblock_password,
+                          msgs_dir = roadblock_messages_dir,
+                          connection_watchdog = roadblock_connection_watchdog)
+        if rc != 0:
+            return rc
 
-    rc = do_roadblock(roadblock_id = roadblock_id,
-                      follower_id = endpoint_label,
-                      label = "collect-sysinfo-begin",
-                      timeout = roadblock_timeouts["collect-sysinfo"],
-                      redis_password = roadblock_password,
-                      msgs_dir = roadblock_messages_dir,
-                      connection_watchdog = roadblock_connection_watchdog)
-    if rc != 0:
-        return rc
-    callback = "collect-sysinfo"
-    engine_init_msgs = None
-    if callback in callbacks and callbacks[callback] is not None:
-        logger.info("Calling endpoint specified callback for '%s'" % (callback))
-        engine_init_msgs = callbacks[callback]()
-    else:
-        logger.info("Calling endpoint did not specify a callback for '%s'" % (callback))
-    rc = do_roadblock(roadblock_id = roadblock_id,
-                      follower_id = endpoint_label,
-                      label = "collect-sysinfo-end",
-                      timeout = roadblock_timeouts["collect-sysinfo"],
-                      redis_password = roadblock_password,
-                      msgs_dir = roadblock_messages_dir,
-                      connection_watchdog = roadblock_connection_watchdog)
-    if rc != 0:
-        return rc
+        rc = do_roadblock(roadblock_id = roadblock_id,
+                          follower_id = endpoint_label,
+                          label = "get-data-begin",
+                          timeout = roadblock_timeouts["default"],
+                          redis_password = roadblock_password,
+                          msgs_dir = roadblock_messages_dir,
+                          connection_watchdog = roadblock_connection_watchdog)
+        if rc != 0:
+            return rc
+        rc = do_roadblock(roadblock_id = roadblock_id,
+                          follower_id = endpoint_label,
+                          label = "get-data-end",
+                          timeout = roadblock_timeouts["default"],
+                          redis_password = roadblock_password,
+                          msgs_dir = roadblock_messages_dir,
+                          connection_watchdog = roadblock_connection_watchdog)
+        if rc != 0:
+            return rc
 
-    rc = do_roadblock(roadblock_id = roadblock_id,
-                      follower_id = endpoint_label,
-                      label = "start-tools-begin",
-                      timeout = roadblock_timeouts["default"],
-                      redis_password = roadblock_password,
-                      msgs_dir = roadblock_messages_dir,
-                      connection_watchdog = roadblock_connection_watchdog)
-    if rc != 0:
-        return rc
-    rc = do_roadblock(roadblock_id = roadblock_id,
-                      follower_id = endpoint_label,
-                      label = "start-tools-end",
-                      timeout = roadblock_timeouts["default"],
-                      redis_password = roadblock_password,
-                      msgs_dir = roadblock_messages_dir,
-                      connection_watchdog = roadblock_connection_watchdog)
-    if rc != 0:
-        return rc
+        rc = do_roadblock(roadblock_id = roadblock_id,
+                          follower_id = endpoint_label,
+                          label = "collect-sysinfo-begin",
+                          timeout = roadblock_timeouts["collect-sysinfo"],
+                          redis_password = roadblock_password,
+                          msgs_dir = roadblock_messages_dir,
+                          connection_watchdog = roadblock_connection_watchdog)
+        if rc != 0:
+            return rc
+        callback = "collect-sysinfo"
+        engine_init_msgs = None
+        if callback in callbacks and callbacks[callback] is not None:
+            logger.info("Calling endpoint specified callback for '%s'" % (callback))
+            engine_init_msgs = callbacks[callback]()
+        else:
+            logger.info("Calling endpoint did not specify a callback for '%s'" % (callback))
+        rc = do_roadblock(roadblock_id = roadblock_id,
+                          follower_id = endpoint_label,
+                          label = "collect-sysinfo-end",
+                          timeout = roadblock_timeouts["collect-sysinfo"],
+                          redis_password = roadblock_password,
+                          msgs_dir = roadblock_messages_dir,
+                          connection_watchdog = roadblock_connection_watchdog)
+        if rc != 0:
+            return rc
 
-    rc = process_bench_roadblocks(callbacks = callbacks,
-                                  roadblock_id = roadblock_id,
-                                  endpoint_label = endpoint_label,
-                                  roadblock_password = roadblock_password,
-                                  max_sample_failures = max_sample_failures,
-                                  roadblock_messages_dir = roadblock_messages_dir,
-                                  roadblock_timeouts = roadblock_timeouts,
-                                  engine_commands_dir = engine_commands_dir,
-                                  endpoint_dir = endpoint_dir,
-                                  roadblock_connection_watchdog = roadblock_connection_watchdog)
-    if rc != 0:
-        return rc
+        rc = do_roadblock(roadblock_id = roadblock_id,
+                          follower_id = endpoint_label,
+                          label = "start-tools-begin",
+                          timeout = roadblock_timeouts["default"],
+                          redis_password = roadblock_password,
+                          msgs_dir = roadblock_messages_dir,
+                          connection_watchdog = roadblock_connection_watchdog)
+        if rc != 0:
+            return rc
+        rc = do_roadblock(roadblock_id = roadblock_id,
+                          follower_id = endpoint_label,
+                          label = "start-tools-end",
+                          timeout = roadblock_timeouts["default"],
+                          redis_password = roadblock_password,
+                          msgs_dir = roadblock_messages_dir,
+                          connection_watchdog = roadblock_connection_watchdog)
+        if rc != 0:
+            return rc
+
+        rc = process_bench_roadblocks(callbacks = callbacks,
+                                      roadblock_id = roadblock_id,
+                                      endpoint_label = endpoint_label,
+                                      roadblock_password = roadblock_password,
+                                      max_sample_failures = max_sample_failures,
+                                      roadblock_messages_dir = roadblock_messages_dir,
+                                      roadblock_timeouts = roadblock_timeouts,
+                                      engine_commands_dir = engine_commands_dir,
+                                      endpoint_dir = endpoint_dir,
+                                      roadblock_connection_watchdog = roadblock_connection_watchdog)
+        if rc != 0:
+            return rc
+
+        roadblocks_completed = True
+    finally:
+        if not roadblocks_completed:
+            callback = "rescue-engine-logs"
+            if callbacks is not None and callback in callbacks and callbacks[callback] is not None:
+                logger.error("Rescuing engine logs due to early exit from process_roadblocks")
+                try:
+                    callbacks[callback]()
+                except Exception as err:
+                    logger.error("Engine log rescue failed during early-exit handling: %s", err)
 
     do_roadblock(roadblock_id = roadblock_id,
                  follower_id = endpoint_label,

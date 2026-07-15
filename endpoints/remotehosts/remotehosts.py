@@ -511,6 +511,7 @@ def image_pull_worker_thread(thread_id, work_queue, threads_rcs):
 
         if remote is None:
             thread_logger("Received a null job", log_level = "warning")
+            work_queue.task_done()
             continue
 
         job_count += 1
@@ -759,6 +760,7 @@ def remote_mkdirs_worker_thread(thread_id, work_queue, threads_rcs):
 
         if remote is None:
             thread_logger("Received a null job", log_level = "warning")
+            work_queue.task_done()
             continue
 
         job_count += 1
@@ -1231,6 +1233,7 @@ def launch_engines_worker_thread(thread_id, work_queue, threads_rcs):
 
         if remote_idx is None:
             thread_logger("Received a null job", log_level = "warning")
+            work_queue.task_done()
             continue
 
         job_count += 1
@@ -1576,7 +1579,7 @@ def collect_podman_log(thread_name, remote_name, engine_name, container_name, co
     else:
         return True
 
-def collect_chroot_log(thread_name, remote_name, engine_name, container_name, connection):
+def collect_chroot_log(thread_name, remote_name, engine_name, container_name, connection, remove = True):
     """
     Use an existing connection to collect the chroot logs for a specific engine
 
@@ -1586,6 +1589,7 @@ def collect_chroot_log(thread_name, remote_name, engine_name, container_name, co
         engine_name (str): The specific engine that is being created
         container_name (str): The name to use for the pod on the remote
         connection (Fabric): The Fabric connection to use to run commands on the remote
+        remove (bool): Whether to remove the remote log file after collection
 
     Globals:
         settings (dict): the one data structure to rule then all
@@ -1614,14 +1618,15 @@ def collect_chroot_log(thread_name, remote_name, engine_name, container_name, co
             log_file_fp.write(base64.b64decode(result.stdout))
         thread_logger("Wrote chroot log to %s" % (log_file), remote_name = remote_name, engine_name = engine_name)
 
-        result = endpoints.run_remote(connection, "rm --verbose " + remote_log_file)
-        thread_logger("Removal of engine log for '%s' gave return code %d:\nstdout:\n%stderr:\n%s" %
-                      (
-                          engine_name,
-                          result.exited,
-                          result.stdout,
-                          result.stderr
-                      ), log_level =  endpoints.get_result_log_level(result), remote_name = remote_name, engine_name = engine_name)
+        if remove:
+            result = endpoints.run_remote(connection, "rm --verbose " + remote_log_file)
+            thread_logger("Removal of engine log for '%s' gave return code %d:\nstdout:\n%stderr:\n%s" %
+                          (
+                              engine_name,
+                              result.exited,
+                              result.stdout,
+                              result.stderr
+                          ), log_level =  endpoints.get_result_log_level(result), remote_name = remote_name, engine_name = engine_name)
         return True
 
 def remove_rickshaw_settings(connection, thread_name, remote_name, engine_name):
@@ -2106,6 +2111,7 @@ def shutdown_engines_worker_thread(thread_id, work_queue, threads_rcs):
 
         if remote_idx is None:
             thread_logger("Received a null job", log_level = "warning")
+            work_queue.task_done()
             continue
 
         job_count += 1
@@ -2116,48 +2122,51 @@ def shutdown_engines_worker_thread(thread_id, work_queue, threads_rcs):
         thread_logger("Processing remote '%s' at index %d" % (remote["config"]["host"], remote_idx), remote_name = remote_name)
         thread_logger("Remote user is %s" % (remote["config"]["settings"]["remote-user"]), remote_name = remote_name)
 
-        with endpoints.remote_connection(remote["config"]["host"], remote["config"]["settings"]["remote-user"]) as con:
-            result = endpoints.run_remote(con, "mount")
-            thread_logger("All mounts on this remote host:\nstdout:\n%s\nstderr:\n%s" % (result.stdout, result.stderr), remote_name = remote_name)
+        try:
+            with endpoints.remote_connection(remote["config"]["host"], remote["config"]["settings"]["remote-user"]) as con:
+                result = endpoints.run_remote(con, "mount")
+                thread_logger("All mounts on this remote host:\nstdout:\n%s\nstderr:\n%s" % (result.stdout, result.stderr), remote_name = remote_name)
 
-            result = endpoints.run_remote(con, "podman ps --all")
-            thread_logger("All podman pods on this remote host:\nstdout:\n%s\nstderr:\n%s" % (result.stdout, result.stderr), remote_name = remote_name)
+                result = endpoints.run_remote(con, "podman ps --all")
+                thread_logger("All podman pods on this remote host:\nstdout:\n%s\nstderr:\n%s" % (result.stdout, result.stderr), remote_name = remote_name)
 
-            result = endpoints.run_remote(con, "podman mount")
-            thread_logger("All podman container mounts on this remote host:\nstdout:\n%s\nstderr:\n%s" % (result.stdout, result.stderr), remote_name = remote_name)
+                result = endpoints.run_remote(con, "podman mount")
+                thread_logger("All podman container mounts on this remote host:\nstdout:\n%s\nstderr:\n%s" % (result.stdout, result.stderr), remote_name = remote_name)
 
-            for engine in remote["engines"]:
-                for engine_id in engine["ids"]:
-                    engine_name = "%s-%s" % (engine["role"], str(engine_id))
-                    container_name = "%s_%s" % (settings["misc"]["run-id"], engine_name)
-                    thread_logger("Processing engine '%s'" % (engine_name), remote_name = remote_name, engine_name = engine_name)
-                    thread_logger("Container name is '%s'" % (container_name), remote_name = remote_name, engine_name = engine_name)
+                for engine in remote["engines"]:
+                    for engine_id in engine["ids"]:
+                        engine_name = "%s-%s" % (engine["role"], str(engine_id))
+                        container_name = "%s_%s" % (settings["misc"]["run-id"], engine_name)
+                        thread_logger("Processing engine '%s'" % (engine_name), remote_name = remote_name, engine_name = engine_name)
+                        thread_logger("Container name is '%s'" % (container_name), remote_name = remote_name, engine_name = engine_name)
 
-                    osruntime = None
-                    if engine["role"] == "profiler":
-                        osruntime = "podman"
-                    else:
-                        osruntime = remote["config"]["settings"]["osruntime"]
-                    thread_logger("osruntime is '%s'" % (osruntime), remote_name = remote_name, engine_name = engine_name)
+                        osruntime = None
+                        if engine["role"] == "profiler":
+                            osruntime = "podman"
+                        else:
+                            osruntime = remote["config"]["settings"]["osruntime"]
+                        thread_logger("osruntime is '%s'" % (osruntime), remote_name = remote_name, engine_name = engine_name)
 
-                    match osruntime:
-                        case "podman":
-                            success = collect_podman_log(thread_name, remote_name, engine_name, container_name, con)
-                            if success:
-                                destroy_podman(thread_name, remote_name, engine_name, container_name, con)
-                        case "chroot":
-                            success = collect_chroot_log(thread_name, remote_name, engine_name, container_name, con)
-                            if success:
-                                destroy_chroot(thread_name, remote_name, engine_name, container_name, con, remote["chroots"][engine_name])
+                        match osruntime:
+                            case "podman":
+                                success = collect_podman_log(thread_name, remote_name, engine_name, container_name, con)
+                                if success:
+                                    destroy_podman(thread_name, remote_name, engine_name, container_name, con)
+                            case "chroot":
+                                success = collect_chroot_log(thread_name, remote_name, engine_name, container_name, con)
+                                if success:
+                                    destroy_chroot(thread_name, remote_name, engine_name, container_name, con, remote["chroots"][engine_name])
 
-            result = endpoints.run_remote(con, "mount")
-            thread_logger("All mounts on this remote host:\nstdout:\n%s\nstderr:\n%s" % (result.stdout, result.stderr), remote_name = remote_name)
+                result = endpoints.run_remote(con, "mount")
+                thread_logger("All mounts on this remote host:\nstdout:\n%s\nstderr:\n%s" % (result.stdout, result.stderr), remote_name = remote_name)
 
-            result = endpoints.run_remote(con, "podman ps --all")
-            thread_logger("All podman pods on this remote host:\nstdout:\n%s\nstderr:\n%s" % (result.stdout, result.stderr), remote_name = remote_name)
+                result = endpoints.run_remote(con, "podman ps --all")
+                thread_logger("All podman pods on this remote host:\nstdout:\n%s\nstderr:\n%s" % (result.stdout, result.stderr), remote_name = remote_name)
 
-            result = endpoints.run_remote(con, "podman mount")
-            thread_logger("All podman container mounts on this remote host:\nstdout:\n%s\nstderr:\n%s" % (result.stdout, result.stderr), remote_name = remote_name)
+                result = endpoints.run_remote(con, "podman mount")
+                thread_logger("All podman container mounts on this remote host:\nstdout:\n%s\nstderr:\n%s" % (result.stdout, result.stderr), remote_name = remote_name)
+        except Exception as err:
+            thread_logger("Failed to shutdown engines on remote '%s': %s" % (remote["config"]["host"], err), log_level = "error", remote_name = remote_name)
 
         thread_logger("Notifying work queue that job processing is complete", remote_name = remote_name)
         work_queue.task_done()
@@ -2223,6 +2232,7 @@ def image_mgmt_worker_thread(thread_id, work_queue, threads_rcs):
 
         if remote is None:
             thread_logger("Received a null job", log_level = "warning")
+            work_queue.task_done()
             continue
 
         job_count += 1
@@ -2264,6 +2274,102 @@ def image_mgmt():
     worker_threads_count = len(settings["engines"]["remotes"])
 
     create_thread_pool("Image Management Worker Threads", "IMWT", image_mgmt_work, worker_threads_count, image_mgmt_worker_thread)
+
+    return 0
+
+def rescue_engine_logs_worker_thread(thread_id, work_queue, threads_rcs):
+    """
+    Worker thread to rescue engine logs from a remote during error state without destroying containers
+
+    Args:
+        thread_id (int): The specifc worker thread that this is
+        work_queue (Queue): The work queue to pull jobs to process from
+        threads_rcs (list): The list to record the threads return code in
+
+    Globals:
+        args (namespace): the script's CLI parameters
+        settings (dict): the one data structure to rule then all
+
+    Returns:
+        None
+    """
+    thread = threading.current_thread()
+    thread_name = thread.name
+    thread_logger("Starting rescue engine logs thread with thread ID %d and name = '%s'" % (thread_id, thread_name), log_level = "warning")
+    rc = 0
+    job_count = 0
+
+    while not work_queue.empty():
+        remote_idx = None
+        try:
+            remote_idx = work_queue.get(block = False)
+        except queue.Empty:
+            thread_logger("Received a work queue empty exception", log_level = "warning")
+            break
+
+        if remote_idx is None:
+            thread_logger("Received a null job", log_level = "warning")
+            work_queue.task_done()
+            continue
+
+        job_count += 1
+
+        remote = settings["run-file"]["endpoints"][args.endpoint_index]["remotes"][remote_idx]
+        remote_name = "%s-%s" % (remote["config"]["host"], remote_idx)
+
+        thread_logger("Rescuing engine logs from remote '%s' at index %d" % (remote["config"]["host"], remote_idx), log_level = "warning", remote_name = remote_name)
+
+        try:
+            with endpoints.remote_connection(remote["config"]["host"], remote["config"]["settings"]["remote-user"]) as con:
+                for engine in remote["engines"]:
+                    for engine_id in engine["ids"]:
+                        engine_name = "%s-%s" % (engine["role"], str(engine_id))
+                        container_name = "%s_%s" % (settings["misc"]["run-id"], engine_name)
+                        thread_logger("Rescuing log for engine '%s'" % (engine_name), log_level = "warning", remote_name = remote_name, engine_name = engine_name)
+
+                        osruntime = None
+                        if engine["role"] == "profiler":
+                            osruntime = "podman"
+                        else:
+                            osruntime = remote["config"]["settings"]["osruntime"]
+
+                        match osruntime:
+                            case "podman":
+                                collect_podman_log(thread_name, remote_name, engine_name, container_name, con)
+                            case "chroot":
+                                collect_chroot_log(thread_name, remote_name, engine_name, container_name, con, remove = False)
+        except Exception as err:
+            thread_logger("Failed to rescue engine logs from remote '%s': %s" % (remote["config"]["host"], err), log_level = "error", remote_name = remote_name)
+
+        thread_logger("Notifying work queue that job processing is complete", log_level = "warning", remote_name = remote_name)
+        work_queue.task_done()
+
+    threads_rcs[thread_id] = rc
+    thread_logger("Stopping rescue engine logs thread after processing %d job(s)" % (job_count), log_level = "warning")
+    return
+
+def rescue_engine_logs():
+    """
+    Rescue engine container logs from all remotes during error state without destroying containers or cleaning up the environment
+
+    Args:
+        None
+
+    Globals:
+        args (namespace): the script's CLI parameters
+        settings (dict): the one data structure to rule then all
+
+    Returns:
+        0
+    """
+    logger.warning("Creating threadpool to rescue engine logs")
+
+    collect_work = queue.Queue()
+    for remote_idx,remote in enumerate(settings["run-file"]["endpoints"][args.endpoint_index]["remotes"]):
+        collect_work.put(remote_idx)
+    worker_threads_count = len(settings["run-file"]["endpoints"][args.endpoint_index]["remotes"])
+
+    create_thread_pool("Rescue Engine Logs Worker Threads", "RELWT", collect_work, worker_threads_count, rescue_engine_logs_worker_thread)
 
     return 0
 
@@ -2318,6 +2424,7 @@ def collect_sysinfo_worker_thread(thread_id, work_queue, threads_rcs):
 
         if remote is None:
             thread_logger("Received a null job", log_level = "warning")
+            work_queue.task_done()
             continue
 
         job_count += 1
@@ -2479,7 +2586,8 @@ def main():
         "collect-sysinfo": collect_sysinfo,
         "test-start": test_start,
         "test-stop": test_stop,
-        "remote-cleanup": remote_cleanup
+        "remote-cleanup": remote_cleanup,
+        "rescue-engine-logs": rescue_engine_logs
     }
     rc = endpoints.process_roadblocks(callbacks = remotehosts_callbacks,
                                       roadblock_id = args.roadblock_id,
