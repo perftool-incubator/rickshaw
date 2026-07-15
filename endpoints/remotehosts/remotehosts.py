@@ -511,6 +511,7 @@ def image_pull_worker_thread(thread_id, work_queue, threads_rcs):
 
         if remote is None:
             thread_logger("Received a null job", log_level = "warning")
+            work_queue.task_done()
             continue
 
         job_count += 1
@@ -759,6 +760,7 @@ def remote_mkdirs_worker_thread(thread_id, work_queue, threads_rcs):
 
         if remote is None:
             thread_logger("Received a null job", log_level = "warning")
+            work_queue.task_done()
             continue
 
         job_count += 1
@@ -1231,6 +1233,7 @@ def launch_engines_worker_thread(thread_id, work_queue, threads_rcs):
 
         if remote_idx is None:
             thread_logger("Received a null job", log_level = "warning")
+            work_queue.task_done()
             continue
 
         job_count += 1
@@ -2108,6 +2111,7 @@ def shutdown_engines_worker_thread(thread_id, work_queue, threads_rcs):
 
         if remote_idx is None:
             thread_logger("Received a null job", log_level = "warning")
+            work_queue.task_done()
             continue
 
         job_count += 1
@@ -2228,6 +2232,7 @@ def image_mgmt_worker_thread(thread_id, work_queue, threads_rcs):
 
         if remote is None:
             thread_logger("Received a null job", log_level = "warning")
+            work_queue.task_done()
             continue
 
         job_count += 1
@@ -2304,6 +2309,7 @@ def rescue_engine_logs_worker_thread(thread_id, work_queue, threads_rcs):
 
         if remote_idx is None:
             thread_logger("Received a null job", log_level = "warning")
+            work_queue.task_done()
             continue
 
         job_count += 1
@@ -2418,6 +2424,7 @@ def collect_sysinfo_worker_thread(thread_id, work_queue, threads_rcs):
 
         if remote is None:
             thread_logger("Received a null job", log_level = "warning")
+            work_queue.task_done()
             continue
 
         job_count += 1

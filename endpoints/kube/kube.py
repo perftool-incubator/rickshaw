@@ -2158,8 +2158,7 @@ def rescue_engine_logs():
         return 0
 
     try:
-        with endpoints.remote_connection(settings["run-file"]["endpoints"][args.endpoint_index]["host"],
-                                         settings["run-file"]["endpoints"][args.endpoint_index]["user"]) as con:
+        with endpoints.remote_connection(endpoint["host"], endpoint["user"]) as con:
             processed_log_pods = set()
             pods = list(settings["engines"]["endpoint"]["pods"].keys())
             pods.sort()

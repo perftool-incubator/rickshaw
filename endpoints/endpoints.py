@@ -1021,6 +1021,7 @@ def process_roadblocks(callbacks = None, roadblock_id = None, endpoint_label = N
     else:
         logger.info("No new followers to inform the roadblock leader about")
 
+    # Separate flag because finally also fires on uncaught exceptions, not just rc != 0 returns
     roadblocks_completed = False
 
     try:
