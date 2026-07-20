@@ -117,11 +117,14 @@ def build_reqs(
                 f"--requirement {utility_req}", [utility], f"{utility} requirements",
             ))
 
-    # 6. Benchmark workshop.json (last — most likely to change)
-    reqs.append(StageRequirement(
-        f"--requirement {workspace_paths.bench_dirs / benchmark / 'workshop.json'}",
-        [benchmark],
-        f"{benchmark} requirements",
-    ))
+    # 6. Benchmark workshop*.json (last — most likely to change)
+    bench_dir = workspace_paths.bench_dirs / benchmark
+    workshop_files = sorted(bench_dir.glob("workshop*.json"))
+    for wf in workshop_files:
+        suffix = wf.stem.replace("workshop", "").strip("-")
+        description = f"{benchmark} {suffix}" if suffix else f"{benchmark} requirements"
+        reqs.append(StageRequirement(
+            f"--requirement {wf}", [benchmark], description,
+        ))
 
     return reqs

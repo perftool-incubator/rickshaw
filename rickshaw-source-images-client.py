@@ -105,21 +105,25 @@ def _collect_directory(dir_path):
 def _remap_workshop_for_role(collected, role):
     """Remap a collected directory for a role-specific workshop build.
 
-    For split workshop benchmarks (client-workshop.json + server-workshop.json),
-    rename {role}-workshop.json to workshop.json and exclude the other role's
-    workshop file so the source-images-service sees a standard workshop.json.
+    For split workshop benchmarks, rename {role}-workshop*.json files to
+    workshop*.json (stripping the role prefix) and exclude the other role's
+    workshop files so the source-images-service sees standard workshop*.json.
+
+    Supports both single-file ({role}-workshop.json -> workshop.json) and
+    multi-stage ({role}-workshop-NN-name.json -> workshop-NN-name.json).
     """
-    role_filename = f"{role}-workshop.json"
+    role_prefix = f"{role}-"
     other_roles = {"client", "server"} - {role}
-    exclude_filenames = {f"{r}-workshop.json" for r in other_roles} | {"workshop.json"}
+    other_prefixes = tuple(f"{r}-workshop" for r in other_roles)
 
     remapped_files = []
     for entry in collected["files"]:
-        if entry["filename"] in exclude_filenames:
+        fname = entry["filename"]
+        if fname.startswith(other_prefixes) or fname.startswith("workshop"):
             continue
-        if entry["filename"] == role_filename:
+        if fname.startswith(f"{role_prefix}workshop"):
             remapped_files.append({
-                "filename": "workshop.json",
+                "filename": fname[len(role_prefix):],
                 "content_base64": entry["content_base64"],
                 "mode": entry["mode"],
             })
