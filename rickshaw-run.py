@@ -6,6 +6,7 @@
 # endpoints, sources container images, deploys engines via roadblock
 # synchronization, and organizes results.
 
+import glob
 import json
 import os
 import platform
@@ -696,24 +697,38 @@ class RunState:
             self.run["benchmark"] += f",{benchmark_name}"
             self.bench_configs[benchmark_name] = bench_config_ref
 
-            has_client_workshop = os.path.exists(os.path.join(this_bench_dir, "client-workshop.json"))
-            has_server_workshop = os.path.exists(os.path.join(this_bench_dir, "server-workshop.json"))
-            has_plain_workshop = os.path.exists(os.path.join(this_bench_dir, "workshop.json"))
+            client_workshops = sorted(glob.glob(os.path.join(this_bench_dir, "client-workshop*.json")))
+            server_workshops = sorted(glob.glob(os.path.join(this_bench_dir, "server-workshop*.json")))
+            plain_workshops = sorted(glob.glob(os.path.join(this_bench_dir, "workshop*.json")))
 
-            if has_client_workshop and has_server_workshop and has_plain_workshop:
-                logger.error("[ERROR] benchmark '%s' has workshop.json alongside client-workshop.json and server-workshop.json; remove workshop.json when using split workshop files", benchmark_name)
+            has_client_workshop = len(client_workshops) > 0
+            has_server_workshop = len(server_workshops) > 0
+            has_plain_workshop = len(plain_workshops) > 0
+
+            if has_plain_workshop and (has_client_workshop or has_server_workshop):
+                logger.error("[ERROR] benchmark '%s' has workshop*.json alongside client/server-workshop*.json; use one convention or the other", benchmark_name)
                 sys.exit(1)
 
             if has_client_workshop and not has_server_workshop:
-                logger.error("[ERROR] benchmark '%s' has client-workshop.json but is missing server-workshop.json; both are required for split workshop builds", benchmark_name)
+                logger.error("[ERROR] benchmark '%s' has client-workshop*.json but is missing server-workshop*.json; both roles are required for split workshop builds", benchmark_name)
                 sys.exit(1)
 
             if has_server_workshop and not has_client_workshop:
-                logger.error("[ERROR] benchmark '%s' has server-workshop.json but is missing client-workshop.json; both are required for split workshop builds", benchmark_name)
+                logger.error("[ERROR] benchmark '%s' has server-workshop*.json but is missing client-workshop*.json; both roles are required for split workshop builds", benchmark_name)
                 sys.exit(1)
 
+            for role, workshops in [("client", client_workshops), ("server", server_workshops), ("plain", plain_workshops)]:
+                prefix = "" if role == "plain" else f"{role}-"
+                unnumbered = os.path.join(this_bench_dir, f"{prefix}workshop.json")
+                numbered = [f for f in workshops if f != unnumbered]
+                if os.path.exists(unnumbered) and numbered:
+                    logger.error("[ERROR] benchmark '%s' has both %sworkshop.json and numbered %sworkshop-NN-*.json files; use one convention or the other",
+                                 benchmark_name, prefix, prefix)
+                    sys.exit(1)
+
             if has_client_workshop and has_server_workshop:
-                logger.info("Benchmark '%s' has split workshop files (client-workshop.json + server-workshop.json)", benchmark_name)
+                logger.info("Benchmark '%s' has split workshop files (%d client, %d server)",
+                            benchmark_name, len(client_workshops), len(server_workshops))
                 self.split_benchmarks[benchmark_name] = {
                     "client": f"{benchmark_name}::client",
                     "server": f"{benchmark_name}::server",
