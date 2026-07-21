@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -51,6 +52,11 @@ def _write_toolbox_req_json(config_dir: Path, toolbox_home: Path) -> Path:
     req_path = config_dir / "toolbox-req.json"
     req_path.write_text(json.dumps(req, indent=2) + "\n")
     return req_path
+
+
+def _natural_sort_key(path: Path):
+    """Sort key that orders numeric segments numerically, not lexicographically."""
+    return [int(s) if s.isdigit() else s.lower() for s in re.split(r'(\d+)', str(path))]
 
 
 @dataclass
@@ -119,7 +125,7 @@ def build_reqs(
 
     # 6. Benchmark workshop*.json (last — most likely to change)
     bench_dir = workspace_paths.bench_dirs / benchmark
-    workshop_files = sorted(bench_dir.glob("workshop*.json"))
+    workshop_files = sorted(bench_dir.glob("workshop*.json"), key=_natural_sort_key)
     for wf in workshop_files:
         suffix = wf.stem.replace("workshop", "").strip("-")
         description = f"{benchmark} {suffix}" if suffix else f"{benchmark} requirements"

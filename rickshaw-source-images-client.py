@@ -119,14 +119,20 @@ def _remap_workshop_for_role(collected, role):
     remapped_files = []
     for entry in collected["files"]:
         fname = entry["filename"]
-        if fname.startswith(other_prefixes) or fname.startswith("workshop"):
-            continue
-        if fname.startswith(f"{role_prefix}workshop"):
-            remapped_files.append({
-                "filename": fname[len(role_prefix):],
-                "content_base64": entry["content_base64"],
-                "mode": entry["mode"],
-            })
+        is_workshop_json = fname.endswith(".json") and (
+            fname.startswith("workshop") or
+            fname.startswith("client-workshop") or
+            fname.startswith("server-workshop")
+        )
+        if is_workshop_json:
+            if fname.startswith(other_prefixes) or fname.startswith("workshop"):
+                continue
+            if fname.startswith(f"{role_prefix}workshop"):
+                remapped_files.append({
+                    "filename": fname[len(role_prefix):],
+                    "content_base64": entry["content_base64"],
+                    "mode": entry["mode"],
+                })
         else:
             remapped_files.append(entry)
 
