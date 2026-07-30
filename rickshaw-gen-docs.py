@@ -32,7 +32,7 @@ from rickshaw_lib.schema_fixup import rickshaw_run_schema_fixup
 
 logger = None
 
-SUPPORTED_CDM_VERS = ["v7dev", "v8dev", "v9dev"]
+SUPPORTED_CDM_VERS = ["v7dev", "v8dev", "v9dev", "v10dev"]
 
 
 def generate_uuid():
@@ -70,16 +70,12 @@ class CDMState:
     def get_index_base_name(self):
         if self.ver in ("v7dev", "v8dev"):
             return f"cdm{self.ver}-"
-        elif self.ver == "v9dev":
-            return "cdm-v9dev-"
-        return f"cdm{self.ver}-"
+        return f"cdm-{self.ver}-"
 
     def get_index_name(self, doctype, year, month):
         if self.ver in ("v7dev", "v8dev"):
             return doctype
-        elif self.ver == "v9dev":
-            return f"{doctype}@{year}.{month}"
-        return doctype
+        return f"{doctype}@{year}.{month}"
 
     def get_index_full_name(self, doctype, year, month):
         return self.get_index_base_name() + self.get_index_name(doctype, year, month)
@@ -330,7 +326,7 @@ def main():
     rickshaw_project_dir = str(Path(__file__).resolve().parent)
     result_schema_file = os.path.join(rickshaw_project_dir, "schema", "rickshaw-run.json")
 
-    # Extract year/month from run dir name for CDMv9 index naming
+    # Extract year/month from run dir name for CDMv9+ index naming
     year = None
     month = None
     m = re.search(r'--(\d{4})-(\d{2})-\d{2}_', base_run_dir)
