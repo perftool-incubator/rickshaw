@@ -185,7 +185,6 @@
   "required": [
     "rickshaw-tool",
     "tool",
-    "controller",
     "collector"
   ],
   "additionalProperties": false
