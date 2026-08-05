@@ -30,7 +30,7 @@ if RICKSHAW_HOME:
     sys.path.append(RICKSHAW_HOME)
 
 from toolbox.fileio import open_write_text_file
-from toolbox.json import load_json_file, save_json_file
+from toolbox.json import load_json_file, save_json_file, validate_schema
 from toolbox.jsonsettings import get_json_setting
 import logging
 from toolbox.logging import setup_logging
@@ -687,6 +687,11 @@ class RunState:
                 logger.error("Could not open the bench config file: %s", err)
                 sys.exit(1)
 
+            valid, err = validate_schema(bench_config_ref, self.bench_schema_file)
+            if not valid:
+                logger.error("Schema validation failed for %s: %s", bench_config_file, err)
+                sys.exit(1)
+
             benchmark_name = bench_config_ref.get("benchmark")
             if not benchmark_name:
                 logger.error("[ERROR] benchmark was not defined in %s", bench_config_file)
@@ -1272,6 +1277,10 @@ class RunState:
                 if tool_cfg is None:
                     logger.error("Could not open the tool config file: %s", this_tool_config)
                     sys.exit(1)
+                valid, err = validate_schema(tool_cfg, self.tool_schema_file)
+                if not valid:
+                    logger.error("Schema validation failed for %s: %s", this_tool_config, err)
+                    sys.exit(1)
                 if tool_cfg.get("tool") != tool_name:
                     logger.error("In tool config %s, 'tool' does not match '%s'", this_tool_config, tool_name)
                     sys.exit(1)
@@ -1291,6 +1300,10 @@ class RunState:
                 json_ref, err = load_json_file(this_utility_config)
                 if json_ref is None:
                     logger.error("Could not open the utility config file: %s", this_utility_config)
+                    sys.exit(1)
+                valid, err = validate_schema(json_ref, self.utility_schema_file)
+                if not valid:
+                    logger.error("Schema validation failed for %s: %s", this_utility_config, err)
                     sys.exit(1)
                 if json_ref.get("utility") != utility:
                     logger.error("In utility config %s, 'utility' does not match '%s'", this_utility_config, utility)
