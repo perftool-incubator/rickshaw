@@ -2448,6 +2448,8 @@ def main():
     state.run["rickshaw-run"] = {"schema": {"version": "2020.03.18"}}
     state.run["max-sample-failures"] = int(state.run.get("max-sample-failures", 1))
     state.run["num-samples"] = int(state.run.get("num-samples", 1))
+    state.run["partial"] = bool(state.dropped_followers_log)
+    state.run["dropped-engines"] = state.dropped_followers_log
     save_json_file(run_file, state.run)
 
 if __name__ == "__main__":
