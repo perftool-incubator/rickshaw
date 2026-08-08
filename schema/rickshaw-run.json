@@ -370,7 +370,8 @@
           "roadblock"
         ],
         "additionalProperties": false
-      }
+      },
+      "additionalItems": false
     }
   },
   "required": [
