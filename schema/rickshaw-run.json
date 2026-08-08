@@ -347,6 +347,31 @@
     "run-file": {
       "description": "The file path to the original run file that initiated this run.",
       "type": "string"
+    },
+    "partial": {
+      "description": "Whether one or more engines were dropped from a roadblock synchronization barrier during this run, indicating the results may be incomplete.",
+      "type": "boolean"
+    },
+    "dropped-engines": {
+      "description": "The engines (roadblock followers) that were dropped during this run, and the roadblock at which each was dropped.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "follower": {
+            "type": "string"
+          },
+          "roadblock": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "follower",
+          "roadblock"
+        ],
+        "additionalProperties": false
+      },
+      "additionalItems": false
     }
   },
   "required": [
