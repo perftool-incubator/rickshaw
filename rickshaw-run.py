@@ -211,6 +211,7 @@ class RunState:
         self.clients_servers = {}
         self.rb_cs_ids = []
         self.active_followers = []
+        self.dropped_followers_log = []
         self.active_collector_types = {}
         self.tests = []
         self.cs_conf_file = ""
@@ -1900,17 +1901,19 @@ class RunState:
             self.wait_for_endpoints()
             sys.exit(roadblock_rc)
 
-    def remove_followers(self, dropped, log_msg=True):
+    def remove_followers(self, dropped, log_msg=True, roadblock_label=None):
         followers_set = set(self.active_followers)
         for f in dropped:
             if f in followers_set:
                 if log_msg:
-                    logger.info("Dropping follower '%s' in an attempt to gracefully continue", f)
+                    logger.warning("Dropping follower '%s' in an attempt to gracefully continue (roadblock: %s)",
+                                    f, roadblock_label)
+                    self.dropped_followers_log.append({"follower": f, "roadblock": roadblock_label})
                 followers_set.discard(f)
         self.active_followers = list(followers_set)
 
-    def remove_dropped_followers(self, dropped):
-        self.remove_followers(dropped, log_msg=True)
+    def remove_dropped_followers(self, dropped, roadblock_label=None):
+        self.remove_followers(dropped, log_msg=True, roadblock_label=roadblock_label)
 
     def remove_engine_followers(self, dropped):
         self.remove_followers(dropped, log_msg=False)
@@ -1919,7 +1922,7 @@ class RunState:
         if roadblock_rc != 0:
             if roadblock_rc == ROADBLOCK_EXITS["timeout"]:
                 logger.error("[ERROR] roadblock '%s' timed out, attempting to exit and cleanly finish the run", rb_name)
-                self.remove_dropped_followers(dropped_followers)
+                self.remove_dropped_followers(dropped_followers, roadblock_label=rb_name)
                 quit_flag = 1
             elif roadblock_rc in (ROADBLOCK_EXITS["abort"], ROADBLOCK_EXITS["abort_waiting"]):
                 if abort == 0:
@@ -2099,22 +2102,22 @@ class RunState:
         self.process_bench_roadblocks()
 
         rc, dropped = self.do_roadblock("stop-tools-begin", self.default_rb_timeout, self.active_followers)
-        self.remove_dropped_followers(dropped)
+        self.remove_dropped_followers(dropped, roadblock_label="stop-tools-begin")
         rc, dropped = self.do_roadblock("stop-tools-end", self.default_rb_timeout, self.active_followers)
-        self.remove_dropped_followers(dropped)
+        self.remove_dropped_followers(dropped, roadblock_label="stop-tools-end")
 
         rc, dropped = self.do_roadblock("send-data-begin", self.default_rb_timeout, self.active_followers)
-        self.remove_dropped_followers(dropped)
+        self.remove_dropped_followers(dropped, roadblock_label="send-data-begin")
         rc, dropped = self.do_roadblock("send-data-end", self.default_rb_timeout, self.active_followers)
-        self.remove_dropped_followers(dropped)
+        self.remove_dropped_followers(dropped, roadblock_label="send-data-end")
 
         self.remove_engine_followers(new_followers)
         self.remove_engine_followers(self.rb_cs_ids)
 
         rc, dropped = self.do_roadblock("endpoint-cleanup-begin", self.default_rb_timeout, self.active_followers)
-        self.remove_dropped_followers(dropped)
+        self.remove_dropped_followers(dropped, roadblock_label="endpoint-cleanup-begin")
         rc, dropped = self.do_roadblock("endpoint-cleanup-end", self.default_rb_timeout, self.active_followers)
-        self.remove_dropped_followers(dropped)
+        self.remove_dropped_followers(dropped, roadblock_label="endpoint-cleanup-end")
 
     def process_bench_roadblocks(self):
         rc, _ = self.do_roadblock("setup-bench-begin", self.default_rb_timeout, self.active_followers)
