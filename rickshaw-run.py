@@ -190,7 +190,6 @@ class RunState:
         self.engine_roadblock_module = ""
         self.iterations_dir = ""
         self.roadblock_msgs_dir = ""
-        self.roadblock_logs_dir = ""
         self.roadblock_followers_dir = ""
 
         self.jsonsettings = {}
@@ -968,8 +967,6 @@ class RunState:
         os.makedirs(self.iterations_dir, exist_ok=True)
         self.roadblock_msgs_dir = os.path.join(self.run_dir, "roadblock-msgs")
         os.makedirs(self.roadblock_msgs_dir, exist_ok=True)
-        self.roadblock_logs_dir = os.path.join(self.run_dir, "roadblock-logs")
-        os.makedirs(self.roadblock_logs_dir, exist_ok=True)
         self.roadblock_followers_dir = os.path.join(self.run_dir, "roadblock-followers")
         os.makedirs(self.roadblock_followers_dir, exist_ok=True)
 
@@ -1865,6 +1862,7 @@ class RunState:
 
         logger.info("Roadblock: role=leader uuid=%s:%s timeout=%d", self.run["id"], label, timeout)
 
+        dropped_followers = []
         rc, messages_data = toolbox_do_roadblock(
             roadblock_id=self.run["id"],
             label=label,
@@ -1878,6 +1876,7 @@ class RunState:
             connection_watchdog=(self.rb_connection_watchdog == "enabled"),
             log_level=self.rb_log_level,
             msgs_dir=self.roadblock_msgs_dir,
+            dropped_followers_out=dropped_followers,
         )
 
         if rc in (ROADBLOCK_EXITS["abort"], ROADBLOCK_EXITS["abort_waiting"]):
@@ -1890,20 +1889,7 @@ class RunState:
 
         self.messages_ref = messages_data
 
-        dropped_followers = []
-        if rc not in (ROADBLOCK_EXITS["success"], ROADBLOCK_EXITS["abort"], ROADBLOCK_EXITS["abort_waiting"]):
-            msgs_log_file = os.path.join(self.roadblock_msgs_dir, f"{label}.json")
-            rb_log_file = os.path.join(self.roadblock_logs_dir, f"{label}.txt")
-            if os.path.exists(rb_log_file):
-                try:
-                    with open(rb_log_file) as f:
-                        for line in f:
-                            if "These followers" in line:
-                                parts = line.split(": ", 1)
-                                if len(parts) > 1:
-                                    dropped_followers.extend(parts[1].split())
-                except OSError:
-                    pass
+        if dropped_followers:
             logger.debug("roadblock dropped followers: %s", " ".join(dropped_followers))
 
         return rc, dropped_followers
