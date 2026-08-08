@@ -2099,6 +2099,8 @@ class RunState:
         rc, _ = self.do_roadblock("start-tools-end", self.default_rb_timeout, self.active_followers)
         self.roadblock_exit_on_error(rc)
 
+        expected_followers = list(self.active_followers)
+
         self.process_bench_roadblocks()
 
         rc, dropped = self.do_roadblock("stop-tools-begin", self.default_rb_timeout, self.active_followers)
@@ -2118,6 +2120,15 @@ class RunState:
         self.remove_dropped_followers(dropped, roadblock_label="endpoint-cleanup-begin")
         rc, dropped = self.do_roadblock("endpoint-cleanup-end", self.default_rb_timeout, self.active_followers)
         self.remove_dropped_followers(dropped, roadblock_label="endpoint-cleanup-end")
+
+        if self.dropped_followers_log:
+            logger.warning("Engine participation summary: %d of %d expected engines were dropped during this run",
+                            len(self.dropped_followers_log), len(expected_followers))
+            for entry in self.dropped_followers_log:
+                logger.warning("\tdropped: %s (roadblock: %s)", entry["follower"], entry["roadblock"])
+        else:
+            logger.info("Engine participation summary: all %d engines participated successfully",
+                         len(expected_followers))
 
     def process_bench_roadblocks(self):
         rc, _ = self.do_roadblock("setup-bench-begin", self.default_rb_timeout, self.active_followers)
