@@ -2184,14 +2184,14 @@ class RunState:
                         abort, quit_flag = self.evaluate_test_roadblock(
                             rb_name, rc, sample_data[idx], dropped, abort, quit_flag
                         )
-                        self.remove_dropped_followers(dropped)
+                        self.remove_dropped_followers(dropped, roadblock_label=rb_name)
 
                 rb_name = f"{rb_prefix}client-start-begin"
                 rc, dropped = self.do_roadblock(rb_name, timeout, self.active_followers)
                 abort, quit_flag = self.evaluate_test_roadblock(
                     rb_name, rc, sample_data[idx], dropped, abort, quit_flag
                 )
-                self.remove_dropped_followers(dropped)
+                self.remove_dropped_followers(dropped, roadblock_label=rb_name)
 
                 if self.messages_ref and "received" in self.messages_ref:
                     for message in self.messages_ref["received"]:
@@ -2209,7 +2209,7 @@ class RunState:
                 abort, quit_flag = self.evaluate_test_roadblock(
                     rb_name, rc, sample_data[idx], dropped, abort, quit_flag
                 )
-                self.remove_dropped_followers(dropped)
+                self.remove_dropped_followers(dropped, roadblock_label=rb_name)
 
                 if timeout != self.default_rb_timeout:
                     timeout = self.default_rb_timeout
@@ -2222,7 +2222,7 @@ class RunState:
                         abort, quit_flag = self.evaluate_test_roadblock(
                             rb_name, rc, sample_data[idx], dropped, abort, quit_flag
                         )
-                        self.remove_dropped_followers(dropped)
+                        self.remove_dropped_followers(dropped, roadblock_label=rb_name)
 
                 if sample_data[idx]["attempt-fail"] == 0 and abort == 0 and quit_flag == 0:
                     sample_data[idx]["complete"] = 1
