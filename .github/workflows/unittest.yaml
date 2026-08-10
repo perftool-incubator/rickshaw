@@ -63,6 +63,30 @@ jobs:
           name: report
           path: util/report.html
 
+  rickshaw-run-tests:
+    runs-on: ubuntu-latest
+    needs: changes
+    if: ${{ github.event.pull_request.head.repo.fork != true && (github.event_name == 'workflow_dispatch' || needs.changes.outputs.only-docs != 'true') }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          python3 -m venv .venv
+          source .venv/bin/activate
+          pip install pytest pytest-html
+
+      - name: Run unit tests
+        run: |
+          source .venv/bin/activate
+          pytest -v --html=report.html --self-contained-html tests/*.py
+
+      - name: Upload html report
+        uses: actions/upload-artifact@v4
+        with:
+          name: rickshaw-run-tests-report
+          path: report.html
+
   faux-unittest:
     runs-on: ubuntu-latest
     needs: changes
@@ -72,7 +96,7 @@ jobs:
 
   unittest-complete:
     runs-on: ubuntu-latest
-    needs: [ blockbreaker, faux-unittest ]
+    needs: [ blockbreaker, rickshaw-run-tests, faux-unittest ]
     if: always()
     steps:
       - name: Check Results
