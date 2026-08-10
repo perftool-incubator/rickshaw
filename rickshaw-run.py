@@ -1920,7 +1920,7 @@ class RunState:
 
     def evaluate_test_roadblock(self, rb_name, roadblock_rc, sample_info, dropped_followers, abort, quit_flag):
         if roadblock_rc != 0:
-            if roadblock_rc == ROADBLOCK_EXITS["timeout"]:
+            if roadblock_rc in (ROADBLOCK_EXITS["timeout"], ROADBLOCK_EXITS["heartbeat_timeout"]):
                 logger.error("[ERROR] roadblock '%s' timed out, attempting to exit and cleanly finish the run", rb_name)
                 self.remove_dropped_followers(dropped_followers, roadblock_label=rb_name)
                 quit_flag = 1
@@ -2184,14 +2184,12 @@ class RunState:
                         abort, quit_flag = self.evaluate_test_roadblock(
                             rb_name, rc, sample_data[idx], dropped, abort, quit_flag
                         )
-                        self.remove_dropped_followers(dropped, roadblock_label=rb_name)
 
                 rb_name = f"{rb_prefix}client-start-begin"
                 rc, dropped = self.do_roadblock(rb_name, timeout, self.active_followers)
                 abort, quit_flag = self.evaluate_test_roadblock(
                     rb_name, rc, sample_data[idx], dropped, abort, quit_flag
                 )
-                self.remove_dropped_followers(dropped, roadblock_label=rb_name)
 
                 if self.messages_ref and "received" in self.messages_ref:
                     for message in self.messages_ref["received"]:
@@ -2209,7 +2207,6 @@ class RunState:
                 abort, quit_flag = self.evaluate_test_roadblock(
                     rb_name, rc, sample_data[idx], dropped, abort, quit_flag
                 )
-                self.remove_dropped_followers(dropped, roadblock_label=rb_name)
 
                 if timeout != self.default_rb_timeout:
                     timeout = self.default_rb_timeout
@@ -2222,7 +2219,6 @@ class RunState:
                         abort, quit_flag = self.evaluate_test_roadblock(
                             rb_name, rc, sample_data[idx], dropped, abort, quit_flag
                         )
-                        self.remove_dropped_followers(dropped, roadblock_label=rb_name)
 
                 if sample_data[idx]["attempt-fail"] == 0 and abort == 0 and quit_flag == 0:
                     sample_data[idx]["complete"] = 1
