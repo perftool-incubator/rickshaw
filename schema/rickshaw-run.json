@@ -254,16 +254,14 @@
                 "val"
               ],
               "additionalProperties": false
-            },
-            "additionalItems": false
+            }
           }
         },
         "required": [
           "params"
         ],
         "additionalProperties": false
-      },
-      "additionalItems": false
+      }
     },
     "endpoints": {
       "description": "An array of endpoint definitions parsed from the run file or command line, identifying deployment targets for the run.",
@@ -285,8 +283,7 @@
             "type": "string"
           }
         }
-      },
-      "additionalItems": false
+      }
     },
     "email": {
       "description": "The email address of the user running the benchmark, used for result attribution.",
@@ -336,8 +333,7 @@
           "val"
         ],
         "additionalProperties": false
-      },
-      "additionalItems": false
+      }
     },
     "test-order": {
       "description": "The order in which iterations and samples are executed (e.g., 'sample', 'iteration', 'random').",
@@ -347,6 +343,30 @@
     "run-file": {
       "description": "The file path to the original run file that initiated this run.",
       "type": "string"
+    },
+    "partial": {
+      "description": "Whether one or more engines were dropped from a roadblock synchronization barrier during this run, indicating the results may be incomplete.",
+      "type": "boolean"
+    },
+    "dropped-engines": {
+      "description": "The engines (roadblock followers) that were dropped during this run, and the roadblock at which each was dropped.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "follower": {
+            "type": "string"
+          },
+          "roadblock": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "follower",
+          "roadblock"
+        ],
+        "additionalProperties": false
+      }
     }
   },
   "required": [

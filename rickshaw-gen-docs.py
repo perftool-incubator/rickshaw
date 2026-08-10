@@ -114,6 +114,18 @@ def create_es_doc(result, cdm, doc_type, iter_idx=None, sample_idx=None, period_
         if field in result:
             es_doc.setdefault("run", {})[field] = result[field]
 
+    # partial/dropped-engines only exist in the "run" doctype mapping starting
+    # in v9dev -- copying them onto other doctypes, or onto v7dev/v8dev's
+    # "run" doctype, would fail under their strict dynamic mappings, which
+    # don't define these properties.
+    if doc_type == "run" and cdm.ver not in ("v7dev", "v8dev"):
+        if "partial" in result:
+            es_doc.setdefault("run", {})["partial"] = result["partial"]
+        if "dropped-engines" in result:
+            es_doc.setdefault("run", {})["dropped-engines"] = [
+                entry["follower"] for entry in result["dropped-engines"]
+            ]
+
     if doc_type == "tag" and iter_idx is not None:
         tag_idx = iter_idx
         tag = result.get("tags", [])[tag_idx]

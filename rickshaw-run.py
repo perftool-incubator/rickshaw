@@ -190,7 +190,6 @@ class RunState:
         self.engine_roadblock_module = ""
         self.iterations_dir = ""
         self.roadblock_msgs_dir = ""
-        self.roadblock_logs_dir = ""
         self.roadblock_followers_dir = ""
 
         self.jsonsettings = {}
@@ -212,6 +211,7 @@ class RunState:
         self.clients_servers = {}
         self.rb_cs_ids = []
         self.active_followers = []
+        self.dropped_followers_log = []
         self.active_collector_types = {}
         self.tests = []
         self.cs_conf_file = ""
@@ -968,8 +968,6 @@ class RunState:
         os.makedirs(self.iterations_dir, exist_ok=True)
         self.roadblock_msgs_dir = os.path.join(self.run_dir, "roadblock-msgs")
         os.makedirs(self.roadblock_msgs_dir, exist_ok=True)
-        self.roadblock_logs_dir = os.path.join(self.run_dir, "roadblock-logs")
-        os.makedirs(self.roadblock_logs_dir, exist_ok=True)
         self.roadblock_followers_dir = os.path.join(self.run_dir, "roadblock-followers")
         os.makedirs(self.roadblock_followers_dir, exist_ok=True)
 
@@ -1865,6 +1863,7 @@ class RunState:
 
         logger.info("Roadblock: role=leader uuid=%s:%s timeout=%d", self.run["id"], label, timeout)
 
+        dropped_followers = []
         rc, messages_data = toolbox_do_roadblock(
             roadblock_id=self.run["id"],
             label=label,
@@ -1878,6 +1877,7 @@ class RunState:
             connection_watchdog=(self.rb_connection_watchdog == "enabled"),
             log_level=self.rb_log_level,
             msgs_dir=self.roadblock_msgs_dir,
+            dropped_followers_out=dropped_followers,
         )
 
         if rc in (ROADBLOCK_EXITS["abort"], ROADBLOCK_EXITS["abort_waiting"]):
@@ -1890,20 +1890,7 @@ class RunState:
 
         self.messages_ref = messages_data
 
-        dropped_followers = []
-        if rc not in (ROADBLOCK_EXITS["success"], ROADBLOCK_EXITS["abort"], ROADBLOCK_EXITS["abort_waiting"]):
-            msgs_log_file = os.path.join(self.roadblock_msgs_dir, f"{label}.json")
-            rb_log_file = os.path.join(self.roadblock_logs_dir, f"{label}.txt")
-            if os.path.exists(rb_log_file):
-                try:
-                    with open(rb_log_file) as f:
-                        for line in f:
-                            if "These followers" in line:
-                                parts = line.split(": ", 1)
-                                if len(parts) > 1:
-                                    dropped_followers.extend(parts[1].split())
-                except OSError:
-                    pass
+        if dropped_followers:
             logger.debug("roadblock dropped followers: %s", " ".join(dropped_followers))
 
         return rc, dropped_followers
@@ -1914,26 +1901,28 @@ class RunState:
             self.wait_for_endpoints()
             sys.exit(roadblock_rc)
 
-    def remove_followers(self, dropped, log_msg=True):
+    def remove_followers(self, dropped, log_msg=True, roadblock_label=None):
         followers_set = set(self.active_followers)
         for f in dropped:
             if f in followers_set:
                 if log_msg:
-                    logger.info("Dropping follower '%s' in an attempt to gracefully continue", f)
+                    logger.warning("Dropping follower '%s' in an attempt to gracefully continue (roadblock: %s)",
+                                    f, roadblock_label)
+                    self.dropped_followers_log.append({"follower": f, "roadblock": roadblock_label})
                 followers_set.discard(f)
         self.active_followers = list(followers_set)
 
-    def remove_dropped_followers(self, dropped):
-        self.remove_followers(dropped, log_msg=True)
+    def remove_dropped_followers(self, dropped, roadblock_label=None):
+        self.remove_followers(dropped, log_msg=True, roadblock_label=roadblock_label)
 
     def remove_engine_followers(self, dropped):
         self.remove_followers(dropped, log_msg=False)
 
     def evaluate_test_roadblock(self, rb_name, roadblock_rc, sample_info, dropped_followers, abort, quit_flag):
         if roadblock_rc != 0:
-            if roadblock_rc == ROADBLOCK_EXITS["timeout"]:
+            if roadblock_rc in (ROADBLOCK_EXITS["timeout"], ROADBLOCK_EXITS["heartbeat_timeout"]):
                 logger.error("[ERROR] roadblock '%s' timed out, attempting to exit and cleanly finish the run", rb_name)
-                self.remove_dropped_followers(dropped_followers)
+                self.remove_dropped_followers(dropped_followers, roadblock_label=rb_name)
                 quit_flag = 1
             elif roadblock_rc in (ROADBLOCK_EXITS["abort"], ROADBLOCK_EXITS["abort_waiting"]):
                 if abort == 0:
@@ -2110,25 +2099,36 @@ class RunState:
         rc, _ = self.do_roadblock("start-tools-end", self.default_rb_timeout, self.active_followers)
         self.roadblock_exit_on_error(rc)
 
+        expected_followers = list(self.active_followers)
+
         self.process_bench_roadblocks()
 
         rc, dropped = self.do_roadblock("stop-tools-begin", self.default_rb_timeout, self.active_followers)
-        self.remove_dropped_followers(dropped)
+        self.remove_dropped_followers(dropped, roadblock_label="stop-tools-begin")
         rc, dropped = self.do_roadblock("stop-tools-end", self.default_rb_timeout, self.active_followers)
-        self.remove_dropped_followers(dropped)
+        self.remove_dropped_followers(dropped, roadblock_label="stop-tools-end")
 
         rc, dropped = self.do_roadblock("send-data-begin", self.default_rb_timeout, self.active_followers)
-        self.remove_dropped_followers(dropped)
+        self.remove_dropped_followers(dropped, roadblock_label="send-data-begin")
         rc, dropped = self.do_roadblock("send-data-end", self.default_rb_timeout, self.active_followers)
-        self.remove_dropped_followers(dropped)
+        self.remove_dropped_followers(dropped, roadblock_label="send-data-end")
 
         self.remove_engine_followers(new_followers)
         self.remove_engine_followers(self.rb_cs_ids)
 
         rc, dropped = self.do_roadblock("endpoint-cleanup-begin", self.default_rb_timeout, self.active_followers)
-        self.remove_dropped_followers(dropped)
+        self.remove_dropped_followers(dropped, roadblock_label="endpoint-cleanup-begin")
         rc, dropped = self.do_roadblock("endpoint-cleanup-end", self.default_rb_timeout, self.active_followers)
-        self.remove_dropped_followers(dropped)
+        self.remove_dropped_followers(dropped, roadblock_label="endpoint-cleanup-end")
+
+        if self.dropped_followers_log:
+            logger.warning("Engine participation summary: %d of %d expected engines were dropped during this run",
+                            len(self.dropped_followers_log), len(expected_followers))
+            for entry in self.dropped_followers_log:
+                logger.warning("\tdropped: %s (roadblock: %s)", entry["follower"], entry["roadblock"])
+        else:
+            logger.info("Engine participation summary: all %d engines participated successfully",
+                         len(expected_followers))
 
     def process_bench_roadblocks(self):
         rc, _ = self.do_roadblock("setup-bench-begin", self.default_rb_timeout, self.active_followers)
@@ -2184,14 +2184,12 @@ class RunState:
                         abort, quit_flag = self.evaluate_test_roadblock(
                             rb_name, rc, sample_data[idx], dropped, abort, quit_flag
                         )
-                        self.remove_dropped_followers(dropped)
 
                 rb_name = f"{rb_prefix}client-start-begin"
                 rc, dropped = self.do_roadblock(rb_name, timeout, self.active_followers)
                 abort, quit_flag = self.evaluate_test_roadblock(
                     rb_name, rc, sample_data[idx], dropped, abort, quit_flag
                 )
-                self.remove_dropped_followers(dropped)
 
                 if self.messages_ref and "received" in self.messages_ref:
                     for message in self.messages_ref["received"]:
@@ -2209,7 +2207,6 @@ class RunState:
                 abort, quit_flag = self.evaluate_test_roadblock(
                     rb_name, rc, sample_data[idx], dropped, abort, quit_flag
                 )
-                self.remove_dropped_followers(dropped)
 
                 if timeout != self.default_rb_timeout:
                     timeout = self.default_rb_timeout
@@ -2222,7 +2219,6 @@ class RunState:
                         abort, quit_flag = self.evaluate_test_roadblock(
                             rb_name, rc, sample_data[idx], dropped, abort, quit_flag
                         )
-                        self.remove_dropped_followers(dropped)
 
                 if sample_data[idx]["attempt-fail"] == 0 and abort == 0 and quit_flag == 0:
                     sample_data[idx]["complete"] = 1
@@ -2448,6 +2444,8 @@ def main():
     state.run["rickshaw-run"] = {"schema": {"version": "2020.03.18"}}
     state.run["max-sample-failures"] = int(state.run.get("max-sample-failures", 1))
     state.run["num-samples"] = int(state.run.get("num-samples", 1))
+    state.run["partial"] = bool(state.dropped_followers_log)
+    state.run["dropped-engines"] = state.dropped_followers_log
     save_json_file(run_file, state.run)
 
 if __name__ == "__main__":
