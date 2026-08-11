@@ -40,6 +40,7 @@ from toolbox.messages import (
     save_received_messages as _tb_save_received_messages,
     ROADBLOCK_EXITS,
 )
+from toolbox.roadblock import do_roadblock as _tb_do_roadblock
 
 ROADBLOCK_HOME = os.environ.get('ROADBLOCK_HOME')
 if ROADBLOCK_HOME is None:
@@ -53,7 +54,6 @@ else:
         print("ERROR: <ROADBLOCK_HOME>/roadblock.py ('%s') does not exist!" % (p))
         exit(2)
     sys.path.append(str(Path(ROADBLOCK_HOME)))
-from roadblock import roadblock
 from roadblock import VERBOSE_DEBUG_LEVEL
 
 roadblock_exits = ROADBLOCK_EXITS
@@ -620,6 +620,11 @@ def do_roadblock(roadblock_id = None, label = None, timeout = None, messages = N
     """
     Run a roadblock
 
+    Thin endpoint-specific wrapper around toolbox.roadblock.do_roadblock():
+    adds the pre-connect ping diagnostic and message stream logging that
+    callers of this function rely on, then delegates the actual roadblock
+    mechanics to the shared implementation also used by engine_lib.py.
+
     Args:
         roadblock_id (str): The base ID to use as part of the roadblock's name
         label (str): The name of the roadblock to participate in
@@ -643,8 +648,6 @@ def do_roadblock(roadblock_id = None, label = None, timeout = None, messages = N
         raise ValueError("No roadblock label specified")
 
     logger.info("Processing roadblock '%s'" % (label), stacklevel = 2)
-    uuid = "%s:%s" % (roadblock_id, label)
-    logger.info("[%s] Roadblock uuid is '%s'" % (label, uuid))
 
     if timeout is None:
         timeout = 300
@@ -652,28 +655,10 @@ def do_roadblock(roadblock_id = None, label = None, timeout = None, messages = N
     else:
         logger.info("[%s] Roadblock timeout set to %d" % (label, timeout))
 
-    if messages is None:
-        logger.info("[%s] No roadblock messages to send" % (label))
-    else:
-        logger.info("[%s] Sending roadblock messages %s" % (label, messages))
-
-    if wait_for is None:
-        logger.info("[%s] No roadblock wait-for" % (label))
-    else:
-        wait_for_log = tempfile.mkstemp(suffix = "log")
-        os.close(wait_for_log[0])
-        wait_for_log = wait_for_log[1]
-        logger.info("[%s] Going to run this wait-for command: %s" % (label, wait_for))
-        logger.info("[%s] Going to log wait-for to this file: %s" % (label, wait_for_log))
-
-    if not abort is None and not abort is False:
-        logger.info("[%s] Going to send an abort" % (label))
-
     msgs_log_file = msgs_dir + "/" + label + ".json"
     logger.info("[%s] Logging messages to: %s" % (label, msgs_log_file))
 
     redis_server = "localhost"
-    leader = "controller"
 
     result = run_local("ping -w 10 -c 4 " + redis_server)
     ping_log_msg = "[%s] Pinged redis server '%s' with return code %d:\nstdout:\n%sstderr:\n%s" % (label, redis_server, result.exited, result.stdout, result.stderr)
@@ -682,44 +667,31 @@ def do_roadblock(roadblock_id = None, label = None, timeout = None, messages = N
     else:
         logger.info(ping_log_msg)
 
-    my_roadblock = roadblock(None, None)
-    my_roadblock.set_uuid(uuid)
-    my_roadblock.set_role("follower")
-    my_roadblock.set_follower_id(follower_id)
-    my_roadblock.set_leader_id(leader)
-    my_roadblock.set_timeout(timeout)
-    my_roadblock.set_redis_server(redis_server)
-    my_roadblock.set_redis_password(redis_password)
-    my_roadblock.set_abort(abort)
-    my_roadblock.set_message_log(msgs_log_file)
-    my_roadblock.set_user_messages(messages)
-    if not wait_for is None:
-        my_roadblock.set_wait_for_cmd(wait_for)
-        my_roadblock.set_wait_for_log(wait_for_log)
-    if connection_watchdog:
-        my_roadblock.set_connection_watchdog("enabled")
-    else:
-        my_roadblock.set_connection_watchdog("disabled")
-
-    rc = my_roadblock.run_it()
+    rc, _ = _tb_do_roadblock(roadblock_id = roadblock_id,
+                             label = label,
+                             role = "follower",
+                             follower_id = follower_id,
+                             leader_id = "controller",
+                             timeout = timeout,
+                             redis_server = redis_server,
+                             redis_password = redis_password,
+                             messages = messages,
+                             abort = abort,
+                             connection_watchdog = connection_watchdog,
+                             msgs_dir = msgs_dir,
+                             wait_for = wait_for)
     result_log_msg = "[%s] Roadblock resulted in return code %d" % (label, rc)
     if rc != 0:
         logger.error(result_log_msg)
     else:
         logger.info(result_log_msg)
 
-    stream = ""
-    with open(msgs_log_file, "r", encoding = "ascii") as msgs_log_file_fp:
-        for line in msgs_log_file_fp:
-            stream += line
-    logger.info("[%s] Logged messages from roadblock:\n%s" % (label, stream))
-
-    if not wait_for is None:
+    if os.path.exists(msgs_log_file):
         stream = ""
-        with open(wait_for_log, "r", encoding = "ascii") as wait_for_log_fp:
-            for line in wait_for_log_fp:
-              stream += line
-        logger.info("[%s] Wait-for log from raodblock:\n%s" % (label, stream))
+        with open(msgs_log_file, "r", encoding = "ascii") as msgs_log_file_fp:
+            for line in msgs_log_file_fp:
+                stream += line
+        logger.info("[%s] Logged messages from roadblock:\n%s" % (label, stream))
 
     logger.info("[%s] Returning %d" % (label, rc))
     return rc
