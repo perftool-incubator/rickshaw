@@ -29,7 +29,6 @@ jobs:
             .github/workflows/crucible-ci.yaml
             .github/workflows/fork-check.yaml
             .github/workflows/controller-build.yaml
-            .github/workflows/unittest.yaml
             docs/**
             engine/engine-script-library.py
             engine/engine-script.py
@@ -37,8 +36,13 @@ jobs:
       - name: Display changes
         run: echo '${{ toJSON(steps.filter.outputs) }}' | jq .
 
-  call-real-core-release-crucible-ci:
+  call-unittest:
     needs: changes
+    if: ${{ github.event.pull_request.head.repo.fork != true && (github.event_name == 'workflow_dispatch' || needs.changes.outputs.only-docs != 'true') }}
+    uses: ./.github/workflows/unittest.yaml
+
+  call-real-core-release-crucible-ci:
+    needs: [ changes, call-unittest ]
     if: ${{ github.event.pull_request.head.repo.fork != true && (github.event_name == 'workflow_dispatch' || needs.changes.outputs.only-docs != 'true') }}
     uses: perftool-incubator/crucible-ci/.github/workflows/core-release-crucible-ci.yaml@main
     with:
@@ -55,7 +59,7 @@ jobs:
     uses: perftool-incubator/crucible-ci/.github/workflows/faux-core-release-crucible-ci.yaml@main
 
   crucible-ci-complete:
-    needs: [ call-real-core-release-crucible-ci, call-faux-core-release-crucible-ci ]
+    needs: [ call-unittest, call-real-core-release-crucible-ci, call-faux-core-release-crucible-ci ]
     if: always()
     runs-on: ubuntu-latest
     steps:
