@@ -12,6 +12,7 @@ import os
 import platform
 import random
 import re
+import shlex
 import shutil
 import signal
 import subprocess
@@ -106,6 +107,19 @@ def dir_entries(dirpath, pattern=None):
     return entries
 
 
+def render_param(arg, val):
+    """Render one {arg, val} pair as a single '--arg' or '--arg=value' token,
+    quoting the value only if the shell would otherwise misinterpret it
+    (e.g. embedded spaces). Shared by benchmark and tool command rendering
+    so both use the same grammar for param_regex fixups to target. Only
+    None/"" render as a bare flag -- any other value (including 0/False) is
+    stringified and rendered, never silently dropped via Python truthiness."""
+    val = "" if val is None else str(val)
+    if val:
+        return f"--{arg}={shlex.quote(val)}"
+    return f"--{arg}"
+
+
 def dump_params(params, cs_id, engine, ids_to_benchmark):
     default_role = "client"
     benchmark = ids_to_benchmark.get(str(cs_id)) if cs_id is not None else None
@@ -113,7 +127,7 @@ def dump_params(params, cs_id, engine, ids_to_benchmark):
 
     for param in params:
         arg = param.get("arg", "")
-        val = param.get("val", "")
+        val = param.get("val")
         bench = param.get("benchmark", "")
         role = param.get("role", default_role)
         param_id = param.get("id")
@@ -125,12 +139,9 @@ def dump_params(params, cs_id, engine, ids_to_benchmark):
         if role != engine and role != "all":
             continue
 
-        if val:
-            if cs_id is not None:
-                val = val.replace("%client-id%", str(cs_id))
-            params_str += f" --{arg}={val}"
-        else:
-            params_str += f" --{arg}"
+        if val is not None and cs_id is not None:
+            val = str(val).replace("%client-id%", str(cs_id))
+        params_str += f" {render_param(arg, val)}"
 
     return params_str.lstrip()
 
@@ -145,6 +156,24 @@ def perl_s_regex(cmd, regex_str):
     count = 0 if "g" in flags_str else 1
     re_flags = re.IGNORECASE if "i" in flags_str else 0
     return re.sub(pattern, replacement, cmd, count=count, flags=re_flags)
+
+
+def apply_param_regex_and_split(cmd, param_regex_list, context_desc):
+    """Apply param_regex fixups to a fully-rendered command string, then
+    split it into a clean argv list. A param_regex pattern anchored on
+    non-whitespace (e.g. \\S+) can leave an unbalanced quote if it ever
+    matches into a value that needed shlex.quote() protection -- fail
+    loudly with the offending text rather than silently mis-tokenizing."""
+    for r in param_regex_list:
+        cmd = perl_s_regex(cmd, r)
+    try:
+        return shlex.split(cmd)
+    except ValueError as exc:
+        logger.error(
+            "[ERROR] Could not parse rendered command for %s: %s -- rendered text: [%s]",
+            context_desc, exc, cmd,
+        )
+        sys.exit(1)
 
 
 class RunState:
@@ -1468,7 +1497,7 @@ class RunState:
 
         tool = {
             "name": tool_id,
-            "command": "declare -a ARGS=(",
+            "argv": [],
             "deployment": "auto",
             "opt-tag": None,
         }
@@ -1478,14 +1507,17 @@ class RunState:
             if "opt-tag" in tool_entry:
                 tool["opt-tag"] = tool_entry["opt-tag"]
 
+        tokens = [self.tools_configs[tool_name]["collector"][start_stop]]
         for tool_param in tool_entry.get("params", []):
             if tool_param.get("enabled") == "no":
                 continue
-            tool["command"] += f"'--{tool_param['arg']}' '{tool_param.get('val', '')}' "
+            tokens.append(render_param(tool_param["arg"], tool_param.get("val", "")))
+        cmd = " ".join(tokens)
 
-        tool["command"] = tool["command"].rstrip()
-        tool["command"] += ") && "
-        tool["command"] += self.tools_configs[tool_name]["collector"][start_stop] + ' "${ARGS[@]}"'
+        param_regex_list = self.tools_configs[tool_name].get("collector", {}).get("param_regex", [])
+        tool["argv"] = apply_param_regex_and_split(
+            cmd, param_regex_list, "tool '%s' (%s)" % (tool_id, start_stop)
+        )
 
         return tool
 
@@ -1649,29 +1681,31 @@ class RunState:
                 for cmd_type in cmd_type_files:
                     if cmd_type == "runtime" and int(cs_id) > 1:
                         continue
-                    this_cmd_file = os.path.join(this_cmds_dir, cmd_type)
-                    with open(this_cmd_file, "w") as fh:
-                        for test_ref in self.tests:
-                            test_iter = test_ref["iteration-id"]
-                            test_samp = test_ref["sample-id"]
-                            iter_array_idx = test_iter - 1
-                            benchmark = self.ids_to_benchmark.get(str(cs_id))
-                            bench_cfg = self.bench_configs.get(benchmark, {})
-                            cmd_template = bench_cfg.get(cs_type, {}).get(cmd_type, "")
-                            if cmd_template:
-                                params_str = dump_params(
-                                    self.run["iterations"][iter_array_idx].get("params", []),
-                                    cs_id, cs_type, self.ids_to_benchmark
-                                )
-                                cmd = f"{cmd_template} {params_str}"
-                                param_regex_list = bench_cfg.get(cs_type, {}).get("param_regex", [])
-                                for r in param_regex_list:
-                                    cmd = perl_s_regex(cmd, r)
-                                fh.write(f"{test_iter}-{test_samp} {cmd}\n")
-                            elif cmd_type != "infra":
-                                logger.error("[ERROR] Could not find %s in bench_config", cmd_type)
-                                sys.exit(1)
-                    os.chmod(this_cmd_file, 0o755)
+                    this_cmd_file = os.path.join(this_cmds_dir, f"{cmd_type}.json")
+                    entries = []
+                    for test_ref in self.tests:
+                        test_iter = test_ref["iteration-id"]
+                        test_samp = test_ref["sample-id"]
+                        iter_array_idx = test_iter - 1
+                        benchmark = self.ids_to_benchmark.get(str(cs_id))
+                        bench_cfg = self.bench_configs.get(benchmark, {})
+                        cmd_template = bench_cfg.get(cs_type, {}).get(cmd_type, "")
+                        if cmd_template:
+                            params_str = dump_params(
+                                self.run["iterations"][iter_array_idx].get("params", []),
+                                cs_id, cs_type, self.ids_to_benchmark
+                            )
+                            cmd = f"{cmd_template} {params_str}"
+                            param_regex_list = bench_cfg.get(cs_type, {}).get("param_regex", [])
+                            argv = apply_param_regex_and_split(
+                                cmd, param_regex_list,
+                                "benchmark '%s' (%s/%s)" % (benchmark, cs_type, cmd_type)
+                            )
+                            entries.append({"test": f"{test_iter}-{test_samp}", "argv": argv})
+                        elif cmd_type != "infra":
+                            logger.error("[ERROR] Could not find %s in bench_config", cmd_type)
+                            sys.exit(1)
+                    save_json_file(this_cmd_file, entries)
 
         for cs_type in list(self.clients_servers.keys()) + all_collector_types:
             if cs_type in ("client", "server"):

@@ -1229,26 +1229,28 @@ def process_bench_roadblocks(callbacks = None, roadblock_id = None, endpoint_lab
     iteration_sample_data = []
 
     logger.info("Initializing data structures")
-    with open(engine_commands_dir + "/client/1/start") as bench_cmds_fp:
-        for line in bench_cmds_fp:
-            split = line.split(" ")
-            iteration_sample = split[0]
-            split = iteration_sample.split("-")
-            iteration_id = int(split[0])
-            sample_id = int(split[1])
+    bench_cmds, err = load_json_file(engine_commands_dir + "/client/1/start.json.xz", uselzma = True)
+    if bench_cmds is None:
+        logger.error("Failed to load bench commands from %s/client/1/start.json.xz: %s" % (engine_commands_dir, err))
+        return 1
+    for entry in bench_cmds:
+        iteration_sample = entry["test"]
+        split = iteration_sample.split("-")
+        iteration_id = int(split[0])
+        sample_id = int(split[1])
 
-            logger.info("iteration_sample=%s iteration_id=%s sample_id=%s" % (iteration_sample, iteration_id, sample_id))
+        logger.info("iteration_sample=%s iteration_id=%s sample_id=%s" % (iteration_sample, iteration_id, sample_id))
 
-            obj = {
-                "iteration-sample": iteration_sample,
-                "iteration-id": iteration_id,
-                "sample-id": sample_id,
-                "failures": 0,
-                "complete": False,
-                "attempt-num": 0,
-                "attempt-fail": 0
-            }
-            iteration_sample_data.append(obj)
+        obj = {
+            "iteration-sample": iteration_sample,
+            "iteration-id": iteration_id,
+            "sample-id": sample_id,
+            "failures": 0,
+            "complete": False,
+            "attempt-num": 0,
+            "attempt-fail": 0
+        }
+        iteration_sample_data.append(obj)
 
     logger.info("Total tests: %d" % (len(iteration_sample_data)))
 

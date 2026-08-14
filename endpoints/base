@@ -758,7 +758,7 @@ function process_bench_roadblocks() {
 
     echo "Initializing data structures:"
     while read -u 9 line; do
-        iter_samp=`echo ${line} | awk '{print $1}'`
+        iter_samp="${line}"
         iter_id=`echo ${iter_samp} | awk -F- '{print $1}'`
         samp_id=`echo ${iter_samp} | awk -F- '{print $2}'`
         iter_array_idx=${total_tests}
@@ -772,7 +772,7 @@ function process_bench_roadblocks() {
         sample_data_attempt_fail[${iter_array_idx}]=0
 
         (( total_tests += 1 ))
-    done 9< "${engine_bench_cmds_dir}/client/1/start"
+    done 9< <(xzcat "${engine_bench_cmds_dir}/client/1/start.json.xz" | jq -r '.[] | .test')
 
     echo "Total tests: ${total_tests}"
 
@@ -788,7 +788,7 @@ function process_bench_roadblocks() {
 
         (( current_test += 1 ))
 
-        iter_samp=`echo ${line} | awk '{print $1}'`
+        iter_samp="${line}"
         iter_id=`echo ${iter_samp} | awk -F- '{print $1}'`
         samp_id=`echo ${iter_samp} | awk -F- '{print $2}'`
         let iter_array_idx=${current_test}-1
@@ -978,7 +978,7 @@ function process_bench_roadblocks() {
                    ${max_sample_failures} \
                    ${sample_result}
         done
-    done 9< "$engine_bench_cmds_dir/client/1/start"
+    done 9< <(xzcat "$engine_bench_cmds_dir/client/1/start.json.xz" | jq -r '.[] | .test')
 }
 
 function process_roadblocks() {
