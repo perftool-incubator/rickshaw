@@ -108,7 +108,7 @@
           "pattern": "^.+$"
         },
         "param_regex": {
-          "description": "Array of regex patterns used to validate benchmark parameters.  Each pattern defines valid parameter formats.",
+          "description": "Array of sed-style 's/pattern/replacement/[flags]' substitutions applied to the fully-rendered client command string (params rendered as '--arg=value' tokens) before it is split back into an argv list. Lets a param declare a placeholder value (e.g. 'ON'/'OFF') for multiplex validation purposes while being rendered as a bare flag or omitted entirely, or lets the benchmark rewrite/strip params outright (e.g. swapping a controller-supplied path for a fixed in-container filename). Shares the same grammar as tool.json's collector 'param_regex'.",
           "type": "array",
           "items": {
             "type": "string",
@@ -169,7 +169,7 @@
           "pattern": "^.+$"
         },
         "param_regex": {
-          "description": "Array of regex patterns used to validate server-side benchmark parameters.",
+          "description": "Array of sed-style 's/pattern/replacement/[flags]' substitutions applied to the fully-rendered server command string (params rendered as '--arg=value' tokens) before it is split back into an argv list. Lets a param declare a placeholder value (e.g. 'ON'/'OFF') for multiplex validation purposes while being rendered as a bare flag or omitted entirely, or lets the benchmark rewrite/strip params outright. Shares the same grammar as tool.json's collector 'param_regex'.",
           "type": "array",
           "items": {
             "type": "string",

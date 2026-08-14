@@ -173,6 +173,15 @@
           "description": "The script that terminates data collection on the collector engine and prepares the collected data for transfer back to the controller.",
           "type": "string",
           "pattern": "^.+$"
+        },
+        "param_regex": {
+          "description": "Array of sed-style 's/pattern/replacement/[flags]' substitutions applied to the fully-rendered start/stop command string (params rendered as '--arg=value' tokens) before it is split back into an argv list. Lets a param declare a placeholder value (e.g. 'ON'/'OFF') for multiplex validation purposes while being rendered as a bare flag or omitted entirely, for scripts whose getopt parsing doesn't accept a real value. Shares the same grammar as benchmark.json's client/server 'param_regex'.",
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^.+$"
+          },
+          "additionalItems": false
         }
       },
       "required": [

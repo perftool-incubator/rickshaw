@@ -7,6 +7,7 @@ import json
 import logging
 import os
 import re
+import shlex
 import shutil
 import sys
 import tempfile
@@ -533,16 +534,16 @@ class Engine:
                     "bench-cmds",
                     self.cs_type,
                     self.cs_id,
-                    "start",
+                    "start.json.xz",
                 ),
-                "bench-start-cmds",
+                "bench-start-cmds.json.xz",
             )
         else:
             self.scp_from_controller(
                 os.path.join(
-                    self.engine_config_dir, "bench-cmds", "client", "1", "start"
+                    self.engine_config_dir, "bench-cmds", "client", "1", "start.json.xz"
                 ),
-                "bench-start-cmds",
+                "bench-start-cmds.json.xz",
             )
 
         if self.cs_type == "client":
@@ -552,9 +553,9 @@ class Engine:
                     "bench-cmds",
                     self.cs_type,
                     self.cs_id,
-                    "infra",
+                    "infra.json.xz",
                 ),
-                "bench-infra-cmds",
+                "bench-infra-cmds.json.xz",
             )
             if self.cs_id == "1":
                 self.scp_from_controller(
@@ -563,9 +564,9 @@ class Engine:
                         "bench-cmds",
                         self.cs_type,
                         self.cs_id,
-                        "runtime",
+                        "runtime.json.xz",
                     ),
-                    "bench-runtime-cmds",
+                    "bench-runtime-cmds.json.xz",
                 )
         elif self.cs_type == "server":
             self.scp_from_controller(
@@ -574,9 +575,9 @@ class Engine:
                     "bench-cmds",
                     self.cs_type,
                     self.cs_id,
-                    "stop",
+                    "stop.json.xz",
                 ),
-                "bench-stop-cmds",
+                "bench-stop-cmds.json.xz",
             )
 
         if self.cs_type in ("client", "server"):
@@ -625,7 +626,7 @@ class Engine:
             raise EngineError(
                 "Failed to load tool commands from %s: %s" % (cmds_file, err)
             )
-        return [(t["name"], t["command"]) for t in data.get("tools", [])]
+        return [(t["name"], t["argv"]) for t in data.get("tools", [])]
 
     def start_tools(self, one_tool=None):
         logger.info("Starting tools")
@@ -645,7 +646,7 @@ class Engine:
 
         tools = self._parse_tool_commands(self.tool_start_cmds)
         total = 0
-        for tool_name, tool_command in tools:
+        for tool_name, tool_argv in tools:
             if one_tool and one_tool != tool_name:
                 logger.info(
                     "Skipping tool '%s' (engine runs '%s' only)",
@@ -658,14 +659,14 @@ class Engine:
             tool_dir = os.path.join("tool-data", tool_name)
             os.makedirs(tool_dir, exist_ok=True)
             logger.info("Starting tool '%s'", tool_name)
-            run_command("cd %s && %s" % (tool_dir, tool_command))
+            run_command("cd %s && %s" % (tool_dir, shlex.join(tool_argv)))
 
         if total == 0:
             logger.info("No tools configured for this engine")
 
     # ---- Benchmark execution ---------------------------------------------
 
-    def run_bench_cmd(self, matching_type, cmd_type, cmd, force=False):
+    def run_bench_cmd(self, matching_type, cmd_type, argv, force=False):
         if self.cs_type != matching_type:
             return 0
         if not force and (self.abort or self.quit):
@@ -676,18 +677,21 @@ class Engine:
                 self.quit,
             )
             return 0
-        if not cmd:
+        if not argv:
             logger.info("No %s command to run", cmd_type)
             return 0
         logger.info("Running %s command", cmd_type)
-        result = run_command(cmd)
+        result = run_command(shlex.join(argv))
         return result.return_code
 
     def _load_bench_cmds(self, filename):
         if not os.path.exists(filename):
             return []
-        with open(filename) as fp:
-            return [line.strip() for line in fp if line.strip()]
+        data, err = load_json_file(filename, uselzma=True)
+        if data is None:
+            logger.error("Failed to load bench commands from %s: %s", filename, err)
+            return []
+        return data
 
     def _roadblock_and_evaluate(self, rb_name, timeout, iter_idx,
                                 sample_data, msgs_file=None, do_abort=False):
@@ -731,10 +735,10 @@ class Engine:
         rc = self.do_roadblock("setup-bench-begin", self.default_timeout)
         self.roadblock_exit_on_error(rc)
 
-        bench_start_cmds = self._load_bench_cmds("bench-start-cmds")
-        bench_infra_cmds = self._load_bench_cmds("bench-infra-cmds")
-        bench_runtime_cmds = self._load_bench_cmds("bench-runtime-cmds")
-        bench_stop_cmds = self._load_bench_cmds("bench-stop-cmds")
+        bench_start_cmds = self._load_bench_cmds("bench-start-cmds.json.xz")
+        bench_infra_cmds = self._load_bench_cmds("bench-infra-cmds.json.xz")
+        bench_runtime_cmds = self._load_bench_cmds("bench-runtime-cmds.json.xz")
+        bench_stop_cmds = self._load_bench_cmds("bench-stop-cmds.json.xz")
 
         if not bench_start_cmds:
             self.abort_error("bench-start-cmds not found", "setup-bench-end")
@@ -742,8 +746,8 @@ class Engine:
 
         total_tests = len(bench_start_cmds)
         sample_data = []
-        for i, line in enumerate(bench_start_cmds):
-            iter_samp = line.split()[0]
+        for i, entry in enumerate(bench_start_cmds):
+            iter_samp = entry["test"]
             parts = iter_samp.split("-")
             iter_id = int(parts[0])
             samp_id = int(parts[1])
@@ -772,7 +776,7 @@ class Engine:
             sd = sample_data[i]
             iter_id = sd["iteration-id"]
             samp_id = sd["sample-id"]
-            iter_samp = bench_start_cmds[i].split()[0]
+            iter_samp = bench_start_cmds[i]["test"]
 
             iter_samp_dir = os.path.join(
                 self.cs_dir,
@@ -784,17 +788,17 @@ class Engine:
             sd["rx-msgs-dir"] = cs_rx_msgs_dir
 
             if self.cs_type == "client":
-                start_cmd = bench_start_cmds[i].split(None, 1)[1] if len(bench_start_cmds[i].split()) > 1 else ""
-                runtime_cmd = bench_runtime_cmds[i].split(None, 1)[1] if i < len(bench_runtime_cmds) and len(bench_runtime_cmds[i].split()) > 1 else ""
-                infra_cmd = bench_infra_cmds[i].split(None, 1)[1] if i < len(bench_infra_cmds) and len(bench_infra_cmds[i].split()) > 1 else ""
-                stop_cmd = ""
+                start_argv = bench_start_cmds[i].get("argv", [])
+                runtime_argv = bench_runtime_cmds[i].get("argv", []) if i < len(bench_runtime_cmds) else []
+                infra_argv = bench_infra_cmds[i].get("argv", []) if i < len(bench_infra_cmds) else []
+                stop_argv = []
             elif self.cs_type == "server":
-                start_cmd = bench_start_cmds[i].split(None, 1)[1] if len(bench_start_cmds[i].split()) > 1 else ""
-                stop_cmd = bench_stop_cmds[i].split(None, 1)[1] if i < len(bench_stop_cmds) and len(bench_stop_cmds[i].split()) > 1 else ""
-                runtime_cmd = ""
-                infra_cmd = ""
+                start_argv = bench_start_cmds[i].get("argv", [])
+                stop_argv = bench_stop_cmds[i].get("argv", []) if i < len(bench_stop_cmds) else []
+                runtime_argv = []
+                infra_argv = []
             else:
-                start_cmd = runtime_cmd = infra_cmd = stop_cmd = ""
+                start_argv = runtime_argv = infra_argv = stop_argv = []
 
             self.abort = False
 
@@ -844,7 +848,7 @@ class Engine:
                 )
                 self._roadblock_and_evaluate(rb_name, timeout, i, sample_data, msgs_file)
 
-                abort_rc = self.run_bench_cmd("client", "infra", infra_cmd)
+                abort_rc = self.run_bench_cmd("client", "infra", infra_argv)
                 do_abort_arg = abort_rc != 0
                 if do_abort_arg:
                     self.abort = True
@@ -865,7 +869,7 @@ class Engine:
                 )
                 self._roadblock_and_evaluate(rb_name, timeout, i, sample_data, msgs_file)
 
-                abort_rc = self.run_bench_cmd("server", "server", start_cmd)
+                abort_rc = self.run_bench_cmd("server", "server", start_argv)
                 do_abort_arg = abort_rc != 0
                 if do_abort_arg:
                     self.abort = True
@@ -900,8 +904,8 @@ class Engine:
                     and not self.quit
                     and self.cs_type == "client"
                     and self.cs_id == "1"
-                    and runtime_cmd):
-                    result = run_command(runtime_cmd)
+                    and runtime_argv):
+                    result = run_command(shlex.join(runtime_argv))
                     runtime_output = result.stdout.strip()
 
                     if result.return_code == 0 and runtime_output:
@@ -959,11 +963,11 @@ class Engine:
                     msgs_file = prepare_user_msgs_file(
                         cs_tx_msgs_dir, iter_samp_dir, rb_name, default_recipients
                     )
-                    wait_for_cmd = (
-                        "python3 /usr/local/bin/engine_lib.py"
-                        " run_bench_cmd '%s' 'client' 'client' '%s' '%s' '0' '%s'"
-                        % (self.cs_type, self.abort, self.quit, start_cmd)
-                    )
+                    wait_for_cmd = [
+                        "python3", "/usr/local/bin/engine_lib.py", "run_bench_cmd",
+                        self.cs_type, "client", "client",
+                        str(self.abort), str(self.quit), "0",
+                    ] + start_argv
                     rc = self.do_roadblock(
                         rb_name, timeout, messages=msgs_file,
                         wait_for=wait_for_cmd,
@@ -978,7 +982,7 @@ class Engine:
                     if result["is_abort"]:
                         self.abort = True
                 else:
-                    abort_rc = self.run_bench_cmd("client", "client", start_cmd)
+                    abort_rc = self.run_bench_cmd("client", "client", start_argv)
                     do_abort_arg = abort_rc != 0
                     if do_abort_arg:
                         self.abort = True
@@ -1030,7 +1034,7 @@ class Engine:
                 self._roadblock_and_evaluate(rb_name, timeout, i, sample_data, msgs_file)
 
                 self.run_bench_cmd(
-                    "server", "server", stop_cmd, force=force_server_stop
+                    "server", "server", stop_argv, force=force_server_stop
                 )
                 abort_rc = 0
                 do_abort_arg = self.abort
@@ -1169,7 +1173,7 @@ def cli_stop_tools(working_dir, tool_cmds_file, disabled, one_tool=""):
 
     for tool in data.get("tools", []):
         tool_name = tool["name"]
-        tool_command = tool["command"]
+        tool_argv = tool["argv"]
 
         if one_tool and one_tool != tool_name:
             log.info("Skipping tool '%s' (engine runs '%s' only)", tool_name, one_tool)
@@ -1180,7 +1184,7 @@ def cli_stop_tools(working_dir, tool_cmds_file, disabled, one_tool=""):
             continue
 
         log.info("Stopping tool '%s'", tool_name)
-        run_command("cd %s && %s" % (tool_dir, tool_command))
+        run_command("cd %s && %s" % (tool_dir, shlex.join(tool_argv)))
 
         if os.path.isfile(env_file):
             shutil.copy2(env_file, tool_dir)
@@ -1230,7 +1234,7 @@ def cli_send_data(ssh_id_file, src_dir, dest_host, dest_path):
 
 
 def cli_run_bench_cmd(cs_type, matching_type, cmd_type, abort_str, quit_str,
-                      force_str, cmd):
+                      force_str, *cmd_argv):
     """Standalone entry point for roadblock wait-for: run bench command."""
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     if cs_type != matching_type:
@@ -1240,9 +1244,9 @@ def cli_run_bench_cmd(cs_type, matching_type, cmd_type, abort_str, quit_str,
     force = force_str not in ("0", "False", "false", "")
     if not force and (abort or quit_flag):
         return
-    if not cmd:
+    if not cmd_argv:
         return
-    result = run_command(cmd)
+    result = run_command(shlex.join(cmd_argv))
     sys.exit(result.return_code)
 
 
