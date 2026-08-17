@@ -4,14 +4,16 @@
 
 """Unit tests for rickshaw-run.py's RunState.apply_tool_multiplex() -- the
 bridge that lets a tool's flat tool-params.json params get validated/
-transformed/preset-applied by multiplex.py, identical to benchmarks, without
-ever risking real parameter multiplication (crucible#653).
+transformed/preset-applied by multiplex.py's --flat mode, identical in
+spirit to benchmarks but without ever needing sets/include/cartesian-
+product (tools always have exactly one implicit param set and, per
+schema/tool-params.json, never more than one value per param).
 
 toolbox is mocked out rather than required, since rickshaw-run.py imports
 from it at module scope and CI does not check toolbox out for this job.
 multiplex.py itself is not invoked -- run_cmd is mocked so these tests
-exercise only the wrap/unwrap logic in apply_tool_multiplex(), not
-multiplex.py's own internals (which are that project's own responsibility).
+exercise only apply_tool_multiplex()'s own logic, not multiplex.py's --flat
+mode internals (which are that project's own responsibility).
 """
 
 import importlib.machinery
@@ -106,17 +108,17 @@ def import_rickshaw_run():
     return mod
 
 
-def fake_multiplex(sets):
-    """Build a run_cmd side_effect simulating multiplex.py: reads the --input
-    file this code wrote, writes back `sets` (a list of param lists) to the
-    --output path, and returns rc=0. Pass rc= to simulate a failure instead.
+def fake_multiplex(params):
+    """Build a run_cmd side_effect simulating multiplex.py --flat: reads the
+    --input file this code wrote, writes back `params` (a flat list of
+    {arg, val} dicts) to the --output path, and returns rc=0.
     """
 
     def _side_effect(cmd):
         match = re.search(r"--output (\S+)", cmd)
         output_file = match.group(1)
         with open(output_file, "w") as f:
-            json.dump(sets, f)
+            json.dump(params, f)
         return (cmd, "", 0)
 
     return _side_effect
@@ -141,31 +143,34 @@ class TestApplyToolMultiplex(unittest.TestCase):
         self.assertEqual(tool_entry["params"], [{"arg": "interval", "val": "10"}])
         self.run_cmd.assert_not_called()
 
-    def test_wraps_and_unwraps_round_trip(self):
+    def test_flat_round_trip(self):
         self._write_multiplex_json()
         self.run_cmd.side_effect = fake_multiplex(
-            [[{"arg": "interval", "val": "10", "role": "all"}]]
+            [{"arg": "interval", "val": "10"}]
         )
         tool_entry = {"tool-id": "kernel", "params": [{"arg": "interval", "val": "10"}]}
         self.state.apply_tool_multiplex(tool_entry, self.tool_dir)
 
-        # role must not leak into the unwrapped result
         self.assertEqual(tool_entry["params"], [{"arg": "interval", "val": "10"}])
 
-        # verify the wrapped input actually sent to multiplex used a
-        # one-element vals array and role "all", not multiplex's "client" default
         cmd = self.run_cmd.call_args[0][0]
+        self.assertIn("--flat", cmd)
+
+        # the input sent to multiplex is the tool's params, flat and
+        # unmodified -- no wrap into a sets/global-options document, no
+        # injected "vals"/"role" (--flat mode owns that internally now)
         input_file = re.search(r"--input (\S+)", cmd).group(1)
         with open(input_file) as f:
-            wrapped = json.load(f)
-        self.assertEqual(
-            wrapped["sets"][0]["params"],
-            [{"arg": "interval", "vals": ["10"], "role": "all"}],
-        )
+            flat_input = json.load(f)
+        self.assertEqual(flat_input, [{"arg": "interval", "val": "10"}])
 
-    def test_disabled_param_excluded_from_wrap(self):
+    def test_disabled_param_passed_through_unfiltered(self):
+        # Filtering a disabled param is now multiplex --flat mode's own
+        # responsibility (param_enabled() inside apply_flat_params()) --
+        # rickshaw no longer pre-filters client-side, matching how the
+        # benchmark path has always relied on multiplex for this.
         self._write_multiplex_json()
-        self.run_cmd.side_effect = fake_multiplex([[]])
+        self.run_cmd.side_effect = fake_multiplex([])
         tool_entry = {
             "tool-id": "kernel",
             "params": [{"arg": "interval", "val": "10", "enabled": "no"}],
@@ -175,8 +180,11 @@ class TestApplyToolMultiplex(unittest.TestCase):
         cmd = self.run_cmd.call_args[0][0]
         input_file = re.search(r"--input (\S+)", cmd).group(1)
         with open(input_file) as f:
-            wrapped = json.load(f)
-        self.assertEqual(wrapped["sets"][0]["params"], [])
+            flat_input = json.load(f)
+        self.assertEqual(
+            flat_input,
+            [{"arg": "interval", "val": "10", "enabled": "no"}],
+        )
 
     def test_multiplex_failure_exits(self):
         self._write_multiplex_json()
@@ -196,18 +204,6 @@ class TestApplyToolMultiplex(unittest.TestCase):
         self._write_multiplex_json()
         self.run_cmd.return_value = ("cmd", "empty param set", 6)
         tool_entry = {"tool-id": "kernel", "params": []}
-        with self.assertRaises(SystemExit):
-            self.state.apply_tool_multiplex(tool_entry, self.tool_dir)
-
-    def test_more_than_one_combination_is_rejected(self):
-        self._write_multiplex_json()
-        self.run_cmd.side_effect = fake_multiplex(
-            [
-                [{"arg": "interval", "val": "10", "role": "all"}],
-                [{"arg": "interval", "val": "20", "role": "all"}],
-            ]
-        )
-        tool_entry = {"tool-id": "kernel", "params": [{"arg": "interval", "val": "10"}]}
         with self.assertRaises(SystemExit):
             self.state.apply_tool_multiplex(tool_entry, self.tool_dir)
 

@@ -1324,9 +1324,17 @@ class RunState:
 
     def apply_tool_multiplex(self, tool_entry, tool_dir):
         """If this tool declares a multiplex.json, run its flat tool-params.json
-        params through multiplex.py (unmodified) for validation/transform/preset
+        params through multiplex.py's --flat mode for validation/transform/preset
         support identical to benchmarks. No-op if the tool has no multiplex.json
         (fully backward compatible for tools that haven't opted in).
+
+        Tools have no sets/include/cartesian-product concept -- they always
+        have exactly one implicit parameter set and (per schema/tool-params.json)
+        never more than one value per param -- so this uses multiplex's --flat
+        mode rather than wrapping into the general sets/global-options document
+        benchmarks use. Filtering of disabled params and enforcing "exactly one
+        combination" both happen inside multiplex.py itself now; any violation
+        surfaces as a non-zero rc below, same as any other multiplex failure.
         """
         requirements_file = os.path.join(tool_dir, "multiplex.json")
         if not os.path.exists(requirements_file):
@@ -1334,48 +1342,19 @@ class RunState:
 
         tool_id = tool_entry["tool-id"]
 
-        # WRAP: tool-params.json's flat {"arg","val"} shape -> multiplex's
-        # "sets" shape. Every value becomes a one-element "vals" array, which
-        # makes itertools.product() (multiplex's actual multiplication step)
-        # structurally incapable of producing more than one combination --
-        # this is what makes reusing multiplex.py unmodified safe for tools.
-        #
-        # Pre-filter disabled params ourselves (rather than relying on
-        # multiplex's own enabled-filtering) since multiplex's essentials-
-        # preset-override runs BEFORE its enabled-filtering step and could
-        # otherwise silently resurrect a param the user explicitly disabled.
-        wrapped_params = [
-            {
-                "arg": p["arg"],
-                "vals": [p["val"]],
-                "role": "all",   # tools have no client/server concept; set
-                                 # explicitly rather than relying on multiplex's
-                                 # sanitize_set() default of "client", which
-                                 # could cause spurious dedup mismatches
-                                 # against presets that specify "role": "server"
-            }
-            for p in tool_entry.get("params", [])
-            if p.get("enabled") != "no"
-        ]
-
-        mv_params_doc = {
-            "schema": {"version": "2021.12.02"},
-            "global-options": [],
-            "sets": [{"params": wrapped_params}],
-        }
-        mv_params_file = os.path.join(self.config_dir, f"{tool_id}-mv-params.json")
+        flat_params_file = os.path.join(self.config_dir, f"{tool_id}-flat-params.json")
         # toolbox.json.save_json_file() unconditionally xz-compresses and
         # renames to "<file>.xz" with no way to opt out -- multiplex.py's own
         # file reading has no decompression support, so a plain write is
         # required here (matching how the benchmark mv-params path writes its
         # own equivalent file directly rather than via save_json_file()).
-        with open(mv_params_file, "w") as f:
-            json.dump(mv_params_doc, f)
+        with open(flat_params_file, "w") as f:
+            json.dump(tool_entry.get("params", []), f)
 
         tool_params_out_file = os.path.join(self.config_dir, f"{tool_id}-tool-params-multiplexed.json")
         multiplex_cmd = (
-            f"{os.environ.get('MULTIPLEX_HOME', '')}/multiplex.py "
-            f"--input {mv_params_file} --output {tool_params_out_file} "
+            f"{os.environ.get('MULTIPLEX_HOME', '')}/multiplex.py --flat "
+            f"--input {flat_params_file} --output {tool_params_out_file} "
             f"--requirements {requirements_file}"
         )
         logger.debug("about to run: %s", multiplex_cmd)
@@ -1385,29 +1364,12 @@ class RunState:
             logger.error("multiplex output is:\n%s", output)
             sys.exit(1)
 
-        # UNWRAP: multiplex output -> tool-params.json's flat shape. Only
-        # arg/val survive -- role/id have no meaning for tools and would
-        # violate tool-params.json's additionalProperties:false if kept.
-        multiplexed_sets, err = load_json_file(tool_params_out_file)
-        if multiplexed_sets is None:
+        multiplexed_params, err = load_json_file(tool_params_out_file)
+        if multiplexed_params is None:
             logger.error("[ERROR] could not load multiplexed tool params for '%s': %s", tool_id, err)
             sys.exit(1)
 
-        if len(multiplexed_sets) != 1:
-            # Should be structurally impossible given the wrap above -- fail
-            # loudly instead of silently taking [0] if a tool's multiplex.json
-            # ever violates that assumption (e.g. via a misused "include").
-            logger.error(
-                "[ERROR] tool '%s' multiplex.json produced %d parameter combinations; "
-                "tool params must resolve to exactly one combination",
-                tool_id, len(multiplexed_sets),
-            )
-            sys.exit(1)
-
-        tool_entry["params"] = [
-            {"arg": param["arg"], "val": param["val"]}
-            for param in multiplexed_sets[0]
-        ]
+        tool_entry["params"] = multiplexed_params
 
     def load_utility_params(self):
         for utility in UTILITIES:
