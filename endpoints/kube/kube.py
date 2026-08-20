@@ -1205,6 +1205,70 @@ def create_job_crd(role = None, id = None, node = None, node_tools = None, cs_en
 
     logger.info("Target architecture for pod '%s': %s" % (name, target_arch))
 
+    # Add initContainer to copy rickshaw-settings.json.xz before main containers start
+    # This eliminates the race condition where multiple containers SCP the same file simultaneously
+    controller_ip = pod_settings.get("controller-ip-address")
+    if controller_ip:
+        # Use the first engine's image as the initContainer image (it has all necessary tools)
+        init_image_info = None
+        if is_cs_pod:
+            first_engine = cs_engines[0]
+            first_engine_settings = endpoint["engines"]["settings"][first_engine["role"]][first_engine["id"]]
+            init_image_info = endpoints.get_engine_id_image(settings, first_engine["role"], first_engine["id"], first_engine_settings["userenv"], arch=target_arch)
+        elif role == "worker" or role == "master":
+            # For profiler pods, use the first tool's image
+            first_container = container_names[0] if container_names else None
+            if first_container:
+                userenv = endpoints.get_profiler_userenv(settings, first_container)
+                if userenv:
+                    init_image_info = endpoints.get_engine_id_image(settings, role, first_container, userenv, arch=target_arch)
+
+        if init_image_info:
+            init_image = init_image_info["image"]
+            logger.info("Adding initContainer to copy rickshaw-settings.json.xz using image '%s'" % (init_image))
+
+            pod_spec["initContainers"] = [{
+                "name": "copy-rickshaw-settings",
+                "image": init_image,
+                "imagePullPolicy": "Always",
+                "command": ["/bin/bash", "-c"],
+                "args": [
+                    "set -e; "
+                    "mkdir -p /shared-engines-dir; "
+                    "printf '%b' \"$SSH_ID\" > /tmp/ssh_id && chmod 600 /tmp/ssh_id; "
+                    "scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "
+                    "-o PasswordAuthentication=no -i /tmp/ssh_id "
+                    "\"$RICKSHAW_HOST:$BASE_RUN_DIR/config/rickshaw-settings.json.xz\" "
+                    "/shared-engines-dir/rickshaw-settings.json.xz && "
+                    "echo 'Successfully copied rickshaw-settings.json.xz to /shared-engines-dir' && "
+                    "rm -f /tmp/ssh_id"
+                ],
+                "env": [
+                    {
+                        "name": "RICKSHAW_HOST",
+                        "value": controller_ip
+                    },
+                    {
+                        "name": "BASE_RUN_DIR",
+                        "value": settings["dirs"]["local"]["base"]
+                    },
+                    {
+                        "name": "SSH_ID",
+                        "value": settings["misc"]["ssh-private-key"]
+                    }
+                ],
+                "volumeMounts": [
+                    {
+                        "mountPath": "/shared-engines-dir",
+                        "name": "shared-engines-dir"
+                    }
+                ]
+            }]
+        else:
+            logger.warning("Could not determine image for initContainer, skipping rickshaw-settings.json.xz pre-copy")
+    else:
+        logger.warning("Controller IP not found, skipping initContainer for rickshaw-settings.json.xz pre-copy")
+
     pod_spec["containers"] = []
     for container_name in container_names:
         logger.info("Adding container '%s' to job" % (container_name))
