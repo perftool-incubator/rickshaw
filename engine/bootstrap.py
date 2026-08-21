@@ -250,14 +250,23 @@ def main():
     json_settings_file = os.path.join(engines_shared, "rickshaw-settings.json.xz")
     os.environ["json_settings_file"] = json_settings_file
 
-    scp_from_controller(
-        ssh_id_file, rickshaw_host,
-        os.path.join(config_dir, "rickshaw-settings.json.xz"),
-        engines_shared,
-    )
     if not os.path.exists(json_settings_file):
-        logger.error("Could not find rickshaw-settings.json.xz")
-        sys.exit(1)
+        logger.warning(
+            "rickshaw-settings.json.xz not found at %s. "
+            "Falling back to SCP from controller (this may race with other containers). "
+            "The endpoint should copy this file before container launch to avoid races.",
+            json_settings_file
+        )
+        scp_from_controller(
+            ssh_id_file, rickshaw_host,
+            os.path.join(config_dir, "rickshaw-settings.json.xz"),
+            engines_shared,
+        )
+        if not os.path.exists(json_settings_file):
+            logger.error("Could not find rickshaw-settings.json.xz after SCP")
+            sys.exit(1)
+    else:
+        logger.info("Found rickshaw-settings.json.xz at %s (endpoint pre-copied it)", json_settings_file)
 
     # ---- Download engine scripts ----
     engine_config_dir = os.environ["engine_config_dir"]

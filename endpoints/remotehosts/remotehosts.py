@@ -804,6 +804,91 @@ def create_remote_dirs():
 
     return 0
 
+def copy_rickshaw_settings_worker_thread(thread_id, work_queue, threads_rcs):
+    """
+    Worker thread to copy rickshaw-settings.json.xz to each remote's data directory before any containers start
+
+    Args:
+        thread_id (int): The specifc worker thread that this is
+        work_queue (Queue): The work queue to pull jobs to process from
+        threads_rcs (list): The list to record the threads return code in
+
+    Globals:
+        args (namespace): the script's CLI parameters
+        settings (dict): the one data structure to rule then all
+
+    Returns:
+        None
+    """
+    thread = threading.current_thread()
+    thread_name = thread.name
+    thread_logger("Starting copy rickshaw settings thread with thread ID %d and name = '%s'" % (thread_id, thread_name))
+    rc = 0
+    job_count = 0
+
+    while not work_queue.empty():
+        remote = None
+        try:
+            remote = work_queue.get(block = False)
+        except queue.Empty:
+            thread_logger("Received a work queue empty exception")
+            break
+
+        if remote is None:
+            thread_logger("Received a null job", log_level = "warning")
+            work_queue.task_done()
+            continue
+
+        job_count += 1
+        thread_logger("Retrieved remote %s" % (remote))
+
+        my_unique_remote = settings["engines"]["remotes"][remote]
+        my_run_file_remote = settings["run-file"]["endpoints"][args.endpoint_index]["remotes"][my_unique_remote["run-file-idx"][0]]
+
+        thread_logger("Remote user is %s" % (my_run_file_remote["config"]["settings"]["remote-user"]), remote_name = remote)
+
+        local_rickshaw_settings = settings["dirs"]["local"]["conf"] + "/rickshaw-settings.json.xz"
+        remote_rickshaw_settings = settings["dirs"]["remote"]["data"] + "/rickshaw-settings.json.xz"
+
+        with endpoints.remote_connection(remote, my_run_file_remote["config"]["settings"]["remote-user"]) as con:
+            result = con.put(local_rickshaw_settings, remote_rickshaw_settings)
+            thread_logger("Copied %s to %s:%s" % (local_rickshaw_settings, remote, remote_rickshaw_settings), remote_name = remote)
+
+        thread_logger("Notifying work queue that job processing is complete", remote_name = remote)
+        work_queue.task_done()
+
+    threads_rcs[thread_id] = rc
+    thread_logger("Stopping copy rickshaw settings thread after processing %d job(s)" % (job_count))
+    return
+
+def copy_rickshaw_settings_to_remotes():
+    """
+    Copy rickshaw-settings.json.xz to each remote's data directory before containers start
+
+    This eliminates the race condition where multiple engine containers simultaneously
+    SCP the same file to the same shared directory, corrupting it.
+
+    Args:
+        None
+
+    Globals:
+        logger: a logger instance
+        settings (dict): the one data structure to rule then all
+
+    Returns:
+        rc (int): 0 on success, non-zero on failure
+    """
+    logger.info("Copying rickshaw-settings.json.xz to remotes before container launch")
+
+    copy_settings_work = queue.Queue()
+    for remote in settings["engines"]["remotes"].keys():
+        copy_settings_work.put(remote)
+    worker_threads_count = len(settings["engines"]["remotes"])
+
+    rc = create_thread_pool("Copy Rickshaw Settings Worker Threads", "CRSWT", copy_settings_work, worker_threads_count, copy_rickshaw_settings_worker_thread)
+
+    return rc
+
 def set_total_cpu_partitions():
     """
     Determine the total cpu partitions that each unique remote should be hosting
@@ -2573,6 +2658,9 @@ def main():
         return 1
 
     create_remote_dirs()
+    copy_settings_rc = copy_rickshaw_settings_to_remotes()
+    if copy_settings_rc != 0:
+        logger.error("Failed to copy rickshaw-settings.json.xz to one or more remotes; affected engines will fall back to SCP from the controller at boot time")
     remote_image_pull_rc = remotes_pull_images()
     if remote_image_pull_rc == 0:
         set_total_cpu_partitions()
