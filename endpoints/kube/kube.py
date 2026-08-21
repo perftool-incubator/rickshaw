@@ -688,9 +688,10 @@ def clean_k8s_namespace(connection):
                     dfh.write(result.stdout)
                 logger.info("Wrote describe for component '%s' to '%s'" % (component, describe_file))
             else:
+                # best-effort: this is new diagnostic data, so a failure to
+                # collect it (e.g. restricted RBAC) should not block deletion
                 logger.error("Failed to collect describe for component '%s'" % (component))
                 endpoints.log_result(result)
-                component_errors = True
 
         logger.info("Cleaning component: %s" % (component))
         cmd = "%s delete --namespace %s %s --all" % (settings["misc"]["k8s-bin"], endpoint["namespace"]["name"], component)
@@ -2226,11 +2227,17 @@ def collect_namespace_diagnostics(con, endpoint, log):
 
     Globals:
         logger: a logger instance
-        settings (dict): the one data structure to rule then all
+        settings (dict): the one data structure to rule them all
 
     Returns:
-        True: all diagnostics were collected successfully
-        False: one or more diagnostics failed to collect
+        True: the namespace status ('get all') was collected successfully
+        False: the namespace status failed to collect
+
+    Note: only the namespace status collection affects the return value,
+    preserving its pre-existing behavior of gating whether cleanup proceeds
+    to delete the namespace.  Namespace events are new diagnostic data added
+    by this function; a failure to collect them is logged but treated as
+    best-effort and does not block cleanup.
     """
     success = True
 
@@ -2257,7 +2264,6 @@ def collect_namespace_diagnostics(con, endpoint, log):
     else:
         logger.error("Failed to collect events for namespace '%s'" % (endpoint["namespace"]["name"]))
         endpoints.log_result(result)
-        success = False
 
     return success
 
@@ -2273,11 +2279,19 @@ def collect_pod_diagnostics(con, endpoint, log):
 
     Globals:
         logger: a logger instance
-        settings (dict): the one data structure to rule then all
+        settings (dict): the one data structure to rule them all
 
     Returns:
-        True: all diagnostics were collected successfully
-        False: one or more diagnostics failed to collect
+        True: all container logs were collected successfully
+        False: one or more container logs failed to collect
+
+    Note: only container log collection affects the return value, preserving
+    its pre-existing behavior of gating whether cleanup proceeds to delete
+    the namespace.  Pod and node describes are new diagnostic data added by
+    this function; describing a node in particular commonly requires
+    cluster-scoped RBAC that a namespace-restricted user may not have, so a
+    describe failure here is logged but treated as best-effort and does not
+    block cleanup.
     """
     if "pods" not in settings["engines"]["endpoint"] or not settings["engines"]["endpoint"]["pods"]:
         log("No pods to collect diagnostics from")
@@ -2310,7 +2324,6 @@ def collect_pod_diagnostics(con, endpoint, log):
             else:
                 logger.error("Failed to collect describe for node '%s'" % (node_name))
                 endpoints.log_result(result)
-                success = False
 
         k8s_pod_name = settings["engines"]["endpoint"]["pods"][pod].get("k8s-pod-name", "%s-%s" % (endpoint_default_settings["prefix"]["pod"], pod_name))
 
@@ -2327,7 +2340,6 @@ def collect_pod_diagnostics(con, endpoint, log):
         else:
             logger.error("Failed to collect describe for pod '%s'" % (pod_name))
             endpoints.log_result(result)
-            success = False
 
         for engine in settings["engines"]["endpoint"]["pods"][pod]["containers"]:
             log("Collecting log for engine '%s'" % (engine))
