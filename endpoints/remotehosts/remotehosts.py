@@ -2658,7 +2658,9 @@ def main():
         return 1
 
     create_remote_dirs()
-    copy_rickshaw_settings_to_remotes()
+    copy_settings_rc = copy_rickshaw_settings_to_remotes()
+    if copy_settings_rc != 0:
+        logger.error("Failed to copy rickshaw-settings.json.xz to one or more remotes; affected engines will fall back to SCP from the controller at boot time")
     remote_image_pull_rc = remotes_pull_images()
     if remote_image_pull_rc == 0:
         set_total_cpu_partitions()
