@@ -676,6 +676,22 @@ def clean_k8s_namespace(connection):
 
     component_errors = False
     for component in [ "jobs", "pods", "services", "secrets" ]:
+        # per-pod describes are already collected (with better naming) by
+        # collect_pod_diagnostics() before cleanup runs, so avoid redundant output here
+        if component != "pods":
+            logger.info("Collecting describe for component: %s" % (component))
+            cmd = "%s describe %s --namespace %s" % (settings["misc"]["k8s-bin"], component, endpoint["namespace"]["name"])
+            result = endpoints.run_remote(connection, cmd, debug = settings["misc"]["debug-output"], env = settings["misc"]["remote-env"])
+            if result.exited == 0:
+                describe_file = "%s/%s.describe.txt.xz" % (settings["dirs"]["local"]["sysinfo"], component)
+                with lzma.open(describe_file, "wt", encoding="utf-8") as dfh:
+                    dfh.write(result.stdout)
+                logger.info("Wrote describe for component '%s' to '%s'" % (component, describe_file))
+            else:
+                logger.error("Failed to collect describe for component '%s'" % (component))
+                endpoints.log_result(result)
+                component_errors = True
+
         logger.info("Cleaning component: %s" % (component))
         cmd = "%s delete --namespace %s %s --all" % (settings["misc"]["k8s-bin"], endpoint["namespace"]["name"], component)
         result = endpoints.run_remote(connection, cmd, debug = settings["misc"]["debug-output"], env = settings["misc"]["remote-env"])
@@ -2198,9 +2214,144 @@ def create_tools_pods(abort_event):
             
     return 0
 
+def collect_namespace_diagnostics(con, endpoint, log):
+    """
+    Collect namespace-wide diagnostics (overall object status and events) and
+    archive them alongside the endpoint's other sysinfo data
+
+    Args:
+        con (Fabric): the Fabric connection to use to run commands
+        endpoint (dict): the endpoint configuration this namespace belongs to
+        log (function): the logger method to use for progress messages (e.g. logger.info or logger.warning)
+
+    Globals:
+        logger: a logger instance
+        settings (dict): the one data structure to rule then all
+
+    Returns:
+        True: all diagnostics were collected successfully
+        False: one or more diagnostics failed to collect
+    """
+    success = True
+
+    log("Current K8S namespace '%s' status" % (endpoint["namespace"]["name"]))
+    cmd = "%s get all --namespace %s --output wide" % (settings["misc"]["k8s-bin"], endpoint["namespace"]["name"])
+    result = endpoints.run_remote(con, cmd, debug = settings["misc"]["debug-output"], env = settings["misc"]["remote-env"])
+    endpoints.log_result(result)
+    if result.exited == 0:
+        out_file = "%s/get-all.txt.xz" % (settings["dirs"]["local"]["sysinfo"])
+        with lzma.open(out_file, "wt", encoding="utf-8") as ofh:
+            ofh.write(result.stdout)
+        log("Wrote namespace status to '%s'" % (out_file))
+    else:
+        success = False
+
+    log("Collecting events for namespace '%s'" % (endpoint["namespace"]["name"]))
+    cmd = "%s get events --namespace %s --sort-by=.lastTimestamp" % (settings["misc"]["k8s-bin"], endpoint["namespace"]["name"])
+    result = endpoints.run_remote(con, cmd, debug = settings["misc"]["debug-output"], env = settings["misc"]["remote-env"])
+    if result.exited == 0:
+        out_file = "%s/events.txt.xz" % (settings["dirs"]["local"]["sysinfo"])
+        with lzma.open(out_file, "wt", encoding="utf-8") as ofh:
+            ofh.write(result.stdout)
+        log("Wrote namespace events to '%s'" % (out_file))
+    else:
+        logger.error("Failed to collect events for namespace '%s'" % (endpoint["namespace"]["name"]))
+        endpoints.log_result(result)
+        success = False
+
+    return success
+
+def collect_pod_diagnostics(con, endpoint, log):
+    """
+    Collect per-pod describes and per-container logs from all known pods, and
+    a describe of each node that hosted one of those pods
+
+    Args:
+        con (Fabric): the Fabric connection to use to run commands
+        endpoint (dict): the endpoint configuration these pods belong to
+        log (function): the logger method to use for progress messages (e.g. logger.info or logger.warning)
+
+    Globals:
+        logger: a logger instance
+        settings (dict): the one data structure to rule then all
+
+    Returns:
+        True: all diagnostics were collected successfully
+        False: one or more diagnostics failed to collect
+    """
+    if "pods" not in settings["engines"]["endpoint"] or not settings["engines"]["endpoint"]["pods"]:
+        log("No pods to collect diagnostics from")
+        return True
+
+    success = True
+
+    processed_log_pods = set()
+    processed_nodes = set()
+    pods = list(settings["engines"]["endpoint"]["pods"].keys())
+    pods.sort()
+    for pod in pods:
+        pod_name = settings["engines"]["endpoint"]["pods"][pod]["name"]
+        if pod_name in processed_log_pods:
+            continue
+        processed_log_pods.add(pod_name)
+        node_name = settings["engines"]["endpoint"]["pods"][pod]["node"]
+        log("Processing pod '%s' on node '%s'" % (pod_name, node_name))
+
+        if node_name not in processed_nodes:
+            processed_nodes.add(node_name)
+            log("Collecting describe for node '%s'" % (node_name))
+            cmd = "%s describe node %s" % (settings["misc"]["k8s-bin"], node_name)
+            result = endpoints.run_remote(con, cmd, debug = settings["misc"]["debug-output"], env = settings["misc"]["remote-env"])
+            if result.exited == 0:
+                describe_file = "%s/node-%s.describe.txt.xz" % (settings["dirs"]["local"]["sysinfo"], node_name)
+                with lzma.open(describe_file, "wt", encoding="utf-8") as dfh:
+                    dfh.write(result.stdout)
+                log("Wrote describe for node '%s' to '%s'" % (node_name, describe_file))
+            else:
+                logger.error("Failed to collect describe for node '%s'" % (node_name))
+                endpoints.log_result(result)
+                success = False
+
+        k8s_pod_name = settings["engines"]["endpoint"]["pods"][pod].get("k8s-pod-name", "%s-%s" % (endpoint_default_settings["prefix"]["pod"], pod_name))
+
+        log("Collecting describe for pod '%s'" % (pod_name))
+        cmd = "%s describe pod %s --namespace %s" % (settings["misc"]["k8s-bin"],
+                                                       k8s_pod_name,
+                                                       endpoint["namespace"]["name"])
+        result = endpoints.run_remote(con, cmd, debug = settings["misc"]["debug-output"], env = settings["misc"]["remote-env"])
+        if result.exited == 0:
+            describe_file = "%s/%s.describe.txt.xz" % (settings["dirs"]["local"]["engine-logs"], pod_name)
+            with lzma.open(describe_file, "wt", encoding="utf-8") as dfh:
+                dfh.write(result.stdout)
+            log("Wrote describe for pod '%s' to '%s'" % (pod_name, describe_file))
+        else:
+            logger.error("Failed to collect describe for pod '%s'" % (pod_name))
+            endpoints.log_result(result)
+            success = False
+
+        for engine in settings["engines"]["endpoint"]["pods"][pod]["containers"]:
+            log("Collecting log for engine '%s'" % (engine))
+            cmd = "%s logs %s --namespace %s --container %s" % (settings["misc"]["k8s-bin"],
+                                                                 k8s_pod_name,
+                                                                 endpoint["namespace"]["name"],
+                                                                 engine)
+            result = endpoints.run_remote(con, cmd, debug = settings["misc"]["debug-output"], env = settings["misc"]["remote-env"])
+            if result.exited == 0:
+                log_file = "%s/%s.txt.xz" % (settings["dirs"]["local"]["engine-logs"], engine)
+                with lzma.open(log_file, "wt", encoding="utf-8") as lfh:
+                    lfh.write(result.stdout)
+                log("Wrote log for engine '%s' in pod '%s' to '%s'" % (engine, pod, log_file))
+            else:
+                logger.error("Failed to collect log for engine '%s' in pod '%s'" % (engine, pod))
+                endpoints.log_result(result)
+                success = False
+
+    return success
+
 def rescue_engine_logs():
     """
-    Rescue engine container logs from all pods during error state without deleting the namespace or cleaning up the environment
+    Rescue engine diagnostics (namespace events/status, pod/node describes, container logs)
+    during error state without deleting the namespace or cleaning up the environment
 
     Args:
         None
@@ -2213,50 +2364,22 @@ def rescue_engine_logs():
     Returns:
         0
     """
-    logger.warning("Rescuing engine logs")
+    logger.warning("Rescuing engine diagnostics")
 
     endpoint = settings["run-file"]["endpoints"][args.endpoint_index]
 
-    if "pods" not in settings["engines"]["endpoint"] or not settings["engines"]["endpoint"]["pods"]:
-        logger.warning("No pods to rescue engine logs from")
-        return 0
-
     try:
         with endpoints.remote_connection(endpoint["host"], endpoint["user"]) as con:
-            processed_log_pods = set()
-            pods = list(settings["engines"]["endpoint"]["pods"].keys())
-            pods.sort()
-            for pod in pods:
-                pod_name = settings["engines"]["endpoint"]["pods"][pod]["name"]
-                if pod_name in processed_log_pods:
-                    continue
-                processed_log_pods.add(pod_name)
-                node_name = settings["engines"]["endpoint"]["pods"][pod]["node"]
-                logger.warning("Rescuing logs from pod '%s' on node '%s'" % (pod_name, node_name))
-                for engine in settings["engines"]["endpoint"]["pods"][pod]["containers"]:
-                    logger.warning("Rescuing log for engine '%s'" % (engine))
-                    k8s_pod_name = settings["engines"]["endpoint"]["pods"][pod].get("k8s-pod-name", "%s-%s" % (endpoint_default_settings["prefix"]["pod"], pod_name))
-                    cmd = "%s logs %s --namespace %s --container %s" % (settings["misc"]["k8s-bin"],
-                                                                         k8s_pod_name,
-                                                                         endpoint["namespace"]["name"],
-                                                                         engine)
-                    result = endpoints.run_remote(con, cmd, debug = settings["misc"]["debug-output"], env = settings["misc"]["remote-env"])
-                    if result.exited == 0:
-                        log_file = "%s/%s.txt.xz" % (settings["dirs"]["local"]["engine-logs"], engine)
-                        with lzma.open(log_file, "wt", encoding="utf-8") as lfh:
-                            lfh.write(result.stdout)
-                        logger.warning("Wrote rescued log for engine '%s' in pod '%s' to '%s'" % (engine, pod, log_file))
-                    else:
-                        logger.error("Failed to rescue log for engine '%s' in pod '%s'" % (engine, pod))
-                        endpoints.log_result(result)
+            collect_namespace_diagnostics(con, endpoint, logger.warning)
+            collect_pod_diagnostics(con, endpoint, logger.warning)
     except Exception as err:
-        logger.error("Failed to rescue engine logs: %s" % (err))
+        logger.error("Failed to rescue engine diagnostics: %s" % (err))
 
     return 0
 
 def kube_cleanup():
     """
-    Attempt to cleanup the K8S namespace by collecting logs from the pods and then deleting everything
+    Attempt to cleanup the K8S namespace by collecting diagnostics from the namespace and then deleting everything
 
     Args:
         None
@@ -2280,44 +2403,14 @@ def kube_cleanup():
                                          settings["run-file"]["endpoints"][args.endpoint_index]["user"]) as con:
             errors = False
 
-            logger.info("Current K8S namespace '%s' status" % (endpoint["namespace"]["name"]))
-            cmd = "%s get all --namespace %s --output wide" % (settings["misc"]["k8s-bin"], endpoint["namespace"]["name"])
-            result = endpoints.run_remote(con, cmd, debug = settings["misc"]["debug-output"], env = settings["misc"]["remote-env"])
-            endpoints.log_result(result)
-            if result.exited != 0:
+            if not collect_namespace_diagnostics(con, endpoint, logger.info):
                 logger.error(cleanup_error)
                 errors = True
 
-            logger.info("Collecting engine logs")
-            processed_log_pods = set()
-            pods = list(settings["engines"]["endpoint"]["pods"].keys())
-            pods.sort()
-            for pod in pods:
-                pod_name = settings["engines"]["endpoint"]["pods"][pod]["name"]
-                if pod_name in processed_log_pods:
-                    continue
-                processed_log_pods.add(pod_name)
-                node_name = settings["engines"]["endpoint"]["pods"][pod]["node"]
-                logger.info("Processing pod '%s' on node '%s'" % (pod_name, node_name))
-                for engine in settings["engines"]["endpoint"]["pods"][pod]["containers"]:
-                    logger.info("Collecting log for engine '%s'" % (engine))
-                    k8s_pod_name = settings["engines"]["endpoint"]["pods"][pod].get("k8s-pod-name", "%s-%s" % (endpoint_default_settings["prefix"]["pod"], pod_name))
-                    cmd = "%s logs %s --namespace %s --container %s" % (settings["misc"]["k8s-bin"],
-                                                                         k8s_pod_name,
-                                                                         endpoint["namespace"]["name"],
-                                                                         engine)
-                    result = endpoints.run_remote(con, cmd, debug = settings["misc"]["debug-output"], env = settings["misc"]["remote-env"])
-                    if result.exited == 0:
-                        log_file = "%s/%s.txt.xz" % (settings["dirs"]["local"]["engine-logs"], engine)
-                        with lzma.open(log_file, "wt", encoding="utf-8") as lfh:
-                            lfh.write(result.stdout)
-                        logger.info("Wrote log for engine '%s' in pod '%s' to '%s'" % (engine, pod, log_file))
-                    else:
-                        logger.error("Failed to collect log for engine '%s' in pod '%s'" % (engine, pod))
-                        endpoints.log_result(result)
-                        if not errors:
-                            logger.error(cleanup_error)
-                            errors = True
+            if not collect_pod_diagnostics(con, endpoint, logger.info):
+                if not errors:
+                    logger.error(cleanup_error)
+                errors = True
 
             if not errors:
                 if clean_k8s_namespace(con):
