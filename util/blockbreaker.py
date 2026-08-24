@@ -278,11 +278,21 @@ def get_bench_ids(json_obj, cfg):
 
     return stream
 
-def get_mv_params(input_json, name):
-    """Extract mv-params from the benchmarks block"""
+def get_mv_params(input_json, name, index=0):
+    """Extract mv-params from the benchmarks block
+
+    Selects the benchmark entry at the given array index (not the
+    first entry matching name) so that multiple "benchmarks" array
+    entries sharing the same benchmark name -- e.g. two concurrent
+    "oslat" engine pairs running in different directions -- each
+    resolve to their own mv-params instead of all collapsing onto the
+    first entry with that name.
+    """
     try:
-        benchmark_blk = next(d for d in input_json['benchmarks'] if d.get('name', None) == name)
-    except:
+        benchmark_blk = input_json['benchmarks'][index]
+        if benchmark_blk.get('name', None) != name:
+            return None
+    except (IndexError, KeyError, TypeError, AttributeError):
         return None
     return benchmark_blk
 
@@ -310,10 +320,17 @@ def main():
             # output is a stream of the endpoint or tags or run-params
             output = json_to_stream(input_json, args.config, args.index)
         case default:
+            dump_index = args.index
             if args.config == "mv-params":
-                input_json = get_mv_params(input_json, args.benchmark)
+                # args.index selects this benchmark's occurrence in the
+                # "benchmarks" array; it is unrelated to indexing within
+                # that occurrence's own "mv-params" array (when
+                # mv-params is array-form rather than a single object),
+                # so dump_json always gets the first element of that.
+                input_json = get_mv_params(input_json, args.benchmark, args.index)
+                dump_index = 0
             # mv-params, tool-params
-            output = dump_json(input_json, args.config, args.index)
+            output = dump_json(input_json, args.config, dump_index)
 
     print(output)
 

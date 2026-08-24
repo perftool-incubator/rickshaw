@@ -1,0 +1,56 @@
+{
+    "benchmarks": [
+        {
+            "name": "oslat",
+            "ids": "1",
+            "mv-params": {
+                "sets": [
+                    {
+                        "params": [
+                            { "arg": "duration", "vals": [ "10" ], "role": "all" },
+                            { "arg": "direction", "vals": [ "east" ], "role": "all" }
+                        ]
+                    }
+                ]
+            }
+        },
+        {
+            "name": "oslat",
+            "ids": "2",
+            "mv-params": {
+                "sets": [
+                    {
+                        "params": [
+                            { "arg": "duration", "vals": [ "10" ], "role": "all" },
+                            { "arg": "direction", "vals": [ "west" ], "role": "all" }
+                        ]
+                    }
+                ]
+            }
+        }
+    ],
+    "endpoints": [
+        {
+            "type": "osp",
+            "controller-ip": "CONTROLLER_IP",
+            "host": "CI_ENDPOINT_HOST",
+            "user": "CI_ENDPOINT_USER",
+            "userenv": "alma8",
+            "unique-project": 1,
+            "server": 1,
+            "client": 1,
+            "config": [
+                {
+                    "targets": "all",
+                    "settings": {
+                        "cpu-partitioning": 1
+                    }
+                }
+            ]
+        }
+    ],
+    "run-params": {
+        "num-samples": 1,
+        "test-order": "s"
+    }
+}

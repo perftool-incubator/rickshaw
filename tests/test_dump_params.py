@@ -9,6 +9,15 @@ enough quoting to survive both shell execution and the shlex.split() round
 trip used to rebuild the argv list shipped to the engine, while every
 existing (space-free) value renders byte-for-byte identically to before.
 
+Also covers the "id"-scoping fix for multiple "benchmarks[]" array entries
+sharing the same benchmark name (e.g. two concurrent "oslat" engine
+pairs with different params): dump_params() now treats a param's "id" as
+a "+"-joined set of engine ids it applies to (falling back to the
+pre-existing single-value behavior when there's no "+"), so that
+load_bench_params()'s automatic per-instance id-scoping (see
+test_load_bench_params_duplicate_names.py) actually reaches the right
+engine.
+
 toolbox is mocked out rather than required, since rickshaw-run.py imports
 from it at module scope and CI does not check toolbox out for this job.
 """
@@ -177,6 +186,28 @@ class TestDumpParams(unittest.TestCase):
         ]
         result = self.mod.dump_params(params, "1", "client", {"1": "fio"})
         self.assertEqual(result, "--fio-only=1")
+
+    def test_single_id_matches_only_that_engine_id(self):
+        params = [{"arg": "mode", "val": "foo", "role": "all", "id": "1"}]
+        self.assertEqual(self.mod.dump_params(params, "1", "client", {}), "--mode=foo")
+        self.assertEqual(self.mod.dump_params(params, "2", "client", {}), "")
+
+    def test_plus_joined_id_set_matches_any_member(self):
+        # load_bench_params() auto-scopes a benchmark instance's params to
+        # a "+"-joined set of its own ids (e.g. "1+2" for ids="1-2") --
+        # any of those engine ids must match, not just the first.
+        params = [{"arg": "mode", "val": "foo", "role": "all", "id": "1+2"}]
+        self.assertEqual(self.mod.dump_params(params, "1", "client", {}), "--mode=foo")
+        self.assertEqual(self.mod.dump_params(params, "2", "client", {}), "--mode=foo")
+        self.assertEqual(self.mod.dump_params(params, "3", "client", {}), "")
+
+    def test_absent_id_still_applies_to_every_engine_id(self):
+        # pre-existing behavior for the common (non-ambiguous) case must
+        # be unchanged: a param with no "id" key at all is never
+        # id-filtered, regardless of cs_id.
+        params = [{"arg": "mode", "val": "foo", "role": "all"}]
+        self.assertEqual(self.mod.dump_params(params, "1", "client", {}), "--mode=foo")
+        self.assertEqual(self.mod.dump_params(params, "2", "client", {}), "--mode=foo")
 
 
 if __name__ == "__main__":

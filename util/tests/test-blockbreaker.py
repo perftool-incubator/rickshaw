@@ -36,6 +36,58 @@ class TestBlockBreaker:
         input_json = blockbreaker.dump_json(benchmark_blk, "mv-params", 0)
         assert type(input_json) == str
 
+    """get_mv_params defaults to index 0, matching the single-instance case"""
+    @pytest.mark.parametrize("load_json_file",
+                             [ "input-oslat-osp.json" ], indirect=True)
+    def test_get_mv_params_default_index(self, load_json_file):
+        benchmark_blk = blockbreaker.get_mv_params(load_json_file, "oslat")
+        assert benchmark_blk["ids"] == "1"
+
+    """Two benchmarks[] entries sharing the same name resolve to their own
+    entry by index, not both collapsing onto the first name match (the
+    actual rickshaw#872-class bug: get_mv_params() used to do
+    next(d for d in benchmarks if d['name'] == name), which always
+    returns the first match regardless of which occurrence was meant)"""
+    @pytest.mark.parametrize("load_json_file",
+                             [ "input-duplicate-benchmark-name.json" ], indirect=True)
+    def test_get_mv_params_duplicate_name_index_0(self, load_json_file):
+        benchmark_blk = blockbreaker.get_mv_params(load_json_file, "oslat", 0)
+        assert benchmark_blk["ids"] == "1"
+        params = benchmark_blk["mv-params"]["sets"][0]["params"]
+        direction = next(p for p in params if p["arg"] == "direction")
+        assert direction["vals"] == ["east"]
+
+    @pytest.mark.parametrize("load_json_file",
+                             [ "input-duplicate-benchmark-name.json" ], indirect=True)
+    def test_get_mv_params_duplicate_name_index_1(self, load_json_file):
+        benchmark_blk = blockbreaker.get_mv_params(load_json_file, "oslat", 1)
+        assert benchmark_blk["ids"] == "2"
+        params = benchmark_blk["mv-params"]["sets"][0]["params"]
+        direction = next(p for p in params if p["arg"] == "direction")
+        assert direction["vals"] == ["west"]
+
+    """An out-of-range index (or a name that doesn't match the entry at
+    that index) returns None rather than silently falling back to some
+    other entry"""
+    @pytest.mark.parametrize("load_json_file",
+                             [ "input-duplicate-benchmark-name.json" ], indirect=True)
+    def test_get_mv_params_index_out_of_range_returns_none(self, load_json_file):
+        assert blockbreaker.get_mv_params(load_json_file, "oslat", 5) is None
+
+    @pytest.mark.parametrize("load_json_file",
+                             [ "input-duplicate-benchmark-name.json" ], indirect=True)
+    def test_get_mv_params_name_mismatch_at_index_returns_none(self, load_json_file):
+        assert blockbreaker.get_mv_params(load_json_file, "not-oslat", 0) is None
+
+    """get_bench_ids emits one "name:ids" entry per benchmarks[] array
+    entry, even when two entries share the same name -- this is what lets
+    rickshaw-run.py iterate occurrences positionally instead of by name"""
+    @pytest.mark.parametrize("load_json_file",
+                             [ "input-duplicate-benchmark-name.json" ], indirect=True)
+    def test_get_bench_ids_lists_every_occurrence(self, load_json_file):
+        stream = blockbreaker.get_bench_ids(load_json_file, "benchmarks")
+        assert stream == "oslat:1,oslat:2"
+
     """Test if json_to_stream returns None for invalid index"""
     @pytest.mark.parametrize("load_json_file",
                              [ "input-oslat-osp.json" ], indirect=True)

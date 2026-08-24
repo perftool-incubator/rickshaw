@@ -120,6 +120,26 @@ def render_param(arg, val):
     return f"--{arg}"
 
 
+def expand_id_ranges(ids_str):
+    """Expand an ids string (e.g. "1", "1-2", "1+3", "1-2+5-7") into a
+    sorted list of individual id strings (e.g. ["1", "2", "3"]).
+    Shared by assign_bench_ids()'s id-to-benchmark mapping and
+    load_bench_params()'s automatic per-instance param scoping, so the
+    two never disagree on what an ids string means."""
+    expanded = set()
+    for segment in ids_str.split(","):
+        for sub in segment.split("+"):
+            m = re.match(r'^(\d+)-(\d+)$', sub)
+            if m:
+                for i in range(int(m.group(1)), int(m.group(2)) + 1):
+                    expanded.add(str(i))
+            elif re.match(r'^\d+$', sub):
+                expanded.add(sub)
+            else:
+                logger.warning("ID range or number not recognized: %s", sub)
+    return sorted(expanded, key=int)
+
+
 def dump_params(params, cs_id, engine, ids_to_benchmark):
     default_role = "client"
     benchmark = ids_to_benchmark.get(str(cs_id)) if cs_id is not None else None
@@ -132,8 +152,13 @@ def dump_params(params, cs_id, engine, ids_to_benchmark):
         role = param.get("role", default_role)
         param_id = param.get("id")
 
-        if param_id is not None and cs_id is not None and str(param_id) != str(cs_id):
-            continue
+        if param_id is not None and cs_id is not None:
+            # param_id may be a single id ("1") or a "+"-joined set
+            # ("1+2") auto-scoped from a benchmark instance's own ids
+            # -- see load_bench_params(). Splitting unconditionally
+            # keeps the single-id case's behavior unchanged.
+            if str(cs_id) not in str(param_id).split("+"):
+                continue
         if benchmark is not None and bench != benchmark:
             continue
         if role != engine and role != "all":
@@ -376,26 +401,35 @@ class RunState:
             benchmarks.append(parts[0])
 
         bench_params = ""
-        for benchmark in benchmarks:
+        for idx, benchmark in enumerate(benchmarks):
             benchmark_dir = os.path.join(os.environ.get("CRUCIBLE_HOME", ""), "subprojects", "benchmarks", benchmark)
             if not os.path.isdir(benchmark_dir):
                 logger.error("[ERROR] invalid benchmark %s, benchmark directory %s does not exist", benchmark, benchmark_dir)
                 sys.exit(1)
 
-            bb_cmd = f"python3 {self.rickshaw_project_dir}/util/blockbreaker.py --json {run_file} --config mv-params --benchmark {benchmark}"
+            # --index selects this benchmark's entry by its position in
+            # the run-file's "benchmarks" array (not by name lookup),
+            # so multiple entries sharing the same benchmark name --
+            # e.g. two concurrent "oslat" engine pairs running in
+            # different directions -- each resolve to their own mv-params
+            # instead of all collapsing onto the first entry with that
+            # name. The output filenames below are likewise keyed by
+            # idx (not just benchmark name) to avoid one occurrence's
+            # files overwriting another's.
+            bb_cmd = f"python3 {self.rickshaw_project_dir}/util/blockbreaker.py --json {run_file} --config mv-params --benchmark {benchmark} --index {idx}"
             logger.debug("about to run: %s", bb_cmd)
             _, output, rc = run_cmd(bb_cmd)
             if rc != 0:
                 logger.error("[ERROR] blockbreaker failed with rc=%d for command=[%s]:\n%s", rc, bb_cmd, output)
                 sys.exit(1)
 
-            bench_mv_params = os.path.join(self.run.get("base-run-dir", self.defaults["base-run-dir"]), "config", f"{benchmark}-mv-params.json")
+            bench_mv_params = os.path.join(self.run.get("base-run-dir", self.defaults["base-run-dir"]), "config", f"{benchmark}-{idx}-mv-params.json")
             os.makedirs(os.path.dirname(bench_mv_params), exist_ok=True)
             with open(bench_mv_params, "w") as f:
                 f.write(output)
 
-            bench_params_run_file = os.path.join(self.run.get("base-run-dir", self.defaults["base-run-dir"]), "config", f"{benchmark}-bench-params.json")
-            bench_params_run_output = os.path.join(self.run.get("base-run-dir", self.defaults["base-run-dir"]), "config", f"{benchmark}-bench-params.txt")
+            bench_params_run_file = os.path.join(self.run.get("base-run-dir", self.defaults["base-run-dir"]), "config", f"{benchmark}-{idx}-bench-params.json")
+            bench_params_run_output = os.path.join(self.run.get("base-run-dir", self.defaults["base-run-dir"]), "config", f"{benchmark}-{idx}-bench-params.txt")
             multiplex_cmd = f"{os.environ.get('MULTIPLEX_HOME', '')}/multiplex.py --input {bench_mv_params} --output {bench_params_run_file}"
             requirements_file = os.path.join(benchmark_dir, "multiplex.json")
             if os.path.exists(requirements_file):
@@ -705,6 +739,22 @@ class RunState:
         count = 0
         self.run["benchmark"] = ""
 
+        # "bench-ids" has one "name:ids" entry per "benchmarks[]" array
+        # entry, in the same order as --bench-dir/--bench-params (see
+        # _process_from_file()). When a benchmark name occurs more
+        # than once -- e.g. two concurrent "oslat" engine pairs
+        # with different params -- each occurrence's own params must
+        # default to applying only to that occurrence's own ids, or
+        # they'd bleed into every other occurrence sharing the name
+        # once flattened into the shared per-iteration params list
+        # below. A param can still set its own explicit "id" to
+        # override this default.
+        bench_ids_entries = [e for e in self.run.get("bench-ids", "").split(",") if e]
+        name_occurrence_count = {}
+        for entry in bench_ids_entries:
+            name = entry.split(":", 1)[0]
+            name_occurrence_count[name] = name_occurrence_count.get(name, 0) + 1
+
         for this_bench_dir in self.run["bench-dir"].split(","):
             bench_config_file = os.path.join(this_bench_dir, "rickshaw.json")
             if not os.path.exists(bench_config_file):
@@ -773,6 +823,13 @@ class RunState:
                 logger.error("Could not open the bench params file: %s", params_files[count])
                 sys.exit(1)
 
+            occurrence_id_scope = None
+            if name_occurrence_count.get(benchmark_name, 0) > 1 and count < len(bench_ids_entries):
+                _, _, occurrence_ids_str = bench_ids_entries[count].partition(":")
+                expanded = expand_id_ranges(occurrence_ids_str)
+                if expanded:
+                    occurrence_id_scope = "+".join(expanded)
+
             for iter_id, params in enumerate(param_sets):
                 while len(self.run["iterations"]) <= iter_id:
                     self.run["iterations"].append({})
@@ -780,6 +837,8 @@ class RunState:
                     self.run["iterations"][iter_id]["params"] = []
                 for param in params:
                     param["benchmark"] = benchmark_name
+                    if occurrence_id_scope is not None and "id" not in param:
+                        param["id"] = occurrence_id_scope
                     self.run["iterations"][iter_id]["params"].append(param)
 
             count += 1
@@ -827,24 +886,10 @@ class RunState:
             if len(parts) != 2:
                 continue
             bench, ids_str = parts
-            instance_ids = set()
-            id_ranges = []
-            for segment in ids_str.split(","):
-                for sub in segment.split("+"):
-                    id_ranges.append(sub)
-            for id_range in id_ranges:
-                m = re.match(r'^(\d+)-(\d+)$', id_range)
-                if m:
-                    for i in range(int(m.group(1)), int(m.group(2)) + 1):
-                        self.ids_to_benchmark[str(i)] = bench
-                        self.benchmark_to_ids.setdefault(bench, []).append(str(i))
-                        instance_ids.add(str(i))
-                elif re.match(r'^\d+$', id_range):
-                    self.ids_to_benchmark[id_range] = bench
-                    self.benchmark_to_ids.setdefault(bench, []).append(id_range)
-                    instance_ids.add(id_range)
-                else:
-                    logger.warning("ID range or number not recognized: %s", id_range)
+            instance_ids = set(expand_id_ranges(ids_str))
+            for id_str in instance_ids:
+                self.ids_to_benchmark[id_str] = bench
+                self.benchmark_to_ids.setdefault(bench, []).append(id_str)
             if instance_ids:
                 self.bench_instances.append({"name": bench, "ids": instance_ids})
 
