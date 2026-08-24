@@ -135,7 +135,7 @@ class TestExpandIdRanges(unittest.TestCase):
         self.assertEqual(self.mod.expand_id_ranges("10+2"), ["2", "10"])
 
     def test_unrecognized_segment_is_skipped_with_a_warning(self):
-        with self.assertLogs(self.mod.logger, level="WARNING"):
+        with self.assertLogs("rickshaw_lib.id_ranges", level="WARNING"):
             result = self.mod.expand_id_ranges("1+not-an-id")
         self.assertEqual(result, ["1"])
 

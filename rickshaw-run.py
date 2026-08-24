@@ -37,6 +37,7 @@ import logging
 from toolbox.logging import setup_logging
 from toolbox.roadblock import do_roadblock as toolbox_do_roadblock, ROADBLOCK_EXITS
 from toolbox.run import run_cmd
+from rickshaw_lib.id_ranges import expand_id_ranges
 
 logger = None
 
@@ -118,26 +119,6 @@ def render_param(arg, val):
     if val:
         return f"--{arg}={shlex.quote(val)}"
     return f"--{arg}"
-
-
-def expand_id_ranges(ids_str):
-    """Expand an ids string (e.g. "1", "1-2", "1+3", "1-2+5-7") into a
-    sorted list of individual id strings (e.g. ["1", "2", "3"]).
-    Shared by assign_bench_ids()'s id-to-benchmark mapping and
-    load_bench_params()'s automatic per-instance param scoping, so the
-    two never disagree on what an ids string means."""
-    expanded = set()
-    for segment in ids_str.split(","):
-        for sub in segment.split("+"):
-            m = re.match(r'^(\d+)-(\d+)$', sub)
-            if m:
-                for i in range(int(m.group(1)), int(m.group(2)) + 1):
-                    expanded.add(str(i))
-            elif re.match(r'^\d+$', sub):
-                expanded.add(sub)
-            else:
-                logger.warning("ID range or number not recognized: %s", sub)
-    return sorted(expanded, key=int)
 
 
 def dump_params(params, cs_id, engine, ids_to_benchmark):
