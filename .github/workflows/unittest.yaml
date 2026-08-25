@@ -46,6 +46,7 @@ jobs:
       - name: Run unit tests
         run: |
           source .venv/bin/activate
+          export RICKSHAW_HOME="${GITHUB_WORKSPACE}"
           pytest -v --html=report.html --self-contained-html tests/*.py
 
       - name: Upload html report

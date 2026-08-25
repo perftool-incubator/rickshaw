@@ -24,6 +24,7 @@ from toolbox.logging import setup_logging
 from toolbox.run import run_cmd
 from toolbox.parallel import run_parallel_jobs, get_max_workers
 from rickshaw_lib.schema_fixup import rickshaw_run_schema_fixup
+from rickshaw_lib.id_ranges import expand_id_ranges
 
 
 def dump_params(params, cs_id, engine, ids_to_benchmark):
@@ -53,8 +54,13 @@ def dump_params(params, cs_id, engine, ids_to_benchmark):
             param_id = None
             update_count += 1
 
-        if param_id is not None and cs_id is not None and str(param_id) != str(cs_id):
-            continue
+        if param_id is not None and cs_id is not None:
+            # param_id may be a single id ("1") or a "+"-joined set
+            # ("1+2") auto-scoped from a duplicate-name benchmark
+            # instance's own ids -- see rickshaw-run.py's
+            # load_bench_params().
+            if str(cs_id) not in str(param_id).split("+"):
+                continue
 
         if bench != benchmark:
             continue
@@ -134,21 +140,9 @@ def main():
         if len(parts) != 2:
             continue
         bench, ids_str = parts
-        id_ranges = []
-        for segment in ids_str.split(","):
-            for sub in segment.split("+"):
-                id_ranges.append(sub)
-        for id_range in id_ranges:
-            m = re.match(r'^(\d+)-(\d+)$', id_range)
-            if m:
-                for i in range(int(m.group(1)), int(m.group(2)) + 1):
-                    ids_to_benchmark[str(i)] = bench
-                    benchmark_to_ids.setdefault(bench, []).append(str(i))
-            elif re.match(r'^\d+$', id_range):
-                ids_to_benchmark[id_range] = bench
-                benchmark_to_ids.setdefault(bench, []).append(id_range)
-            else:
-                logger.warning("ID range not recognized: %s", id_range)
+        for id_str in expand_id_ranges(ids_str):
+            ids_to_benchmark[id_str] = bench
+            benchmark_to_ids.setdefault(bench, []).append(id_str)
 
     max_workers = get_max_workers()
     logger.info("Will run a maximum of %d post-processing jobs at a time", max_workers)
