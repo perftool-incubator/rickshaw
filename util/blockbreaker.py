@@ -136,6 +136,8 @@ def json_to_stream(json_obj, cfg, idx):
                     return stream
         else:
             # single object w/ key:value pairs e.g. "tags" block
+            if cfg not in json_obj:
+                return ""
             json_blk = json_obj[cfg]
     except IndexError as err:
         err_msg=(
@@ -143,7 +145,7 @@ def json_to_stream(json_obj, cfg, idx):
             f"{ len(json_obj[cfg]) } element(s)."
         )
     except KeyError as err:
-        err_msg=f"{ err }: There is no 'type' key in { json_blk }"
+        err_msg=f"{ err }: There is no 'type' key in endpoint configuration"
     except Exception as err:
         err_msg=f"{ err }: Failed to parse config { cfg }, index { idx }."
 
@@ -315,10 +317,15 @@ def main():
             # output is a stream of all endpoints
             output=""
             for idx in range(0, len(input_json["endpoints"])):
-                output += json_to_stream(input_json, "endpoints", idx) + " "
+                ep_stream = json_to_stream(input_json, "endpoints", idx)
+                if ep_stream is None:
+                    return 1
+                output += ep_stream + " "
         case "endpoint" | "tags" | "run-params":
             # output is a stream of the endpoint or tags or run-params
             output = json_to_stream(input_json, args.config, args.index)
+            if output is None:
+                return 1
         case default:
             dump_index = args.index
             if args.config == "mv-params":

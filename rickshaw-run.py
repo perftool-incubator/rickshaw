@@ -341,13 +341,16 @@ class RunState:
                 logger.debug("argument: [%s]", arg)
                 if "tags" not in self.run:
                     self.run["tags"] = []
-                for this_tag in val.split(","):
-                    m = re.match(r'(\S+):(\S+)', this_tag)
-                    if m:
-                        self.run["tags"].append({"name": m.group(1), "val": m.group(2)})
-                    else:
-                        logger.error("ERROR: format for tag is not valid: %s", this_tag)
-                        sys.exit(1)
+                if val:
+                    for this_tag in val.split(","):
+                        if not this_tag:
+                            continue
+                        m = re.match(r'(\S+):(\S+)', this_tag)
+                        if m:
+                            self.run["tags"].append({"name": m.group(1), "val": m.group(2)})
+                        else:
+                            logger.error("ERROR: format for tag is not valid: %s", this_tag)
+                            sys.exit(1)
             else:
                 logger.error("[ERROR] argument not valid: [%s]", arg)
                 self.usage()
@@ -449,8 +452,9 @@ class RunState:
             logger.error("[ERROR] blockbreaker failed with rc=%d for command=[%s]:\n%s", rc, bb_cmd, output)
             sys.exit(1)
         output = output.strip()
-        logger.debug("appending arg [--tags] with value [%s] extracted from from-file to argv", output)
-        args.extend(["--tags", output])
+        if output:
+            logger.debug("appending arg [--tags] with value [%s] extracted from from-file to argv", output)
+            args.extend(["--tags", output])
 
         bb_cmd = f"python3 {self.rickshaw_project_dir}/util/blockbreaker.py --json {run_file} --config endpoints"
         logger.debug("about to run: %s", bb_cmd)
@@ -2510,13 +2514,16 @@ def main():
             if var == "tags":
                 if "tags" not in state.run:
                     state.run["tags"] = []
-                for this_tag in os.environ[e].split(","):
-                    m = re.match(r'(\S+):(\S+)', this_tag)
-                    if m:
-                        state.run["tags"].append({"name": m.group(1), "val": m.group(2)})
-                    else:
-                        logger.error("ERROR: format for RS_TAGS value is not valid: %s", this_tag)
-                        sys.exit(1)
+                if os.environ[e]:
+                    for this_tag in os.environ[e].split(","):
+                        if not this_tag:
+                            continue
+                        m = re.match(r'(\S+):(\S+)', this_tag)
+                        if m:
+                            state.run["tags"].append({"name": m.group(1), "val": m.group(2)})
+                        else:
+                            logger.error("ERROR: format for RS_TAGS value is not valid: %s", this_tag)
+                            sys.exit(1)
             else:
                 state.run[var] = os.environ[e]
 
