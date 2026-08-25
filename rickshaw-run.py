@@ -287,8 +287,30 @@ class RunState:
 
 
     # ----------------------------------------------------------------
-    # Phase 1: CLI and URL parsing
+    # Phase 1: CLI, environment, and URL parsing
     # ----------------------------------------------------------------
+
+    def process_environ(self):
+        """Process RS_* environment variables into run parameters."""
+        for e in ("RS_NAME", "RS_EMAIL", "RS_TAGS", "RS_DESC"):
+            if e in os.environ:
+                var = e.replace("RS_", "").lower().replace("_", "-")
+                logger.debug("Found environment variable: %s, assigning '%s' to %s", e, os.environ[e], var)
+                if var == "tags":
+                    if "tags" not in self.run:
+                        self.run["tags"] = []
+                    if os.environ[e]:
+                        for this_tag in os.environ[e].split(","):
+                            if not this_tag:
+                                continue
+                            m = re.match(r'(\S+):(\S+)', this_tag)
+                            if m:
+                                self.run["tags"].append({"name": m.group(1), "val": m.group(2)})
+                            else:
+                                logger.error("ERROR: format for RS_TAGS value is not valid: %s", this_tag)
+                                sys.exit(1)
+                else:
+                    self.run[var] = os.environ[e]
 
     def process_cmdline(self):
         args = sys.argv[1:]
@@ -2507,26 +2529,7 @@ def main():
     state.log_level = log_level
     logger.info("Found %d available cpus, arch=%s", state.available_cpus, state.arch)
 
-    for e in ("RS_NAME", "RS_EMAIL", "RS_TAGS", "RS_DESC"):
-        if e in os.environ:
-            var = e.replace("RS_", "").lower().replace("_", "-")
-            logger.debug("Found environment variable: %s, assigning '%s' to %s", e, os.environ[e], var)
-            if var == "tags":
-                if "tags" not in state.run:
-                    state.run["tags"] = []
-                if os.environ[e]:
-                    for this_tag in os.environ[e].split(","):
-                        if not this_tag:
-                            continue
-                        m = re.match(r'(\S+):(\S+)', this_tag)
-                        if m:
-                            state.run["tags"].append({"name": m.group(1), "val": m.group(2)})
-                        else:
-                            logger.error("ERROR: format for RS_TAGS value is not valid: %s", this_tag)
-                            sys.exit(1)
-            else:
-                state.run[var] = os.environ[e]
-
+    state.process_environ()
     state.process_cmdline()
     state.load_settings_info()
     if state.log_level != "normal":

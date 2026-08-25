@@ -230,48 +230,39 @@ class TestProcessFromFileTags(unittest.TestCase):
 
 
 class TestRsTagsEnvParsing(unittest.TestCase):
-    """Tests for RS_TAGS environment variable handling."""
+    """Tests for RS_TAGS environment variable handling in RunState.process_environ()."""
 
     def setUp(self):
         self.mod = import_rickshaw_run()
+        self.state = self.mod.RunState()
         logging.getLogger().setLevel(logging.CRITICAL)
 
     def test_rs_tags_empty_string(self):
-        state = self.mod.RunState()
-        e = "RS_TAGS"
-        with patch.dict(os.environ, {e: ""}):
-            var = e.replace("RS_", "").lower().replace("_", "-")
-            if var == "tags":
-                if "tags" not in state.run:
-                    state.run["tags"] = []
-                if os.environ[e]:
-                    for this_tag in os.environ[e].split(","):
-                        if not this_tag:
-                            continue
-                        m = re.match(r'(\S+):(\S+)', this_tag)
-                        if m:
-                            state.run["tags"].append({"name": m.group(1), "val": m.group(2)})
-        self.assertEqual(state.run.get("tags"), [])
+        with patch.dict(os.environ, {"RS_TAGS": ""}):
+            self.state.process_environ()
+        self.assertEqual(self.state.run.get("tags"), [])
 
     def test_rs_tags_valid_string(self):
-        state = self.mod.RunState()
-        e = "RS_TAGS"
-        with patch.dict(os.environ, {e: "env:ci,team:perf"}):
-            var = e.replace("RS_", "").lower().replace("_", "-")
-            if var == "tags":
-                if "tags" not in state.run:
-                    state.run["tags"] = []
-                if os.environ[e]:
-                    for this_tag in os.environ[e].split(","):
-                        if not this_tag:
-                            continue
-                        m = re.match(r'(\S+):(\S+)', this_tag)
-                        if m:
-                            state.run["tags"].append({"name": m.group(1), "val": m.group(2)})
+        with patch.dict(os.environ, {"RS_TAGS": "env:ci,team:perf"}):
+            self.state.process_environ()
         self.assertEqual(
-            state.run.get("tags"),
+            self.state.run.get("tags"),
             [{"name": "env", "val": "ci"}, {"name": "team", "val": "perf"}],
         )
+
+    def test_rs_tags_with_empty_tokens(self):
+        with patch.dict(os.environ, {"RS_TAGS": ",env:ci,,team:perf,"}):
+            self.state.process_environ()
+        self.assertEqual(
+            self.state.run.get("tags"),
+            [{"name": "env", "val": "ci"}, {"name": "team", "val": "perf"}],
+        )
+
+    def test_rs_tags_invalid_format_exits(self):
+        with patch.dict(os.environ, {"RS_TAGS": "invalidtag"}):
+            with self.assertRaises(SystemExit) as cm:
+                self.state.process_environ()
+            self.assertEqual(cm.exception.code, 1)
 
 
 if __name__ == "__main__":
