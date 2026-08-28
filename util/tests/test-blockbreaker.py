@@ -27,6 +27,31 @@ class TestBlockBreaker:
 
         assert run_params_stream == expected_stream
 
+    """Test if json_to_stream returns empty stream when tags is omitted"""
+    @pytest.mark.parametrize("load_json_file",
+                             [ "input-oslat-osp.json" ], indirect=True)
+    def test_json_to_stream_tags_omitted(self, load_json_file):
+        assert "tags" not in load_json_file
+        tags_stream = blockbreaker.json_to_stream(load_json_file, "tags", 0)
+        assert tags_stream == ""
+
+    """Test if json_to_stream returns empty stream when tags is empty object"""
+    @pytest.mark.parametrize("load_json_file",
+                             [ "input-oslat-osp.json" ], indirect=True)
+    def test_json_to_stream_tags_empty(self, load_json_file):
+        load_json_file["tags"] = {}
+        tags_stream = blockbreaker.json_to_stream(load_json_file, "tags", 0)
+        assert tags_stream == ""
+
+    """Test if json_to_stream converts tags block to stream when tags present"""
+    @pytest.mark.parametrize("load_json_file",
+                             [ "input-oslat-osp.json" ], indirect=True)
+    def test_json_to_stream_tags_present(self, load_json_file):
+        load_json_file["tags"] = {"run": "single-json-all-in-one", "userenv": "alma8"}
+        tags_stream = blockbreaker.json_to_stream(load_json_file, "tags", 0)
+        expected_stream = self._load_file("output-oslat-tags.stream")
+        assert tags_stream == expected_stream
+
     """Test if dump_json returns a str"""
     @pytest.mark.parametrize("load_json_file",
                              [ "input-oslat-osp.json" ], indirect=True)
