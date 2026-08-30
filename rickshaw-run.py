@@ -44,6 +44,18 @@ logger = None
 UTILITIES = ["packrat"]
 
 
+def parse_bool_arg(val):
+    if isinstance(val, bool):
+        return val
+    val_lower = str(val).strip().lower()
+    if val_lower in ("true", "1", "yes", "on"):
+        return True
+    elif val_lower in ("false", "0", "no", "off"):
+        return False
+    else:
+        raise ValueError(f"Invalid boolean value '{val}'")
+
+
 def generate_uuid():
     return str(uuid_module.uuid1()).upper()
 
@@ -332,7 +344,13 @@ class RunState:
                 continue
 
             if p.startswith("validate-only="):
-                self.validate_only = True
+                val = p.split("=", 1)[1]
+                try:
+                    self.validate_only = parse_bool_arg(val)
+                except ValueError:
+                    logger.error("[ERROR] Invalid --validate-only value '%s'. Must be a boolean (true/false)", val)
+                    self.usage()
+                    sys.exit(1)
                 continue
 
             if "=" in p:
@@ -2527,7 +2545,17 @@ def main():
         print(f"Invalid --log-level value '{log_level}'. Must be one of: {', '.join(valid_log_levels)}", file=sys.stderr)
         sys.exit(1)
 
-    validate_only = "--validate-only" in sys.argv or any(arg.startswith("--validate-only=") for arg in sys.argv)
+    validate_only = False
+    for arg in sys.argv[1:]:
+        if arg == "--validate-only":
+            validate_only = True
+        elif arg.startswith("--validate-only="):
+            val = arg.split("=", 1)[1]
+            try:
+                validate_only = parse_bool_arg(val)
+            except ValueError:
+                print(f"Invalid --validate-only value '{val}'. Must be a boolean (true/false)", file=sys.stderr)
+                sys.exit(1)
 
     logger = setup_logging("rickshaw-run", log_level)
     # At normal level, suppress library INFO (e.g. roadblock) for curated
