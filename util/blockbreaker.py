@@ -104,7 +104,7 @@ def load_json_file(json_file):
          err_msg = f"Could not find JSON file { json_file }:{ err }"
     except IOError as err:
          err_msg = f"Could not open/read JSON file { json_file }:{ err }"
-    except JSONDecodeError as err:
+    except json.JSONDecodeError as err:
          err_msg = f"Decoding JSON file has failed: { json_file }:{ err }"
     except TypeError as err:
          err_msg = f"JSON object type error: { err }"

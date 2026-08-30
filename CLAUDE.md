@@ -71,6 +71,10 @@ The source-images-service validates that `request.arch` matches `platform.machin
 
 All rickshaw scripts accept `--log-level` with a standard vocabulary: `normal`, `verbose`, `debug`, `verbose-debug`. When `crucible run --log-level <level>` is invoked with a non-default level, `rickshaw-run.py` overrides the `endpoints.log-level` and `roadblock.log-level` values from `rickshaw-settings.json` and updates the settings dict before saving it, so engine scripts also pick up the override via the saved settings file. The `verbose-debug` level enables roadblock's ultra-verbose mode end-to-end (controller, endpoints, and engine-side roadblock invocations).
 
+## Validation Mode
+
+`rickshaw-run.py` supports a `--validate-only` flag for deep run-file validation without deployment or endpoint connectivity. In this mode, `rickshaw-run.py` validates the run-file schema, endpoint definition blocks, benchmark integration schemas, controller environment, tool schemas, and utility schemas (including multiplex expansion for benchmarks and tools). It skips live endpoint validation (`validate_endpoints()`), image sourcing, engine deployment, and execution, exiting with status 0 upon successful validation. This mode is used by `crucible validate` for deep run-file validation.
+
 ## CI
 
 GitHub Actions workflows in `.github/workflows/`:

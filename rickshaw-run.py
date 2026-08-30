@@ -228,6 +228,7 @@ class RunState:
         self.roadblock_followers_dir = ""
 
         self.jsonsettings = {}
+        self.validate_only = False
         self.registries_settings = None
         self.use_workshop = 0
         self.workshop_script = "workshop.py"
@@ -325,6 +326,14 @@ class RunState:
             if p == "help":
                 self.usage()
                 sys.exit(0)
+
+            if p == "validate-only":
+                self.validate_only = True
+                continue
+
+            if p.startswith("validate-only="):
+                self.validate_only = True
+                continue
 
             if "=" in p:
                 arg, val = p.split("=", 1)
@@ -515,6 +524,7 @@ class RunState:
         logger.info("--num-samples            The number of sample executions to run for each benchmark iteration")
         logger.info("--max-sample-failures    The total number of benchmark sample executions that are tolerated")
         logger.info("--log-level              Logging verbosity: normal, verbose, or debug (default: normal)")
+        logger.info("--validate-only          Perform validation of configuration, benchmarks, tools and utilities without deploying or connecting to endpoints")
         logger.info("--test-order             's' = run all samples of an iteration first")
         logger.info("                         'i' = run all iterations of a sample first")
         logger.info("                         'r' = run a sample from a random iteration one at a time")
@@ -2506,7 +2516,7 @@ class RunState:
 
 def main():
     global logger
-    valid_log_levels = ("normal", "verbose", "debug", "verbose-debug")
+    valid_log_levels = ["normal", "verbose", "debug", "verbose-debug"]
     log_level = "normal"
     for i, arg in enumerate(sys.argv[1:]):
         if arg == "--log-level" and i + 2 < len(sys.argv):
@@ -2516,17 +2526,25 @@ def main():
     if log_level not in valid_log_levels:
         print(f"Invalid --log-level value '{log_level}'. Must be one of: {', '.join(valid_log_levels)}", file=sys.stderr)
         sys.exit(1)
+
+    validate_only = "--validate-only" in sys.argv or any(arg.startswith("--validate-only=") for arg in sys.argv)
+
     logger = setup_logging("rickshaw-run", log_level)
     # At normal level, suppress library INFO (e.g. roadblock) for curated
     # output. Raise the root logger to WARNING while keeping our own logger
     # at INFO. Use --log-level=verbose to see library INFO output.
+    # In validate-only mode at normal level, suppress routine startup messages.
     if log_level == "normal":
-        logger.setLevel(logging.INFO)
+        if validate_only:
+            logger.setLevel(logging.WARNING)
+        else:
+            logger.setLevel(logging.INFO)
         logging.getLogger().setLevel(logging.WARNING)
     logger.info("rickshaw-run.py starting")
 
     state = RunState()
     state.log_level = log_level
+    state.validate_only = validate_only
     logger.info("Found %d available cpus, arch=%s", state.available_cpus, state.arch)
 
     state.process_environ()
@@ -2548,9 +2566,13 @@ def main():
     state.validate_controller_env()
     state.make_run_dirs()
     state.save_config_info()
-    state.validate_endpoints()
+    if not state.validate_only:
+        state.validate_endpoints()
     state.load_tool_params()
     state.load_utility_params()
+    if state.validate_only:
+        print("VALID")
+        sys.exit(0)
     state.build_test_order()
     state.prepare_bench_tool_engines()
 
