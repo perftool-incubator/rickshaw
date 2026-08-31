@@ -858,6 +858,11 @@ class RunState:
                 logger.error("Could not open the bench params file: %s", params_files[count])
                 sys.exit(1)
 
+            valid, err = validate_schema(param_sets, self.bench_params_schema_file)
+            if not valid:
+                logger.error("Schema validation failed for %s: %s", params_files[count], err)
+                sys.exit(1)
+
             occurrence_id_scope = None
             if name_occurrence_count.get(benchmark_name, 0) > 1 and count < len(bench_ids_entries):
                 _, _, occurrence_ids_str = bench_ids_entries[count].partition(":")
@@ -1324,6 +1329,11 @@ class RunState:
         json_ref, err = load_json_file(self.run["tool-params"])
         if json_ref is None:
             logger.error("Could not open the tool params file: %s", err)
+            sys.exit(1)
+
+        valid, err = validate_schema(json_ref, self.tool_params_schema_file)
+        if not valid:
+            logger.error("Schema validation failed for %s: %s", self.run["tool-params"], err)
             sys.exit(1)
 
         tool_name_count = {}

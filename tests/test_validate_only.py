@@ -2,7 +2,7 @@
 # -*- mode: python; indent-tabs-mode: nil; python-indent-level: 4 -*-
 # vim: autoindent tabstop=4 shiftwidth=4 expandtab softtabstop=4 filetype=python
 
-"""Unit tests for rickshaw-run.py's --validate-only option.
+"""Unit tests for rickshaw-run.py's --validate-only option and schema validation.
 
 Validates that:
 - parse_bool_arg correctly parses boolean and string representations (true/false/1/0/yes/no/etc.)
@@ -11,8 +11,11 @@ Validates that:
 - Invalid --validate-only values trigger an error and sys.exit(1)
 - Validation mode bypasses live validate_endpoints() and exits with code 0 and "VALID"
 - Logging level is raised to WARNING in validation mode under normal log level
+- Benchmark parameter files are validated against schema/bench-params.json
+- Tool parameter files are validated against schema/tool-params.json
 """
 
+import glob
 import importlib.machinery
 import importlib.util
 import io
@@ -20,6 +23,7 @@ import json
 import logging
 import os
 import sys
+import tempfile
 import types
 import unittest
 from unittest.mock import MagicMock, patch
@@ -39,9 +43,19 @@ def import_rickshaw_run():
         except Exception as e:
             return None, str(e)
 
+    def fake_validate_schema(data, schema_file):
+        try:
+            import jsonschema
+            with open(schema_file, "r") as f:
+                schema = json.load(f)
+            jsonschema.validate(instance=data, schema=schema)
+            return True, None
+        except Exception as e:
+            return False, str(e)
+
     mock_json.load_json_file = fake_load_json_file
     mock_json.save_json_file = lambda *a, **k: None
-    mock_json.validate_schema = lambda *a, **k: (True, None)
+    mock_json.validate_schema = fake_validate_schema
 
     mock_jsonsettings = types.ModuleType("toolbox.jsonsettings")
     mock_jsonsettings.get_json_setting = lambda *a, **k: None
@@ -238,6 +252,147 @@ class TestValidateOnlyLogging(unittest.TestCase):
                 test_logger.setLevel(logging.INFO)
 
         self.assertEqual(test_logger.level, logging.INFO)
+
+
+class TestParamSchemaValidation(unittest.TestCase):
+    """Test bench-params and tool-params schema validation in load_bench_params() and load_tool_params()."""
+
+    def setUp(self):
+        self.rr = import_rickshaw_run()
+        self.state = self.rr.RunState()
+        self.temp_dir = tempfile.mkdtemp()
+
+        # Create mock benchmark directory with schema-valid rickshaw.json
+        self.bench_dir = os.path.join(self.temp_dir, "testbench")
+        os.makedirs(self.bench_dir, exist_ok=True)
+        bench_rickshaw = {
+            "rickshaw-benchmark": {"schema": {"version": "2020.05.18"}},
+            "benchmark": "testbench",
+            "controller": {"post-script": "testbench-post-process"},
+            "client": {
+                "files-from-controller": [{"src": "a", "dest": "b"}],
+                "runtime": "testbench-runtime",
+                "start": "testbench-start"
+            }
+        }
+        with open(os.path.join(self.bench_dir, "rickshaw.json"), "w") as f:
+            json.dump(bench_rickshaw, f)
+
+        # Create mock tools directory with schema-valid rickshaw.json
+        self.tools_dir = os.path.join(self.temp_dir, "tools")
+        self.sysstat_dir = os.path.join(self.tools_dir, "sysstat")
+        os.makedirs(self.sysstat_dir, exist_ok=True)
+        tool_rickshaw = {
+            "rickshaw-tool": {"schema": {"version": "2020.03.18"}},
+            "tool": "sysstat",
+            "controller": {"post-script": "sysstat-post-process"},
+            "collector": {
+                "start": "sysstat-start",
+                "stop": "sysstat-stop"
+            }
+        }
+        with open(os.path.join(self.sysstat_dir, "rickshaw.json"), "w") as f:
+            json.dump(tool_rickshaw, f)
+
+        self.state.config_dir = self.temp_dir
+        self.state.default_tool_userenv = "stream-latest"
+        self.state.required_archs = ["x86_64"]
+
+    def _write_json(self, data):
+        fd, path = tempfile.mkstemp(suffix=".json", dir=self.temp_dir)
+        with os.fdopen(fd, "w") as f:
+            json.dump(data, f)
+        return path
+
+    def test_load_bench_params_valid_schema(self):
+        valid_params = [[{"arg": "duration", "val": "10"}]]
+        params_file = self._write_json(valid_params)
+        self.state.run["bench-dir"] = self.bench_dir
+        self.state.run["bench-params"] = params_file
+
+        # Should load without exception or sys.exit
+        self.state.load_bench_params()
+        self.assertEqual(len(self.state.run["iterations"]), 1)
+        self.assertEqual(self.state.run["iterations"][0]["params"][0]["arg"], "duration")
+
+    def test_load_bench_params_invalid_schema_dict_exits(self):
+        # Empty object / dict instead of array of arrays
+        invalid_params = {}
+        params_file = self._write_json(invalid_params)
+        self.state.run["bench-dir"] = self.bench_dir
+        self.state.run["bench-params"] = params_file
+
+        with self.assertRaises(SystemExit) as cm:
+            self.state.load_bench_params()
+        self.assertEqual(cm.exception.code, 1)
+
+    def test_load_bench_params_invalid_schema_empty_array_exits(self):
+        # Empty array (bench-params requires minItems: 1)
+        invalid_params = []
+        params_file = self._write_json(invalid_params)
+        self.state.run["bench-dir"] = self.bench_dir
+        self.state.run["bench-params"] = params_file
+
+        with self.assertRaises(SystemExit) as cm:
+            self.state.load_bench_params()
+        self.assertEqual(cm.exception.code, 1)
+
+    def test_load_bench_params_invalid_param_item_exits(self):
+        # Item missing required 'val' field
+        invalid_params = [[{"arg": "duration"}]]
+        params_file = self._write_json(invalid_params)
+        self.state.run["bench-dir"] = self.bench_dir
+        self.state.run["bench-params"] = params_file
+
+        with self.assertRaises(SystemExit) as cm:
+            self.state.load_bench_params()
+        self.assertEqual(cm.exception.code, 1)
+
+    def test_load_tool_params_valid_schema(self):
+        valid_tool_params = [
+            {
+                "tool": "sysstat",
+                "params": [{"arg": "interval", "val": "1"}]
+            }
+        ]
+        tool_params_file = self._write_json(valid_tool_params)
+        self.state.run["tools-dir"] = self.tools_dir
+        self.state.run["tool-params"] = tool_params_file
+
+        self.state.load_tool_params()
+        self.assertEqual(len(self.state.tools_params), 1)
+        self.assertEqual(self.state.tools_params[0]["tool"], "sysstat")
+
+    def test_load_tool_params_invalid_params_type_exits(self):
+        # "params": "invalid" instead of array of param objects
+        invalid_tool_params = [
+            {
+                "tool": "sysstat",
+                "params": "invalid"
+            }
+        ]
+        tool_params_file = self._write_json(invalid_tool_params)
+        self.state.run["tools-dir"] = self.tools_dir
+        self.state.run["tool-params"] = tool_params_file
+
+        with self.assertRaises(SystemExit) as cm:
+            self.state.load_tool_params()
+        self.assertEqual(cm.exception.code, 1)
+
+    def test_load_tool_params_missing_tool_field_exits(self):
+        # Object missing required "tool" field
+        invalid_tool_params = [
+            {
+                "params": [{"arg": "interval", "val": "1"}]
+            }
+        ]
+        tool_params_file = self._write_json(invalid_tool_params)
+        self.state.run["tools-dir"] = self.tools_dir
+        self.state.run["tool-params"] = tool_params_file
+
+        with self.assertRaises(SystemExit) as cm:
+            self.state.load_tool_params()
+        self.assertEqual(cm.exception.code, 1)
 
 
 if __name__ == "__main__":
