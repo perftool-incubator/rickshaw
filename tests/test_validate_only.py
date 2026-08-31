@@ -65,6 +65,21 @@ def import_rickshaw_run():
                             (not isinstance(t.get("params"), str)) for t in data)):
                     return True, None
                 return False, "invalid tool-params structure"
+            if "run-file" in schema_file:
+                if (isinstance(data, dict) and "benchmarks" in data and "endpoints" in data
+                        and isinstance(data["benchmarks"], list) and len(data["benchmarks"]) > 0
+                        and isinstance(data["endpoints"], list) and len(data["endpoints"]) > 0):
+                    return True, None
+                return False, "invalid run-file structure"
+            if "remotehosts" in schema_file:
+                if (isinstance(data, dict) and data.get("type") == "remotehosts"
+                        and isinstance(data.get("remotes"), list)):
+                    return True, None
+                return False, "invalid remotehosts structure"
+            if "kube" in schema_file:
+                if (isinstance(data, dict) and data.get("type") == "kube"):
+                    return True, None
+                return False, "invalid kube structure"
             return True, None
         except Exception as e:
             return False, str(e)
@@ -408,6 +423,169 @@ class TestParamSchemaValidation(unittest.TestCase):
 
         with self.assertRaises(SystemExit) as cm:
             self.state.load_tool_params()
+        self.assertEqual(cm.exception.code, 1)
+
+
+class TestEndpointSchemaValidation(unittest.TestCase):
+    """Test static schema validation of run-file and endpoint definitions."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.rickshaw_mod = import_rickshaw_run()
+
+    def setUp(self):
+        self.state = self.rickshaw_mod.RunState()
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.run_dir = self.temp_dir.name
+        self.state.run["base-run-dir"] = self.run_dir
+        self.state.rickshaw_project_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        self.state.run_file_schema_file = os.path.join(self.state.rickshaw_project_dir, "schema", "run-file.json")
+
+    def tearDown(self):
+        self.temp_dir.cleanup()
+
+    def _write_json(self, data):
+        fpath = os.path.join(self.run_dir, f"test_{tempfile.mktemp(dir='')}.json")
+        with open(fpath, "w") as f:
+            json.dump(data, f)
+        return fpath
+
+    def test_validate_endpoint_schemas_no_endpoints_exits(self):
+        self.state.endpoints = []
+        with self.assertRaises(SystemExit) as cm:
+            self.state.validate_endpoint_schemas()
+        self.assertEqual(cm.exception.code, 1)
+
+    def test_validate_endpoint_schemas_valid_remotehosts(self):
+        run_file_data = {
+            "benchmarks": [
+                {
+                    "name": "oslat",
+                    "ids": "1",
+                    "mv-params": {"sets": []}
+                }
+            ],
+            "endpoints": [
+                {
+                    "type": "remotehosts",
+                    "remotes": [
+                        {
+                            "engines": [{"role": "client", "ids": [1]}],
+                            "config": {"host": "localhost"}
+                        }
+                    ]
+                }
+            ]
+        }
+        run_file_path = self._write_json(run_file_data)
+        self.state.run["run-file"] = run_file_path
+        self.state.endpoints = [{"type": "remotehosts", "opts": "", "label": "remotehosts-0"}]
+
+        self.state.validate_endpoint_schemas()
+
+    def test_validate_endpoint_schemas_valid_kube(self):
+        run_file_data = {
+            "benchmarks": [
+                {
+                    "name": "oslat",
+                    "ids": "1",
+                    "mv-params": {"sets": []}
+                }
+            ],
+            "endpoints": [
+                {
+                    "type": "kube",
+                    "controller-ip-address": "127.0.0.1",
+                    "host": "localhost",
+                    "user": "testuser",
+                    "engines": {
+                        "client": 1,
+                        "server": 1
+                    }
+                }
+            ]
+        }
+        run_file_path = self._write_json(run_file_data)
+        self.state.run["run-file"] = run_file_path
+        self.state.endpoints = [{"type": "kube", "opts": "", "label": "kube-0"}]
+
+        self.state.validate_endpoint_schemas()
+
+    def test_validate_endpoint_schemas_invalid_run_file_exits(self):
+        invalid_run_file = {
+            "endpoints": [
+                {
+                    "type": "remotehosts",
+                    "remotes": [
+                        {
+                            "engines": [{"role": "client", "ids": [1]}],
+                            "config": {"host": "localhost"}
+                        }
+                    ]
+                }
+            ]
+        }
+        run_file_path = self._write_json(invalid_run_file)
+        self.state.run["run-file"] = run_file_path
+        self.state.endpoints = [{"type": "remotehosts", "opts": "", "label": "remotehosts-0"}]
+
+        with self.assertRaises(SystemExit) as cm:
+            self.state.validate_endpoint_schemas()
+        self.assertEqual(cm.exception.code, 1)
+
+    def test_validate_endpoint_schemas_invalid_endpoint_block_exits(self):
+        invalid_endpoint_run_file = {
+            "benchmarks": [
+                {
+                    "name": "oslat",
+                    "ids": "1",
+                    "mv-params": {"sets": []}
+                }
+            ],
+            "endpoints": [
+                {
+                    "type": "remotehosts",
+                    "remotes": "invalid_remotes_type"
+                }
+            ]
+        }
+        run_file_path = self._write_json(invalid_endpoint_run_file)
+        self.state.run["run-file"] = run_file_path
+        self.state.endpoints = [{"type": "remotehosts", "opts": "", "label": "remotehosts-0"}]
+
+        with self.assertRaises(SystemExit) as cm:
+            self.state.validate_endpoint_schemas()
+        self.assertEqual(cm.exception.code, 1)
+
+    def test_validate_endpoint_schemas_unknown_endpoint_type_exits(self):
+        unknown_ep_run_file = {
+            "benchmarks": [
+                {
+                    "name": "oslat",
+                    "ids": "1",
+                    "mv-params": {"sets": []}
+                }
+            ],
+            "endpoints": [
+                {
+                    "type": "unknown_endpoint_type",
+                    "foo": "bar"
+                }
+            ]
+        }
+        run_file_path = self._write_json(unknown_ep_run_file)
+        self.state.run["run-file"] = run_file_path
+        self.state.endpoints = [{"type": "unknown_endpoint_type", "opts": "", "label": "unknown-0"}]
+
+        with self.assertRaises(SystemExit) as cm:
+            self.state.validate_endpoint_schemas()
+        self.assertEqual(cm.exception.code, 1)
+
+    def test_validate_endpoint_schemas_missing_endpoint_directory_exits(self):
+        self.state.endpoints = [{"type": "nonexistent_type", "opts": "", "label": "nonexistent-0"}]
+
+        with self.assertRaises(SystemExit) as cm:
+            self.state.validate_endpoint_schemas()
         self.assertEqual(cm.exception.code, 1)
 
 

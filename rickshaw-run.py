@@ -216,6 +216,7 @@ class RunState:
         self.utility_schema_file = os.path.join(self.rickshaw_project_dir, "schema", "utility.json")
         self.bench_params_schema_file = os.path.join(self.rickshaw_project_dir, "schema", "bench-params.json")
         self.tool_params_schema_file = os.path.join(self.rickshaw_project_dir, "schema", "tool-params.json")
+        self.run_file_schema_file = os.path.join(self.rickshaw_project_dir, "schema", "run-file.json")
         self.rickshaw_settings_schema_file = os.path.join(self.rickshaw_project_dir, "schema", "rickshaw-settings.json")
         self.source_images_input_schema_file = os.path.join(self.rickshaw_project_dir, "schema", "source-images-input.json")
         self.source_images_output_schema_file = os.path.join(self.rickshaw_project_dir, "schema", "source-images-output.json")
@@ -1097,6 +1098,63 @@ class RunState:
     # ----------------------------------------------------------------
     # Phase 3: Endpoint validation and preparation
     # ----------------------------------------------------------------
+
+    def validate_endpoint_schemas(self):
+        """Perform static schema validation of run-file and endpoint definitions.
+
+        Validates the run-file structure against schema/run-file.json and each
+        declared endpoint block against its type-specific schema (e.g.
+        schema/remotehosts.json, schema/kube.json, schema/osp.json) without
+        performing live network connectivity or host discovery checks.
+        """
+        if not self.endpoints:
+            logger.error("ERROR: you must declare endpoints")
+            sys.exit(1)
+
+        run_file = self.run.get("run-file")
+        if run_file and os.path.isfile(run_file):
+            run_file_json, err = load_json_file(run_file)
+            if run_file_json is None:
+                logger.error("[ERROR] Could not load run-file %s: %s", run_file, err)
+                sys.exit(1)
+
+            valid, err = validate_schema(run_file_json, self.run_file_schema_file)
+            if not valid:
+                logger.error("[ERROR] Schema validation failed for run-file %s: %s", run_file, err)
+                sys.exit(1)
+
+            for idx, ep_blk in enumerate(run_file_json.get("endpoints", [])):
+                ep_type = ep_blk.get("type")
+                if not ep_type:
+                    logger.error("[ERROR] Endpoint at index %d in %s missing 'type' field", idx, run_file)
+                    sys.exit(1)
+
+                ep_schema_file = os.path.join(self.rickshaw_project_dir, "schema", f"{ep_type}.json")
+                if not os.path.isfile(ep_schema_file):
+                    logger.error("[ERROR] Unknown endpoint type '%s' or missing schema %s", ep_type, ep_schema_file)
+                    sys.exit(1)
+
+                valid, err = validate_schema(ep_blk, ep_schema_file)
+                if not valid:
+                    logger.error("[ERROR] Schema validation failed for %s endpoint at index %d in %s: %s", ep_type, idx, run_file, err)
+                    sys.exit(1)
+
+        for endpoint in self.endpoints:
+            ep_type = endpoint.get("type")
+            ep_dir = os.path.join(self.rickshaw_project_dir, "endpoints", ep_type)
+            if not os.path.isdir(ep_dir):
+                logger.error("[ERROR] Endpoint '%s' directory does not exist: %s", ep_type, ep_dir)
+                sys.exit(1)
+
+            dep_file = os.path.join(ep_dir, "deprecated")
+            if os.path.exists(dep_file):
+                with open(dep_file) as f:
+                    logger.warning("WARNING: the '%s' endpoint is deprecated:\n%s", ep_type, f.read())
+
+            exp_file = os.path.join(ep_dir, "experimental")
+            if os.path.exists(exp_file):
+                with open(exp_file) as f:
+                    logger.warning("WARNING: the '%s' endpoint is experimental:\n%s", ep_type, f.read())
 
     def validate_endpoints(self):
         logger.info("Confirming the endpoints will satisfy the benchmark requirements:")
@@ -2602,6 +2660,7 @@ def main():
         state.jsonsettings["endpoints"]["log-level"] = state.log_level
     state.load_bench_params()
     state.validate_controller_env()
+    state.validate_endpoint_schemas()
     state.make_run_dirs()
     state.save_config_info()
     if not state.validate_only:
