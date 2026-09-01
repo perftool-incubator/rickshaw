@@ -44,6 +44,18 @@ logger = None
 UTILITIES = ["packrat"]
 
 
+def parse_bool_arg(val):
+    if isinstance(val, bool):
+        return val
+    val_lower = str(val).strip().lower()
+    if val_lower in ("true", "1", "yes", "on"):
+        return True
+    elif val_lower in ("false", "0", "no", "off"):
+        return False
+    else:
+        raise ValueError(f"Invalid boolean value '{val}'")
+
+
 def generate_uuid():
     return str(uuid_module.uuid1()).upper()
 
@@ -204,6 +216,7 @@ class RunState:
         self.utility_schema_file = os.path.join(self.rickshaw_project_dir, "schema", "utility.json")
         self.bench_params_schema_file = os.path.join(self.rickshaw_project_dir, "schema", "bench-params.json")
         self.tool_params_schema_file = os.path.join(self.rickshaw_project_dir, "schema", "tool-params.json")
+        self.run_file_schema_file = os.path.join(self.rickshaw_project_dir, "schema", "run-file.json")
         self.rickshaw_settings_schema_file = os.path.join(self.rickshaw_project_dir, "schema", "rickshaw-settings.json")
         self.source_images_input_schema_file = os.path.join(self.rickshaw_project_dir, "schema", "source-images-input.json")
         self.source_images_output_schema_file = os.path.join(self.rickshaw_project_dir, "schema", "source-images-output.json")
@@ -228,6 +241,7 @@ class RunState:
         self.roadblock_followers_dir = ""
 
         self.jsonsettings = {}
+        self.validate_only = False
         self.registries_settings = None
         self.use_workshop = 0
         self.workshop_script = "workshop.py"
@@ -325,6 +339,20 @@ class RunState:
             if p == "help":
                 self.usage()
                 sys.exit(0)
+
+            if p == "validate-only":
+                self.validate_only = True
+                continue
+
+            if p.startswith("validate-only="):
+                val = p.split("=", 1)[1]
+                try:
+                    self.validate_only = parse_bool_arg(val)
+                except ValueError:
+                    logger.error("[ERROR] Invalid --validate-only value '%s'. Must be a boolean (true/false)", val)
+                    self.usage()
+                    sys.exit(1)
+                continue
 
             if "=" in p:
                 arg, val = p.split("=", 1)
@@ -515,6 +543,7 @@ class RunState:
         logger.info("--num-samples            The number of sample executions to run for each benchmark iteration")
         logger.info("--max-sample-failures    The total number of benchmark sample executions that are tolerated")
         logger.info("--log-level              Logging verbosity: normal, verbose, or debug (default: normal)")
+        logger.info("--validate-only          Perform validation of configuration, benchmarks, tools and utilities without deploying or connecting to endpoints")
         logger.info("--test-order             's' = run all samples of an iteration first")
         logger.info("                         'i' = run all iterations of a sample first")
         logger.info("                         'r' = run a sample from a random iteration one at a time")
@@ -830,6 +859,11 @@ class RunState:
                 logger.error("Could not open the bench params file: %s", params_files[count])
                 sys.exit(1)
 
+            valid, err = validate_schema(param_sets, self.bench_params_schema_file)
+            if not valid:
+                logger.error("Schema validation failed for %s: %s", params_files[count], err)
+                sys.exit(1)
+
             occurrence_id_scope = None
             if name_occurrence_count.get(benchmark_name, 0) > 1 and count < len(bench_ids_entries):
                 _, _, occurrence_ids_str = bench_ids_entries[count].partition(":")
@@ -1065,6 +1099,63 @@ class RunState:
     # Phase 3: Endpoint validation and preparation
     # ----------------------------------------------------------------
 
+    def validate_endpoint_schemas(self):
+        """Perform static schema validation of run-file and endpoint definitions.
+
+        Validates the run-file structure against schema/run-file.json and each
+        declared endpoint block against its type-specific schema (e.g.
+        schema/remotehosts.json, schema/kube.json, schema/osp.json) without
+        performing live network connectivity or host discovery checks.
+        """
+        if not self.endpoints:
+            logger.error("ERROR: you must declare endpoints")
+            sys.exit(1)
+
+        run_file = self.run.get("run-file")
+        if run_file and os.path.isfile(run_file):
+            run_file_json, err = load_json_file(run_file)
+            if run_file_json is None:
+                logger.error("[ERROR] Could not load run-file %s: %s", run_file, err)
+                sys.exit(1)
+
+            valid, err = validate_schema(run_file_json, self.run_file_schema_file)
+            if not valid:
+                logger.error("[ERROR] Schema validation failed for run-file %s: %s", run_file, err)
+                sys.exit(1)
+
+            for idx, ep_blk in enumerate(run_file_json.get("endpoints", [])):
+                ep_type = ep_blk.get("type")
+                if not ep_type:
+                    logger.error("[ERROR] Endpoint at index %d in %s missing 'type' field", idx, run_file)
+                    sys.exit(1)
+
+                ep_schema_file = os.path.join(self.rickshaw_project_dir, "schema", f"{ep_type}.json")
+                if not os.path.isfile(ep_schema_file):
+                    logger.error("[ERROR] Unknown endpoint type '%s' or missing schema %s", ep_type, ep_schema_file)
+                    sys.exit(1)
+
+                valid, err = validate_schema(ep_blk, ep_schema_file)
+                if not valid:
+                    logger.error("[ERROR] Schema validation failed for %s endpoint at index %d in %s: %s", ep_type, idx, run_file, err)
+                    sys.exit(1)
+
+        for endpoint in self.endpoints:
+            ep_type = endpoint.get("type")
+            ep_dir = os.path.join(self.rickshaw_project_dir, "endpoints", ep_type)
+            if not os.path.isdir(ep_dir):
+                logger.error("[ERROR] Endpoint '%s' directory does not exist: %s", ep_type, ep_dir)
+                sys.exit(1)
+
+            dep_file = os.path.join(ep_dir, "deprecated")
+            if os.path.exists(dep_file):
+                with open(dep_file) as f:
+                    logger.warning("WARNING: the '%s' endpoint is deprecated:\n%s", ep_type, f.read())
+
+            exp_file = os.path.join(ep_dir, "experimental")
+            if os.path.exists(exp_file):
+                with open(exp_file) as f:
+                    logger.warning("WARNING: the '%s' endpoint is experimental:\n%s", ep_type, f.read())
+
     def validate_endpoints(self):
         logger.info("Confirming the endpoints will satisfy the benchmark requirements:")
         deprecated_endpoints = {}
@@ -1296,6 +1387,11 @@ class RunState:
         json_ref, err = load_json_file(self.run["tool-params"])
         if json_ref is None:
             logger.error("Could not open the tool params file: %s", err)
+            sys.exit(1)
+
+        valid, err = validate_schema(json_ref, self.tool_params_schema_file)
+        if not valid:
+            logger.error("Schema validation failed for %s: %s", self.run["tool-params"], err)
             sys.exit(1)
 
         tool_name_count = {}
@@ -2506,7 +2602,7 @@ class RunState:
 
 def main():
     global logger
-    valid_log_levels = ("normal", "verbose", "debug", "verbose-debug")
+    valid_log_levels = ["normal", "verbose", "debug", "verbose-debug"]
     log_level = "normal"
     for i, arg in enumerate(sys.argv[1:]):
         if arg == "--log-level" and i + 2 < len(sys.argv):
@@ -2516,17 +2612,35 @@ def main():
     if log_level not in valid_log_levels:
         print(f"Invalid --log-level value '{log_level}'. Must be one of: {', '.join(valid_log_levels)}", file=sys.stderr)
         sys.exit(1)
+
+    validate_only = False
+    for arg in sys.argv[1:]:
+        if arg == "--validate-only":
+            validate_only = True
+        elif arg.startswith("--validate-only="):
+            val = arg.split("=", 1)[1]
+            try:
+                validate_only = parse_bool_arg(val)
+            except ValueError:
+                print(f"Invalid --validate-only value '{val}'. Must be a boolean (true/false)", file=sys.stderr)
+                sys.exit(1)
+
     logger = setup_logging("rickshaw-run", log_level)
     # At normal level, suppress library INFO (e.g. roadblock) for curated
     # output. Raise the root logger to WARNING while keeping our own logger
     # at INFO. Use --log-level=verbose to see library INFO output.
+    # In validate-only mode at normal level, suppress routine startup messages.
     if log_level == "normal":
-        logger.setLevel(logging.INFO)
+        if validate_only:
+            logger.setLevel(logging.WARNING)
+        else:
+            logger.setLevel(logging.INFO)
         logging.getLogger().setLevel(logging.WARNING)
     logger.info("rickshaw-run.py starting")
 
     state = RunState()
     state.log_level = log_level
+    state.validate_only = validate_only
     logger.info("Found %d available cpus, arch=%s", state.available_cpus, state.arch)
 
     state.process_environ()
@@ -2546,11 +2660,16 @@ def main():
         state.jsonsettings["endpoints"]["log-level"] = state.log_level
     state.load_bench_params()
     state.validate_controller_env()
+    state.validate_endpoint_schemas()
     state.make_run_dirs()
     state.save_config_info()
-    state.validate_endpoints()
+    if not state.validate_only:
+        state.validate_endpoints()
     state.load_tool_params()
     state.load_utility_params()
+    if state.validate_only:
+        print("VALID")
+        sys.exit(0)
     state.build_test_order()
     state.prepare_bench_tool_engines()
 
