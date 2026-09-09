@@ -201,6 +201,42 @@ class TestProcessFromFileTags(unittest.TestCase):
 
         self.assertNotIn("--tags", args)
 
+    def test_process_from_file_with_omitted_tool_params_uses_defaults(self):
+        """An omitted tool-params block materializes the repository defaults."""
+        default_tool_params = [
+            {"tool": "sysstat"},
+            {"tool": "procstat"},
+        ]
+        default_config_dir = os.path.join(self.temp_dir.name, "rickshaw-config")
+        os.makedirs(os.path.join(default_config_dir, "config"), exist_ok=True)
+        with open(os.path.join(default_config_dir, "config", "tool-params.json"), "w") as f:
+            json.dump(default_tool_params, f)
+        self.state.rickshaw_project_dir = default_config_dir
+
+        run_file_path = os.path.join(self.temp_dir.name, "run-file.json")
+        with open(run_file_path, "w") as f:
+            json.dump({"run-params": {}}, f)
+
+        self.state.run["run-file"] = run_file_path
+        args = ["--from-file", run_file_path]
+
+        def mock_run_cmd(cmd):
+            if "--config benchmarks" in cmd:
+                return ("cmd", "oslat", 0)
+            elif "--config tool-params" in cmd:
+                return ("cmd", "\n", 0)
+            elif "--config tags" in cmd:
+                return ("cmd", "", 0)
+            elif "--config endpoints" in cmd:
+                return ("cmd", "remotehosts,hosts=localhost", 0)
+            return ("cmd", "", 0)
+
+        with patch.object(self.mod, "run_cmd", side_effect=mock_run_cmd):
+            self.state._process_from_file(args)
+
+        with open(os.path.join(self.temp_dir.name, "config", "tool-params.json")) as f:
+            self.assertEqual(json.load(f), default_tool_params)
+
     def test_process_from_file_with_tags_output(self):
         """When blockbreaker returns tags output, --tags is appended to args."""
         run_file_path = os.path.join(self.temp_dir.name, "run-file.json")
