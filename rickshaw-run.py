@@ -489,6 +489,16 @@ class RunState:
         if rc != 0:
             logger.error("[ERROR] blockbreaker failed with rc=%d for command=[%s]:\n%s", rc, bb_cmd, output)
             sys.exit(1)
+        if not output.strip():
+            # An omitted tool-params block means use the repository defaults.
+            # Keep an explicit [] intact so users can disable tool collection.
+            default_tool_params = os.path.join(self.rickshaw_project_dir, "config", "tool-params.json")
+            try:
+                with open(default_tool_params, "r") as f:
+                    output = f.read()
+            except OSError as err:
+                logger.error("[ERROR] Could not open the default tool params file %s: %s", default_tool_params, err)
+                sys.exit(1)
         tool_params = os.path.join(self.run.get("base-run-dir", self.defaults["base-run-dir"]), "config", "tool-params.json")
         with open(tool_params, "w") as f:
             f.write(output)
