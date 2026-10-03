@@ -118,6 +118,7 @@ def json_to_stream(json_obj, cfg, idx):
     """Parse key:value from a JSON object/block and transform into a stream"""
     err_msg = None
     stream = ""
+    requested_index = idx
     if json_obj is None:
         return None
     if cfg == 'endpoint':
@@ -154,6 +155,10 @@ def json_to_stream(json_obj, cfg, idx):
         return None
 
     for key in json_blk:
+        if cfg == 'endpoints' and key == 'ssh-identity-profile':
+            # Endpoint identity selectors are propagated by rickshaw-run as
+            # process environment, not as legacy endpoint-specific options.
+            continue
         if cfg == 'endpoints' and key == 'config':
             for ecfg in range(0, len(json_blk[key])):
                 # process targets e.g. 'client-1' for each config section
@@ -222,6 +227,13 @@ def json_to_stream(json_obj, cfg, idx):
                 except:
                     raise Exception("Error: Unexpected object type %s" % (type(val)))
                     return None
+
+    if cfg == 'endpoints' and json_blk.get('type') == 'osp':
+        # OSP still receives its endpoint configuration through legacy
+        # --endpoint-opts, so carry the run-file index separately for
+        # rickshaw-run to associate endpoint-only settings such as the
+        # identity profile with this generated record.
+        stream += '__rickshaw-run-file-endpoint-index:' + str(requested_index) + ','
 
     if cfg != 'run-params':
         # remove last ","
@@ -344,4 +356,3 @@ def main():
 if __name__ == "__main__":
     args = process_options()
     exit(main())
-

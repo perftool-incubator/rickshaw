@@ -22,6 +22,9 @@ import uuid as uuid_module
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
+sys.path.append(str(Path(__file__).resolve().parent / "endpoints"))
+from ssh_identity import profile_socket
+
 TOOLBOX_HOME = os.environ.get("TOOLBOX_HOME")
 if TOOLBOX_HOME:
     sys.path.append(str(Path(TOOLBOX_HOME) / "python"))
@@ -38,6 +41,7 @@ from toolbox.logging import setup_logging
 from toolbox.roadblock import do_roadblock as toolbox_do_roadblock, ROADBLOCK_EXITS
 from toolbox.run import run_cmd
 from rickshaw_lib.id_ranges import expand_id_ranges
+from invoke import run as invoke_run
 
 logger = None
 
@@ -96,11 +100,28 @@ def file_newer_than(filepath, epoch_sec):
 
 def add_endpoint(endpoints, ep_type, opts):
     num = sum(1 for e in endpoints if e["type"] == ep_type) + 1
-    endpoints.append({
+    run_file_endpoint_index = None
+    hidden_index = re.search(
+        r"(?:^|,)__rickshaw-run-file-endpoint-index:(\d+)(?=,|$)", opts
+    )
+    if hidden_index:
+        run_file_endpoint_index = int(hidden_index.group(1))
+        opts = re.sub(
+            r"(?:^|,)__rickshaw-run-file-endpoint-index:\d+(?=,|$)", "", opts
+        ).strip(",")
+    elif re.search(r"(?:^|,)run-file=", opts):
+        endpoint_index = re.search(r"(?:^|,)endpoint-index=(\d+)(?:,|$)", opts)
+        if endpoint_index:
+            run_file_endpoint_index = int(endpoint_index.group(1))
+
+    endpoint = {
         "type": ep_type,
         "opts": opts,
         "label": f"{ep_type}-{num}",
-    })
+    }
+    if run_file_endpoint_index is not None:
+        endpoint["run-file-endpoint-index"] = run_file_endpoint_index
+    endpoints.append(endpoint)
 
 
 def dump_endpoint_types(endpoints):
@@ -1109,6 +1130,22 @@ class RunState:
     # Phase 3: Endpoint validation and preparation
     # ----------------------------------------------------------------
 
+    @staticmethod
+    def _run_file_endpoint_identity_profile(endpoint_block):
+        """Return the endpoint default only when a remote inherits it."""
+        profile = endpoint_block.get("ssh-identity-profile")
+        if endpoint_block.get("type") != "remotehosts":
+            return profile
+
+        # Crucible snapshots only profiles selected by at least one remote.
+        # Avoid resolving an endpoint default that every remote overrides;
+        # that unused profile is intentionally absent from the socket map.
+        for remote in endpoint_block.get("remotes", []):
+            remote_profile = remote.get("config", {}).get("ssh-identity-profile")
+            if not remote_profile:
+                return profile
+        return None
+
     def validate_endpoint_schemas(self):
         """Perform static schema validation of run-file and endpoint definitions.
 
@@ -1149,6 +1186,21 @@ class RunState:
                     logger.error("[ERROR] Schema validation failed for %s endpoint at index %d in %s: %s", ep_type, idx, run_file, err)
                     sys.exit(1)
 
+                # Attach run-file-only settings to the record generated from
+                # this exact block. Direct CLI endpoints can appear earlier
+                # in self.endpoints, so list position is not the run-file index.
+                for endpoint in self.endpoints:
+                    if (
+                        endpoint.get("run-file-endpoint-index") == idx
+                        and endpoint.get("type") == ep_type
+                    ):
+                        endpoint["ssh-identity-profile"] = (
+                            self._run_file_endpoint_identity_profile(ep_blk)
+                        )
+
+        for endpoint in self.endpoints:
+            endpoint.pop("run-file-endpoint-index", None)
+
         for endpoint in self.endpoints:
             ep_type = endpoint.get("type")
             ep_dir = os.path.join(self.rickshaw_project_dir, "endpoints", ep_type)
@@ -1165,6 +1217,29 @@ class RunState:
             if os.path.exists(exp_file):
                 with open(exp_file) as f:
                     logger.warning("WARNING: the '%s' endpoint is experimental:\n%s", ep_type, f.read())
+
+    def _endpoint_environment(self, endpoint):
+        """Build endpoint process environment without logging socket paths."""
+
+        environment = os.environ.copy()
+        identity_profile = endpoint.get("ssh-identity-profile") or environment.get(
+            "CRUCIBLE_SSH_IDENTITY_PROFILE"
+        )
+        if identity_profile:
+            environment["SSH_AUTH_SOCK"] = profile_socket(identity_profile)
+            environment["CRUCIBLE_SSH_IDENTITY_PROFILE"] = identity_profile
+        known_hosts_file = os.environ.get("CRUCIBLE_SSH_KNOWN_HOSTS_FILE")
+        if known_hosts_file:
+            environment["CRUCIBLE_SSH_KNOWN_HOSTS_FILE"] = known_hosts_file
+        return environment
+
+    @staticmethod
+    def _run_endpoint_command(command, environment):
+        result = invoke_run(command, hide=True, warn=True, env=environment)
+        output = result.stdout
+        if result.stderr:
+            output += result.stderr
+        return command, output, result.return_code
 
     def validate_endpoints(self):
         logger.info("Confirming the endpoints will satisfy the benchmark requirements:")
@@ -1201,7 +1276,11 @@ class RunState:
             else:
                 cmd += f" --endpoint-opts={endpoint['opts']}"
 
-            jobs.append({"endpoint": endpoint["label"], "command": cmd})
+            jobs.append({
+                "endpoint": endpoint["label"],
+                "command": cmd,
+                "environment": self._endpoint_environment(endpoint),
+            })
 
         endpoint_outputs = {}
         job_errors = 0
@@ -1210,7 +1289,11 @@ class RunState:
         with ThreadPoolExecutor(max_workers=num_workers) as executor:
             future_to_ep = {}
             for job in jobs:
-                future = executor.submit(run_cmd, job["command"])
+                future = executor.submit(
+                    self._run_endpoint_command,
+                    job["command"],
+                    job["environment"],
+                )
                 future_to_ep[future] = job["endpoint"]
 
             for future in as_completed(future_to_ep):
@@ -1257,7 +1340,7 @@ class RunState:
                             for i in range(int(m.group(1)), int(m.group(2)) + 1):
                                 self.clients_servers.setdefault(keyword, {})[str(i)] = {
                                     "endpoint-type": endpoint["type"],
-                                    "id": str(i),
+                            "id": str(i),
                                 }
                                 rb_id = f"{keyword}-{i}"
                                 if rb_id not in self.rb_cs_ids:
@@ -2284,7 +2367,8 @@ class RunState:
                 log_fh = open(cmd_log, "w")
                 proc = subprocess.Popen(
                     cmd, shell=True, stdout=log_fh, stderr=subprocess.STDOUT,
-                    cwd=endpoint_project_dir
+                    cwd=endpoint_project_dir,
+                    env=self._endpoint_environment(endpoint),
                 )
                 self.endpoint_processes.append((proc, log_fh))
 

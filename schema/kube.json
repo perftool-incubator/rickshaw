@@ -263,6 +263,11 @@
             "type": "string",
             "minLength": 1
         },
+        "ssh-identity-profile": {
+            "description": "Optional Crucible-managed SSH identity profile used for the controller-to-Kubernetes-management-host connection. When omitted, the existing ambient SSH authentication is used.",
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"
+        },
         "engines": {
             "type": "object",
             "properties": {

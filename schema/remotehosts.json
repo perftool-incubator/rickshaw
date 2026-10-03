@@ -8,6 +8,11 @@
             "type": "string",
             "enum": [ "remotehosts" ]
         },
+        "ssh-identity-profile": {
+            "description": "Optional Crucible-managed SSH identity profile used for controller-to-management-host connections. When omitted, the existing ambient SSH authentication is used.",
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"
+        },
         "settings": {
             "description": "An optional top-level settings object that provides default configuration values for all remote hosts in this endpoint.  Individual remote hosts can override these defaults by specifying their own settings in their config block.",
             "$ref": "#/definitions/settings"
@@ -73,6 +78,11 @@
                                 "description": "The hostname or IP address of the remote Linux host.  This is used by rickshaw to establish SSH connections for deploying and managing engines on the host.",
                                 "type": "string",
                                 "minLength": 1
+                            },
+                            "ssh-identity-profile": {
+                                "description": "Optional per-remote SSH identity profile overriding the endpoint-level profile for this management host.",
+                                "type": "string",
+                                "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"
                             },
                             "settings": {
                                 "description": "An optional settings object that provides host-specific configuration values.  Any values specified here override the corresponding endpoint-level settings defaults for this remote host only.",

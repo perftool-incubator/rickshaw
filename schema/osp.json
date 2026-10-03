@@ -20,6 +20,11 @@
             "description": "The username used to log in to the OpenStack controller host via SSH.",
             "type": "string"
         },
+        "ssh-identity-profile": {
+            "description": "Optional Crucible-managed SSH identity profile used only for controller-to-OpenStack-management-host connections. When omitted, the existing ambient SSH authentication is used.",
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"
+        },
         "userenv": {
             "description": "This parameter defines the userenv that is to be assigned to all engines on this endpoint.  The userenv specifies the base container image used to build the engine images.",
             "type": "string"

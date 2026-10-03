@@ -8,6 +8,7 @@ Rickshaw is a benchmark orchestration framework that manages container image bui
 - **`rickshaw-source-images-client.py`** (Python, no pip deps) — CLI bridge that translates local files into HTTP API calls to the source-images-service.
 - **`source-images-service/`** (Python/FastAPI) — Web service for container image building. See `SOURCE-IMAGES-SERVICE-OVERVIEW.md` for detailed architecture.
 - **`endpoints/`** — Endpoint implementations (kube, remotehosts, etc.) in Python.
+- **`endpoints/ssh_identity.py`** — Resolves endpoint-selected Crucible SSH profile names to run-scoped filtered agent sockets; it carries socket references only and never handles private-key bytes.
 - **`engine/`** — Engine scripts for benchmark/tool execution inside containers.
 - **`userenvs/`** — User environment definitions (JSON files describing container base images).
 - **`schema/`** — JSON schemas for validation (`run.json`, `source-images-input.json`, `source-images-output.json`, etc.).
@@ -22,6 +23,21 @@ Rickshaw is a benchmark orchestration framework that manages container image bui
 ### Engine runtime
 
 The engine scripts that run inside benchmark/tool containers are Python (`engine.py`, `engine_lib.py`). The `engine.runtime` setting in `rickshaw-settings.json` controls which files are staged (`"python"` or `"bash"`, default `"python"`). The bash bootstrap auto-detects which files were staged and execs the appropriate entry point. The Engine class in `engine_lib.py` uses Fabric/paramiko for SSH file transfer and Invoke for local command execution. Benchmark and tool scripts remain Bash — the Python engine runs them as subprocesses.
+
+### Controller-to-management SSH identity profiles
+
+Endpoint-level `ssh-identity-profile` selectors are propagated by
+`rickshaw-run.py` to kube, osp, and remotehosts endpoint processes. The
+remotehosts endpoint also supports a per-remote override. These selectors map
+to filtered, run-scoped agent sockets through `endpoints/ssh_identity.py`;
+private keys remain in the host SSH agent. `endpoints/endpoints.py` owns
+controller-to-management SSH setup and managed host-key loading. When any
+profile is active in a run, it serializes SSH connection setup because
+Paramiko reads the process-wide `SSH_AUTH_SOCK`; ambient connections in that
+same endpoint process must use the same lock so they cannot observe another
+remote's selected profile. Keep endpoint selector schemas, environment
+propagation, and this connection boundary synchronized when changing this
+behavior.
 
 ## Key Conventions
 

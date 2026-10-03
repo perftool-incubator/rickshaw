@@ -28,9 +28,10 @@ import os
 import shutil
 import sys
 import tempfile
+import threading
 import types
 import unittest
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 
 def import_endpoints():
@@ -204,6 +205,132 @@ class TestProcessBenchRoadblocksInit(unittest.TestCase):
             )
 
         self.assertEqual(rc, 1)
+
+
+class TestRemoteConnectionSSHIdentity(unittest.TestCase):
+    def setUp(self):
+        self.mod = import_endpoints()
+
+    def test_selected_profile_uses_only_the_filtered_agent(self):
+        connection = MagicMock()
+        connection.connect_kwargs = {
+            "key_filename": "/home/user/.ssh/id_ed25519",
+            "look_for_keys": True,
+            "password": "ambient-password",
+            "passphrase": "ambient-passphrase",
+            "pkey": object(),
+            "allow_agent": False,
+        }
+        selected_socket = "/run/crucible/ssh-profile-agents/run/admin.sock"
+        observed_socket = []
+        connection.open.side_effect = lambda: observed_socket.append(
+            os.environ.get("SSH_AUTH_SOCK")
+        )
+
+        with patch.dict(os.environ, {"SSH_AUTH_SOCK": "/tmp/ambient-agent.sock"}):
+            with patch.object(
+                self.mod, "Connection", return_value=connection
+            ), patch.object(self.mod, "profile_socket", return_value=selected_socket):
+                result = self.mod.remote_connection(
+                    "management.example", "root", ssh_identity_profile="cluster-admin"
+                )
+                self.assertEqual(
+                    os.environ["SSH_AUTH_SOCK"], "/tmp/ambient-agent.sock"
+                )
+
+        self.assertIs(result, connection)
+        self.assertEqual(observed_socket, [selected_socket])
+        self.assertTrue(connection.connect_kwargs["allow_agent"])
+        self.assertFalse(connection.connect_kwargs["look_for_keys"])
+        self.assertFalse(connection.forward_agent)
+        for field in ("key_filename", "password", "passphrase", "pkey"):
+            self.assertNotIn(field, connection.connect_kwargs)
+
+    def test_missing_profile_keeps_ambient_authentication(self):
+        connection = MagicMock()
+        connection.connect_kwargs = {
+            "key_filename": "/home/user/.ssh/id_ed25519",
+            "look_for_keys": True,
+            "allow_agent": True,
+        }
+        connection.forward_agent = True
+        ambient_socket = "/tmp/ambient-agent.sock"
+
+        with patch.dict(os.environ, {"SSH_AUTH_SOCK": ambient_socket}):
+            with patch.object(
+                self.mod, "Connection", return_value=connection
+            ), patch.object(self.mod, "profile_socket", return_value=None) as profile_socket:
+                result = self.mod.remote_connection("management.example", "root")
+                self.assertEqual(os.environ["SSH_AUTH_SOCK"], ambient_socket)
+
+        self.assertIs(result, connection)
+        self.assertTrue(connection.connect_kwargs["look_for_keys"])
+        self.assertTrue(connection.forward_agent)
+        profile_socket.assert_called_once_with(None)
+
+    def test_ambient_connection_waits_while_profile_socket_is_selected(self):
+        selected_connection = MagicMock()
+        ambient_connection = MagicMock()
+        selected_entered = threading.Event()
+        release_selected = threading.Event()
+        ambient_entered = threading.Event()
+        errors = []
+
+        def selected_open():
+            selected_entered.set()
+            if not release_selected.wait(timeout=2):
+                raise AssertionError("selected SSH connection was not released")
+
+        selected_connection.open.side_effect = selected_open
+        ambient_connection.open.side_effect = ambient_entered.set
+
+        def connect(profile):
+            try:
+                self.mod.remote_connection(
+                    "management.example",
+                    "root",
+                    ssh_identity_profile=profile,
+                )
+            except BaseException as exc:
+                errors.append(exc)
+
+        with (
+            patch.dict(
+                os.environ,
+                {
+                    "SSH_AUTH_SOCK": "/tmp/ambient-agent.sock",
+                    "CRUCIBLE_SSH_PROFILE_ACTIVE": "1",
+                },
+            ),
+            patch.object(
+                self.mod,
+                "Connection",
+                side_effect=[selected_connection, ambient_connection],
+            ),
+            patch.object(
+                self.mod,
+                "profile_socket",
+                side_effect=lambda profile: "/tmp/selected-agent.sock" if profile else None,
+            ),
+        ):
+            selected_thread = threading.Thread(
+                target=connect, args=("cluster-admin",)
+            )
+            ambient_thread = threading.Thread(target=connect, args=(None,))
+            selected_thread.start()
+            self.assertTrue(selected_entered.wait(timeout=1))
+            ambient_thread.start()
+            try:
+                self.assertFalse(ambient_entered.wait(timeout=0.05))
+            finally:
+                release_selected.set()
+                selected_thread.join(timeout=1)
+                ambient_thread.join(timeout=1)
+
+        self.assertFalse(selected_thread.is_alive())
+        self.assertFalse(ambient_thread.is_alive())
+        self.assertFalse(errors)
+        self.assertTrue(ambient_entered.is_set())
 
 
 if __name__ == "__main__":
