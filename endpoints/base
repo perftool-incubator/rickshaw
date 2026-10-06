@@ -504,7 +504,11 @@ function profile_ssh_config_add_jump() {
             printf 'Invalid ProxyJump destination: %s\n' "$jump" >&2
             return 1
         fi
-        jump_host="${jump_hostport%%]*}]"
+        # OpenSSH removes the brackets from a ProxyJump IPv6 destination
+        # before starting its child ssh process, so the generated Host stanza
+        # must use the same normalized address.
+        jump_host="${jump_hostport#\[}"
+        jump_host="${jump_host%%]*}"
         remainder="${jump_hostport#*]}"
         if [ -n "$remainder" ]; then
             case "$remainder" in
