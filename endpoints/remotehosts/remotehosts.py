@@ -53,7 +53,8 @@ endpoint_defaults = {
     "osruntime": "podman",
     "user": "root",
     "podman-settings": {},
-    "maximum-worker-threads-count": 250
+    "maximum-worker-threads-count": 250,
+    "ssh-identity-profile": None,
 }
 
 def validate():
@@ -69,7 +70,10 @@ def validate():
     Returns:
         int: zero for success / non-zero for failure
     """
-    endpoints.validate_comment("environment: %s" % (dict(os.environ)))
+    environment = dict(os.environ)
+    if "SSH_AUTH_SOCK" in environment:
+        environment["SSH_AUTH_SOCK"] = "<redacted>"
+    endpoints.validate_comment("environment: %s" % environment)
 
     endpoints.validate_comment("params: %s" % (endpoints.cli_stream()))
 
@@ -117,6 +121,7 @@ def validate():
     endpoint_settings = normalize_endpoint_settings(endpoint_settings, rickshaw_settings)
     if endpoint_settings is None:
         return 1
+    activate_profile_connection_lock(endpoint_settings)
     endpoints.validate_comment("normalized endpoint-settings: %s" % (endpoint_settings))
 
     benchmark_engine_mapping = endpoints.build_benchmark_engine_mapping(json["benchmarks"])
@@ -163,11 +168,29 @@ def validate():
                 endpoints.validate_log("engine-userenv %s %d %s" % (engine["role"], eid, userenv))
 
     remotes = dict()
+    host_profiles = dict()
     for remote in endpoint_settings["remotes"]:
-        if not remote["config"]["host"] in remotes:
-            remotes[remote["config"]["host"]] = dict()
-        if not remote["config"]["settings"]["remote-user"] in remotes[remote["config"]["host"]]:
-            remotes[remote["config"]["host"]][remote["config"]["settings"]["remote-user"]] = True
+        remote_host = remote["config"]["host"]
+        remote_user = remote["config"]["settings"]["remote-user"]
+        profile = remote["config"]["settings"].get("ssh-identity-profile")
+        if remote_host in host_profiles and host_profiles[remote_host] != profile:
+            endpoints.validate_error(
+                "Conflicting SSH identity profiles for remote %s"
+                % remote_host
+            )
+            return 1
+        host_profiles[remote_host] = profile
+
+        if remote_host not in remotes:
+            remotes[remote_host] = dict()
+        if remote_user not in remotes[remote_host]:
+            remotes[remote_host][remote_user] = profile
+        elif remotes[remote_host][remote_user] != profile:
+            endpoints.validate_error(
+                "Conflicting SSH identity profiles for remote %s as user %s"
+                % (remote_host, remote_user)
+            )
+            return 1
     endpoints.validate_comment("remotes: %s" % (remotes))
 
     debug_output = False
@@ -177,7 +200,10 @@ def validate():
     for remote in remotes.keys():
         for remote_user in remotes[remote].keys():
             try:
-                with endpoints.remote_connection(remote, remote_user, validate = True) as c:
+                with endpoints.remote_connection(
+                    remote, remote_user, validate=True,
+                    ssh_identity_profile=remotes[remote][remote_user],
+                ) as c:
                     # uname -m serves dual purpose: verifies SSH connectivity and detects architecture
                     result = endpoints.run_remote(c, "uname -m", validate = True, debug = debug_output)
                     host_arch = result.stdout.strip()
@@ -204,6 +230,19 @@ def validate():
         endpoints.validate_log("arch %s" % (" ".join(sorted(remote_archs))))
 
     return 0
+
+
+def activate_profile_connection_lock(endpoint_settings):
+    """Make ambient SSH opens share the lock when any remote selects a profile."""
+
+    remotes = endpoint_settings.get("remotes", [])
+    profile_active = bool(os.environ.get("CRUCIBLE_SSH_IDENTITY_PROFILE")) or any(
+        remote.get("config", {}).get("settings", {}).get("ssh-identity-profile")
+        for remote in remotes
+    )
+    if profile_active:
+        os.environ["CRUCIBLE_SSH_PROFILE_ACTIVE"] = "1"
+
 
 def normalize_endpoint_settings(endpoint, rickshaw):
     """
@@ -232,6 +271,7 @@ def normalize_endpoint_settings(endpoint, rickshaw):
         "osruntime": endpoint_defaults["osruntime"],
         "remote-user": endpoint_defaults["user"],
         "podman-settings": endpoint_defaults["podman-settings"],
+        "ssh-identity-profile": endpoint.get("ssh-identity-profile"),
         "userenv": rickshaw["userenvs"]["default"]["benchmarks"]
     }
 
@@ -244,6 +284,9 @@ def normalize_endpoint_settings(endpoint, rickshaw):
     for remote in endpoint["remotes"]:
         if not "settings" in remote["config"]:
             remote["config"]["settings"] = dict()
+
+        if "ssh-identity-profile" in remote["config"]:
+            remote["config"]["settings"]["ssh-identity-profile"] = remote["config"]["ssh-identity-profile"]
 
         for key in defaults.keys():
             if not key in remote["config"]["settings"]:
@@ -334,6 +377,7 @@ def build_unique_remote_configs():
     settings["engines"]["new-followers"] = []
 
     for remote_idx,remote in enumerate(settings["run-file"]["endpoints"][args.endpoint_index]["remotes"]):
+        identity_profile = remote["config"]["settings"].get("ssh-identity-profile")
         if not remote["config"]["host"] in settings["engines"]["remotes"]:
             settings["engines"]["remotes"][remote["config"]["host"]] = {
                 "roles": dict(),
@@ -341,8 +385,14 @@ def build_unique_remote_configs():
                 "disable-tools": None,
                 "engines": [],
                 "tool-opt-in-tags": [],
-                "tool-opt-out-tags": []
+                "tool-opt-out-tags": [],
+                "ssh-identity-profile": identity_profile,
             }
+        elif settings["engines"]["remotes"][remote["config"]["host"]]["ssh-identity-profile"] != identity_profile:
+            raise ValueError(
+                "Conflicting SSH identity profiles for remote %s"
+                % remote["config"]["host"]
+            )
 
         if settings["engines"]["remotes"][remote["config"]["host"]]["disable-tools"] is None:
             settings["engines"]["remotes"][remote["config"]["host"]]["disable-tools"] = remote["config"]["settings"]["disable-tools"]
@@ -371,7 +421,13 @@ def build_unique_remote_configs():
     # Detect architecture for each remote host
     for remote in settings["engines"]["remotes"].keys():
         my_run_file_remote = settings["run-file"]["endpoints"][args.endpoint_index]["remotes"][settings["engines"]["remotes"][remote]["run-file-idx"][0]]
-        with endpoints.remote_connection(remote, my_run_file_remote["config"]["settings"]["remote-user"]) as con:
+        with endpoints.remote_connection(
+            remote,
+            my_run_file_remote["config"]["settings"]["remote-user"],
+            ssh_identity_profile=settings["engines"]["remotes"][remote].get(
+                "ssh-identity-profile"
+            ),
+        ) as con:
             result = endpoints.run_remote(con, "uname -m")
             if result.exited == 0:
                 settings["engines"]["remotes"][remote]["arch"] = result.stdout.strip()
@@ -522,7 +578,7 @@ def image_pull_worker_thread(thread_id, work_queue, threads_rcs):
 
         thread_logger("Remote user is %s" % (my_run_file_remote["config"]["settings"]["remote-user"]), remote_name = remote)
 
-        with endpoints.remote_connection(remote, my_run_file_remote["config"]["settings"]["remote-user"]) as c:
+        with endpoints.remote_connection(remote, my_run_file_remote["config"]["settings"]["remote-user"], ssh_identity_profile=my_unique_remote.get("ssh-identity-profile")) as c:
             for image_info in my_unique_remote["images"]:
                 auth_arg = ""
                 remote_auth_file = settings["dirs"]["remote"]["run"] + "/pull-token.json"
@@ -769,7 +825,13 @@ def remote_mkdirs_worker_thread(thread_id, work_queue, threads_rcs):
         my_unique_remote = settings["engines"]["remotes"][remote]
         my_run_file_remote = settings["run-file"]["endpoints"][args.endpoint_index]["remotes"][my_unique_remote["run-file-idx"][0]]
 
-        with endpoints.remote_connection(remote, my_run_file_remote["config"]["settings"]["remote-user"]) as con:
+        with endpoints.remote_connection(
+            remote,
+            my_run_file_remote["config"]["settings"]["remote-user"],
+            ssh_identity_profile=settings["engines"]["remotes"][remote].get(
+                "ssh-identity-profile"
+            ),
+        ) as con:
             for remote_dir in settings["dirs"]["remote"].keys():
                 result = endpoints.run_remote(con, "mkdir --parents --verbose " + settings["dirs"]["remote"][remote_dir])
                 thread_logger("Remote attempted to mkdir %s with return code %d:\nstdout:\n%s\nstderr:\n%s" % (settings["dirs"]["remote"][remote_dir], result.exited, result.stdout, result.stderr), log_level = endpoints.get_result_log_level(result), remote_name = remote)
@@ -850,7 +912,7 @@ def copy_rickshaw_settings_worker_thread(thread_id, work_queue, threads_rcs):
         local_rickshaw_settings = settings["dirs"]["local"]["conf"] + "/rickshaw-settings.json.xz"
         remote_rickshaw_settings = settings["dirs"]["remote"]["data"] + "/rickshaw-settings.json.xz"
 
-        with endpoints.remote_connection(remote, my_run_file_remote["config"]["settings"]["remote-user"]) as con:
+        with endpoints.remote_connection(remote, my_run_file_remote["config"]["settings"]["remote-user"], ssh_identity_profile=my_unique_remote.get("ssh-identity-profile")) as con:
             result = con.put(local_rickshaw_settings, remote_rickshaw_settings)
             thread_logger("Copied %s to %s:%s" % (local_rickshaw_settings, remote, remote_rickshaw_settings), remote_name = remote)
 
@@ -1329,7 +1391,7 @@ def launch_engines_worker_thread(thread_id, work_queue, threads_rcs):
         thread_logger("Processing remote '%s' at index %d" % (remote["config"]["host"], remote_idx), remote_name = remote_name)
         thread_logger("Remote user is %s" % (remote["config"]["settings"]["remote-user"]), remote_name = remote_name)
 
-        with endpoints.remote_connection(remote["config"]["host"], remote["config"]["settings"]["remote-user"]) as con:
+        with endpoints.remote_connection(remote["config"]["host"], remote["config"]["settings"]["remote-user"], ssh_identity_profile=remote["config"]["settings"].get("ssh-identity-profile")) as con:
             for engine in remote["engines"]:
                 for engine_id in engine["ids"]:
                     engine_name = "%s-%s" % (engine["role"], str(engine_id))
@@ -2208,7 +2270,7 @@ def shutdown_engines_worker_thread(thread_id, work_queue, threads_rcs):
         thread_logger("Remote user is %s" % (remote["config"]["settings"]["remote-user"]), remote_name = remote_name)
 
         try:
-            with endpoints.remote_connection(remote["config"]["host"], remote["config"]["settings"]["remote-user"]) as con:
+            with endpoints.remote_connection(remote["config"]["host"], remote["config"]["settings"]["remote-user"], ssh_identity_profile=remote["config"]["settings"].get("ssh-identity-profile")) as con:
                 result = endpoints.run_remote(con, "mount")
                 thread_logger("All mounts on this remote host:\nstdout:\n%s\nstderr:\n%s" % (result.stdout, result.stderr), remote_name = remote_name)
 
@@ -2327,7 +2389,7 @@ def image_mgmt_worker_thread(thread_id, work_queue, threads_rcs):
 
         thread_logger("Remote user is %s" % (my_run_file_remote["config"]["settings"]["remote-user"]), remote_name = remote)
 
-        with endpoints.remote_connection(remote, my_run_file_remote["config"]["settings"]["remote-user"]) as con:
+        with endpoints.remote_connection(remote, my_run_file_remote["config"]["settings"]["remote-user"], ssh_identity_profile=my_unique_remote.get("ssh-identity-profile")) as con:
             remote_image_manager(thread_name, remote, con, my_run_file_remote["config"]["settings"]["image-cache-size"])
 
         thread_logger("Notifying work queue that job processing is complete", remote_name = remote)
@@ -2405,7 +2467,7 @@ def rescue_engine_logs_worker_thread(thread_id, work_queue, threads_rcs):
         thread_logger("Rescuing engine logs from remote '%s' at index %d" % (remote["config"]["host"], remote_idx), log_level = "warning", remote_name = remote_name)
 
         try:
-            with endpoints.remote_connection(remote["config"]["host"], remote["config"]["settings"]["remote-user"]) as con:
+            with endpoints.remote_connection(remote["config"]["host"], remote["config"]["settings"]["remote-user"], ssh_identity_profile=remote["config"]["settings"].get("ssh-identity-profile")) as con:
                 for engine in remote["engines"]:
                     for engine_id in engine["ids"]:
                         engine_name = "%s-%s" % (engine["role"], str(engine_id))
@@ -2519,7 +2581,7 @@ def collect_sysinfo_worker_thread(thread_id, work_queue, threads_rcs):
 
         thread_logger("Remote user is %s" % (my_run_file_remote["config"]["settings"]["remote-user"]), remote_name = remote)
 
-        with endpoints.remote_connection(remote, my_run_file_remote["config"]["settings"]["remote-user"]) as con:
+        with endpoints.remote_connection(remote, my_run_file_remote["config"]["settings"]["remote-user"], ssh_identity_profile=my_unique_remote.get("ssh-identity-profile")) as con:
             local_dir = settings["dirs"]["local"]["sysinfo"] + "/" + remote
             endpoints.my_make_dirs(local_dir)
 
@@ -2642,6 +2704,10 @@ def main():
                                        crucible_dir = args.crucible_dir)
     if settings is None:
         return 1
+
+    activate_profile_connection_lock(
+        settings["run-file"]["endpoints"][args.endpoint_index]
+    )
 
     if check_base_requirements() != 0:
         return 1

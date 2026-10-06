@@ -41,7 +41,7 @@ jobs:
         run: |
           python3 -m venv .venv
           source .venv/bin/activate
-          pip install pytest pytest-html jsonschema
+          pip install pytest pytest-html jsonschema invoke
 
       - name: Run unit tests
         run: |

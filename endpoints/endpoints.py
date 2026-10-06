@@ -5,7 +5,10 @@ Module with common code for use by all endpoints written in Python
 import argparse
 import base64
 import calendar
+from contextlib import nullcontext
+import fcntl
 from fabric import Connection
+_FabricConnectionType = Connection
 from invoke import run
 import hashlib
 import json
@@ -19,6 +22,8 @@ import tempfile
 import time
 import ipaddress
 import threading
+sys.path.append(str(Path(__file__).resolve().parent))
+from ssh_identity import profile_socket
 
 TOOLBOX_HOME = os.environ.get('TOOLBOX_HOME')
 if TOOLBOX_HOME is None:
@@ -59,6 +64,7 @@ from roadblock import VERBOSE_DEBUG_LEVEL
 roadblock_exits = ROADBLOCK_EXITS
 
 logger = logging.getLogger(__file__)
+_ssh_connection_lock = threading.RLock()
 
 def log_result(result, level = None):
     """
@@ -231,7 +237,72 @@ def get_result_log_level(result):
     else:
         return "info"
 
-def remote_connection(host, user, validate = False):
+def _fabric_connection_chain(connection, profile_selected=False):
+    """Return Fabric connections in the gateway chain, failing closed for ProxyCommand profiles."""
+    route = []
+    pending = [connection]
+    seen = set()
+    while pending:
+        current = pending.pop()
+        if id(current) in seen:
+            continue
+        seen.add(id(current))
+        route.append(current)
+        # Keep the imported class separate from the constructor symbol so
+        # callers and tests can replace Connection without breaking isinstance.
+        # Read from __dict__ to avoid treating an unconfigured MagicMock
+        # attribute as a real gateway connection.
+        gateway = getattr(current, "__dict__", {}).get("gateway")
+        if isinstance(gateway, _FabricConnectionType):
+            pending.append(gateway)
+        elif isinstance(gateway, str) and profile_selected:
+            raise RuntimeError(
+                "SSH identity profiles cannot use ProxyCommand gateways; use ProxyJump or a direct connection"
+            )
+    return route
+
+def _fabric_host_key_name(connection):
+    if connection.port == 22:
+        return connection.host
+    return "[{}]:{}".format(connection.host, connection.port)
+
+class _HostKeyAliasPolicy:
+    """Delegate unknown-key handling while saving accepted keys under HostKeyAlias."""
+
+    def __init__(self, policy, alias):
+        self.policy = policy
+        self.alias = alias
+
+    def missing_host_key(self, client, hostname, key):
+        return self.policy.missing_host_key(client, self.alias, key)
+
+def _load_fabric_managed_host_keys(connection, known_hosts_path):
+    """Load managed pins, translating HostKeyAlias to Paramiko's lookup name."""
+    client = connection.client
+    host_keys = client.get_host_keys()
+    host_keys.clear()
+    client.load_host_keys(str(known_hosts_path))
+
+    ssh_config = getattr(connection, "__dict__", {}).get("ssh_config", {})
+    alias = ssh_config.get("hostkeyalias")
+    if not alias:
+        return
+
+    alias_keys = host_keys.lookup(alias)
+    pinned_keys = list(alias_keys.items()) if alias_keys is not None else []
+    host_keys.clear()
+    verification_name = _fabric_host_key_name(connection)
+    for key_type, key in pinned_keys:
+        host_keys.add(verification_name, key_type, key)
+
+    # Paramiko's AutoAddPolicy receives the resolved host name. Save any
+    # first-use key under the configured alias, matching OpenSSH semantics.
+    policy = client._policy
+    if isinstance(policy, _HostKeyAliasPolicy):
+        policy = policy.policy
+    client.set_missing_host_key_policy(_HostKeyAliasPolicy(policy, alias))
+
+def remote_connection(host, user, validate = False, ssh_identity_profile = None):
     """
     Create a Fabric connection and open it
 
@@ -246,13 +317,119 @@ def remote_connection(host, user, validate = False):
     Returns:
        an open Fabric Connection
     """
-    connection = Connection(host = host, user = user)
+    selected_profile = (
+        ssh_identity_profile
+        or os.environ.get("CRUCIBLE_SSH_IDENTITY_PROFILE")
+        or None
+    )
+    connection = Connection(host=host, user=user)
+    connection_route = _fabric_connection_chain(
+        connection, profile_selected=bool(selected_profile)
+    )
+    if selected_profile:
+        # An explicit profile is agent-only: ssh_config IdentityFile entries
+        # and Paramiko's default key search must not silently add identities.
+        # Fabric creates separate Connection objects for ProxyJump hops, so
+        # apply the same restrictions to every connection in the route.
+        for route_connection in connection_route:
+            for key in (
+                "key_filename",
+                "look_for_keys",
+                "password",
+                "passphrase",
+                "pkey",
+                "auth_strategy",
+                "gss_auth",
+                "gss_kex",
+                "gss_deleg_creds",
+                "gss_host",
+                "gss_trust_dns",
+            ):
+                route_connection.connect_kwargs.pop(key, None)
+            route_connection.connect_kwargs["allow_agent"] = True
+            route_connection.connect_kwargs["look_for_keys"] = False
+            route_connection.connect_kwargs["gss_auth"] = False
+            route_connection.connect_kwargs["gss_kex"] = False
+            route_connection.connect_kwargs["gss_deleg_creds"] = False
+            route_connection.forward_agent = False
+            # Fabric's configured strategy can independently load SSH-config
+            # and default keys, so profile connections use Paramiko's agent-only
+            # authentication path instead.
+            route_connection.config.authentication.strategy_class = None
+            route_connection.config.authentication.identities = []
+    selected_agent_socket = profile_socket(selected_profile)
+    known_hosts_file = os.environ.get("CRUCIBLE_SSH_KNOWN_HOSTS_FILE")
+    known_hosts_path = None
+    if known_hosts_file:
+        known_hosts_path = Path(known_hosts_file)
+        known_hosts_path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        flags = os.O_CREAT | os.O_RDWR
+        if hasattr(os, "O_NOFOLLOW"):
+            flags |= os.O_NOFOLLOW
+        known_hosts_fd = os.open(known_hosts_path, flags, 0o600)
+        try:
+            if not os.path.isfile(known_hosts_path):
+                raise RuntimeError("managed SSH known-hosts path is not a regular file")
+            os.fchmod(known_hosts_fd, 0o600)
+        finally:
+            os.close(known_hosts_fd)
+        os.chmod(known_hosts_path, 0o600)
+        # Fabric's AutoAddPolicy persists newly accepted keys to the file
+        # loaded here; existing mismatched keys remain a hard failure. Load
+        # the same managed trust store for every ProxyJump connection too.
+        for route_connection in connection_route:
+            _load_fabric_managed_host_keys(route_connection, known_hosts_path)
     attempts = 5
     attempt = 0
     while attempt < attempts:
         try:
             attempt += 1
-            connection.open()
+            # Paramiko reads SSH_AUTH_SOCK while authenticating. Its API does
+            # not accept an Agent object, so serialize only the short open
+            # operation while selecting a per-remote filtered socket.
+            # Profile selection temporarily changes process-wide
+            # SSH_AUTH_SOCK. Ambient connections in the same mixed-profile
+            # endpoint must take the same lock or they can borrow that key.
+            profile_auth_active = (
+                os.environ.get("CRUCIBLE_SSH_PROFILE_ACTIVE") == "1"
+            )
+            connection_lock = (
+                _ssh_connection_lock
+                if selected_agent_socket is not None or profile_auth_active
+                else nullcontext()
+            )
+            with connection_lock:
+                previous_agent_socket = os.environ.get("SSH_AUTH_SOCK")
+                lock_fd = None
+                try:
+                    if selected_agent_socket:
+                        os.environ["SSH_AUTH_SOCK"] = selected_agent_socket
+                    unknown_route_host = known_hosts_path is not None and any(
+                        route_connection.client.get_host_keys().lookup(
+                            _fabric_host_key_name(route_connection)
+                        ) is None
+                        for route_connection in connection_route
+                    )
+                    if unknown_route_host:
+                        lock_path = known_hosts_path.with_name(known_hosts_path.name + ".lock")
+                        lock_fd = os.open(lock_path, flags, 0o600)
+                        fcntl.flock(lock_fd, fcntl.LOCK_EX)
+                        # Another endpoint process may have accepted a first-use
+                        # key while this route was waiting for the lock.
+                        for route_connection in connection_route:
+                            _load_fabric_managed_host_keys(
+                                route_connection, known_hosts_path
+                            )
+                    connection.open()
+                finally:
+                    if lock_fd is not None:
+                        fcntl.flock(lock_fd, fcntl.LOCK_UN)
+                        os.close(lock_fd)
+                    if selected_agent_socket:
+                        if previous_agent_socket is None:
+                            os.environ.pop("SSH_AUTH_SOCK", None)
+                        else:
+                            os.environ["SSH_AUTH_SOCK"] = previous_agent_socket
             if attempt > 1:
                 msg = "Connected to remote '%s' as user '%s' after %d attempts" % (host, user, attempt)
                 if validate:
@@ -390,7 +567,10 @@ def log_env():
     Returns:
         0
     """
-    logger.info("Logging Environment Variables:\n%s" % (dump_json(dict(os.environ))))
+    environment = dict(os.environ)
+    if "SSH_AUTH_SOCK" in environment:
+        environment["SSH_AUTH_SOCK"] = "<redacted>"
+    logger.info("Logging Environment Variables:\n%s" % (dump_json(environment)))
 
     return 0
 

@@ -27,7 +27,24 @@ user=""
 engine_script_start_timeout=""
 max_sample_failures=""
 total_cpu_partitions=0
-export ssh_opts="-q -o StrictHostKeyChecking=no -o PasswordAuthentication=no -o ControlMaster=auto -o ControlPath=~/.ssh/sockets/%r@%h-%p -o ControlPersist=60"
+ssh_identity_auth_opts=""
+ssh_control_opts="-o ControlMaster=auto -o ControlPath=~/.ssh/sockets/%r@%h-%p -o ControlPersist=60"
+if [ -n "${CRUCIBLE_SSH_IDENTITY_PROFILE:-}" ]; then
+    # Profile-mode calls use a resolved ssh_config with identity sources
+    # removed, preserving host routing while keeping the filtered agent only.
+    ssh_identity_auth_opts="-o IdentityFile=none -o IdentitiesOnly=no -o PubkeyAuthentication=yes -o ForwardAgent=no -o HostbasedAuthentication=no -o PasswordAuthentication=no -o KbdInteractiveAuthentication=no -o GSSAPIAuthentication=no -o PreferredAuthentications=publickey"
+    # Do not reuse a master authenticated with an ambient or different
+    # profile identity. ControlPath=none disables both attaching and creating.
+    ssh_control_opts="-o ControlMaster=no -o ControlPath=none -o ControlPersist=no"
+fi
+# Keep OSP VM hops on their configured identities or explicit VM key, and do
+# not forward an agent from the management host to the VMs.
+ssh_vm_opts="-q -o StrictHostKeyChecking=no -o PasswordAuthentication=no -o IdentitiesOnly=yes -o ForwardAgent=no -o ControlMaster=auto -o ControlPath=~/.ssh/sockets/%r@%h-%p -o ControlPersist=60"
+if [ -n "${CRUCIBLE_SSH_KNOWN_HOSTS_FILE:-}" ]; then
+    export ssh_opts="-q -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=${CRUCIBLE_SSH_KNOWN_HOSTS_FILE} -o GlobalKnownHostsFile=/dev/null -o HashKnownHosts=no -o PasswordAuthentication=no ${ssh_identity_auth_opts} ${ssh_control_opts}"
+else
+    export ssh_opts="-q -o StrictHostKeyChecking=no -o PasswordAuthentication=no ${ssh_identity_auth_opts} ${ssh_control_opts}"
+fi
 mkdir -p ~/.ssh/sockets
 config_dir=""
 engine_config_dir=""
@@ -472,27 +489,201 @@ function verify_ssh_login() {
     do_ssh $user@$host uptime >/dev/null || exit_error "Could not ssh to $host -- did you setup passwordless login using SSH keys?"
 }
 
+function profile_ssh_config_add_jump() {
+    local jump="$1" config_file="$2" hosts_file="$3"
+    local jump_user="" jump_hostport jump_host jump_port="" jump_destination remainder
+
+    jump_hostport="$jump"
+    if [[ "$jump_hostport" == *@* ]]; then
+        jump_user="${jump_hostport%@*}"
+        jump_hostport="${jump_hostport##*@}"
+    fi
+
+    if [[ "$jump_hostport" == \[* ]]; then
+        if [[ "$jump_hostport" != *"]"* ]]; then
+            printf 'Invalid ProxyJump destination: %s\n' "$jump" >&2
+            return 1
+        fi
+        # OpenSSH removes the brackets from a ProxyJump IPv6 destination
+        # before starting its child ssh process, so the generated Host stanza
+        # must use the same normalized address.
+        jump_host="${jump_hostport#\[}"
+        jump_host="${jump_host%%]*}"
+        remainder="${jump_hostport#*]}"
+        if [ -n "$remainder" ]; then
+            case "$remainder" in
+                :*)
+                    jump_port="${remainder#:}"
+                    if [ -z "$jump_port" ]; then
+                        printf 'Invalid ProxyJump destination: %s\n' "$jump" >&2
+                        return 1
+                    fi
+                    ;;
+                *)
+                    printf 'Invalid ProxyJump destination: %s\n' "$jump" >&2
+                    return 1
+                    ;;
+            esac
+        fi
+    elif [[ "$jump_hostport" == *:* ]]; then
+        jump_host="${jump_hostport%:*}"
+        jump_port="${jump_hostport##*:}"
+        if [ -z "$jump_port" ]; then
+            printf 'Invalid ProxyJump destination: %s\n' "$jump" >&2
+            return 1
+        fi
+        if [[ "$jump_host" == *:* ]]; then
+            printf 'IPv6 ProxyJump destinations must be bracketed: %s\n' "$jump" >&2
+            return 1
+        fi
+    else
+        jump_host="$jump_hostport"
+    fi
+
+    if [ -z "$jump_host" ] || { [ -n "$jump_port" ] && [[ ! "$jump_port" =~ ^[0-9]+$ ]]; }; then
+        printf 'Invalid ProxyJump destination: %s\n' "$jump" >&2
+        return 1
+    fi
+    jump_destination="$jump_host"
+    if [ -n "$jump_user" ]; then
+        jump_destination="${jump_user}@${jump_host}"
+    fi
+    profile_ssh_config_add_host "$jump_destination" "$config_file" "$hosts_file" "$jump_port"
+}
+
+function profile_ssh_config_add_host() {
+    local destination="$1" config_file="$2" hosts_file="$3" destination_port="${4:-}"
+    local resolved_config host proxyjump proxycommand jump
+
+    if [ -n "$destination_port" ]; then
+        resolved_config=$(ssh -G -p "$destination_port" "$destination") || return 1
+    else
+        resolved_config=$(ssh -G "$destination") || return 1
+    fi
+    proxycommand=$(printf '%s\n' "$resolved_config" | awk 'tolower($1) == "proxycommand" { $1 = ""; sub(/^[[:space:]]+/, ""); print; exit }')
+    if [ -n "$proxycommand" ] && [ "$proxycommand" != "none" ]; then
+        printf 'ProxyCommand is not supported with SSH identity profiles for %s\n' "$destination" >&2
+        return 1
+    fi
+    host=$(printf '%s\n' "$resolved_config" | awk 'tolower($1) == "host" { print $2; exit }')
+    if [ -z "$host" ]; then
+        return 1
+    fi
+    if grep -F -x -- "$host" "$hosts_file" >/dev/null 2>&1; then
+        return 0
+    fi
+    printf '%s\n' "$host" >> "$hosts_file" || return 1
+
+    {
+        printf 'Host %s\n' "$host"
+        printf '%s\n' "$resolved_config" | awk '
+            tolower($1) == "host" ||
+            tolower($1) == "identityfile" ||
+            tolower($1) == "certificatefile" ||
+            tolower($1) == "identityagent" ||
+            tolower($1) == "identitiesonly" ||
+            tolower($1) == "pubkeyauthentication" ||
+            tolower($1) == "pkcs11provider" ||
+            tolower($1) == "securitykeyprovider" ||
+            tolower($1) == "controlmaster" ||
+            tolower($1) == "controlpath" ||
+            tolower($1) == "controlpersist" ||
+            tolower($1) == "forwardagent" ||
+            tolower($1) == "hostbasedauthentication" ||
+            tolower($1) == "passwordauthentication" ||
+            tolower($1) == "kbdinteractiveauthentication" ||
+            tolower($1) == "challengeresponseauthentication" ||
+            tolower($1) == "gssapiauthentication" ||
+            tolower($1) == "preferredauthentications" ||
+            tolower($1) == "stricthostkeychecking" ||
+            tolower($1) == "knownhostscommand" ||
+            tolower($1) == "userknownhostsfile" ||
+            tolower($1) == "globalknownhostsfile" ||
+            tolower($1) == "hashknownhosts" ||
+            tolower($1) ~ /^canonicalize/ { next }
+            { print }
+        '
+        # ProxyJump launches another ssh process using this same config.
+        # Keep its authentication and host-key policy aligned with the parent.
+        printf '    IdentityFile none\n'
+        printf '    IdentitiesOnly no\n'
+        printf '    PubkeyAuthentication yes\n'
+        printf '    ControlMaster no\n'
+        printf '    ControlPath none\n'
+        printf '    ControlPersist no\n'
+        printf '    ForwardAgent no\n'
+        printf '    HostbasedAuthentication no\n'
+        printf '    PasswordAuthentication no\n'
+        printf '    KbdInteractiveAuthentication no\n'
+        printf '    GSSAPIAuthentication no\n'
+        printf '    PreferredAuthentications publickey\n'
+        printf '    CanonicalizeHostname no\n'
+        if [ -n "${CRUCIBLE_SSH_KNOWN_HOSTS_FILE:-}" ]; then
+            printf '    StrictHostKeyChecking accept-new\n'
+            printf '    UserKnownHostsFile %s\n' "$CRUCIBLE_SSH_KNOWN_HOSTS_FILE"
+            printf '    GlobalKnownHostsFile /dev/null\n'
+            printf '    HashKnownHosts no\n'
+        else
+            printf '    StrictHostKeyChecking no\n'
+        fi
+    } >> "$config_file" || return 1
+
+    proxyjump=$(printf '%s\n' "$resolved_config" | awk 'tolower($1) == "proxyjump" { $1 = ""; sub(/^[[:space:]]+/, ""); print; exit }')
+    if [ -n "$proxyjump" ] && [ "$proxyjump" != "none" ]; then
+        while IFS= read -r jump; do
+            [ -n "$jump" ] || continue
+            profile_ssh_config_add_jump "$jump" "$config_file" "$hosts_file" || return 1
+        done < <(printf '%s\n' "$proxyjump" | tr ',' '\n')
+    fi
+}
+
+function profile_ssh_config() {
+    local destination="$1" config_file hosts_file
+
+    config_file=$(mktemp /tmp/rickshaw-ssh-config.XXXXXX) || return 1
+    hosts_file=$(mktemp /tmp/rickshaw-ssh-hosts.XXXXXX) || {
+        rm -f "$config_file"
+        return 1
+    }
+    if ! chmod 600 "$config_file" "$hosts_file" ||
+       ! profile_ssh_config_add_host "$destination" "$config_file" "$hosts_file"; then
+        rm -f "$config_file" "$hosts_file"
+        return 1
+    fi
+    rm -f "$hosts_file"
+    printf '%s\n' "$config_file"
+}
+
 function do_ssh() {
-    local user_host user host ssh_cmd
+    local user_host user host ssh_cmd profile_config profile_config_opt
     user_host=$1; shift
     user=`echo $user_host | awk -F@ '{print $1}'`
     host=`echo $user_host | awk -F@ '{print $2}'`
     ssh_cmd=""
+    profile_config=""
+    profile_config_opt=""
     if [ -z "$user" ]; then
         exit_error "do_ssh: user was blank: $user_host"
     fi
     if [ -z "$host" ]; then
         exit_error "do_ssh: host was blank: $user_host"
     fi
+    if [ -n "${CRUCIBLE_SSH_IDENTITY_PROFILE:-}" ]; then
+        profile_config=$(profile_ssh_config "$user_host") || exit_error "Could not resolve SSH configuration for $host"
+        profile_config_opt="-F $profile_config"
+    fi
     # the osp endpoint is the only endpoint (as of now) that doesn't
     # force the user to have root privileges.
     if [ "${endpoint_name}" != "osp" -a "${user}" != "root" ]; then
-        ssh_cmd="ssh $ssh_opts $user_host sudo bash -c \"$@\""
+        ssh_cmd="ssh $profile_config_opt $ssh_opts $user_host sudo bash -c \"$@\""
     else
-        ssh_cmd="ssh $ssh_opts $user_host bash -c \"$@\""
+        ssh_cmd="ssh $profile_config_opt $ssh_opts $user_host bash -c \"$@\""
     fi
     $ssh_cmd
     local rc=$?
+    if [ -n "$profile_config" ]; then
+        rm -f "$profile_config"
+    fi
     return $rc
 }
 
@@ -502,6 +693,11 @@ function do_scp() {
     # no password prompt required.
     local src dst dst_sudo_cmd dst_path dst_user_host dst_user dst_cmd src_base
     local src_sudo_cmd src_path src_user_host src_user src_sudo_cmd src_cmd
+    local src_profile_config dst_profile_config src_profile_config_opt dst_profile_config_opt
+    src_profile_config=""
+    dst_profile_config=""
+    src_profile_config_opt=""
+    dst_profile_config_opt=""
     src_userhost=$1; shift # [<user>@<host>]
     src_path=$1; shift # <path> path can be a dir or file
                        # If a dir, the full dir is used when copied to the destination
@@ -517,7 +713,12 @@ function do_scp() {
             local dst_sudo_cmd="sudo"
         fi
         dst_host=`echo $dst_userhost | awk -F@ '{print $2}'`
-        dst_cmd="ssh $ssh_opts ${dst_user}@$dst_host $dst_sudo_cmd tar -C $dst_path -xf -"
+        dst_profile_config_opt=""
+        if [ -n "${CRUCIBLE_SSH_IDENTITY_PROFILE:-}" ]; then
+            dst_profile_config=$(profile_ssh_config "${dst_user}@$dst_host") || return 1
+            dst_profile_config_opt="-F $dst_profile_config"
+        fi
+        dst_cmd="ssh $dst_profile_config_opt $ssh_opts ${dst_user}@$dst_host $dst_sudo_cmd tar -C $dst_path -xf -"
     else
         dst_cmd="tar -C $dst_path -xf -"
     fi
@@ -531,7 +732,15 @@ function do_scp() {
             src_sudo_cmd="sudo"
         fi
         src_host=`echo $src_userhost | awk -F@ '{print $2}'`
-        src_cmd="ssh ${ssh_opts} ${src_user}@${src_host} ${src_sudo_cmd} tar -C ${src_base} -cf - ${src_path}"
+        src_profile_config_opt=""
+        if [ -n "${CRUCIBLE_SSH_IDENTITY_PROFILE:-}" ]; then
+            src_profile_config=$(profile_ssh_config "${src_user}@${src_host}") || {
+                rm -f "$dst_profile_config"
+                return 1
+            }
+            src_profile_config_opt="-F $src_profile_config"
+        fi
+        src_cmd="ssh $src_profile_config_opt ${ssh_opts} ${src_user}@${src_host} ${src_sudo_cmd} tar -C ${src_base} -cf - ${src_path}"
     else
         src_cmd="tar -C ${src_base} -cf - ${src_path}"
     fi
@@ -539,6 +748,14 @@ function do_scp() {
     echo "Going to run:"
     echo "$src_cmd | $dst_cmd"
     $src_cmd | $dst_cmd
+    local rc=$?
+    if [ -n "$src_profile_config" ]; then
+        rm -f "$src_profile_config"
+    fi
+    if [ -n "$dst_profile_config" ]; then
+        rm -f "$dst_profile_config"
+    fi
+    return $rc
 }
 
 function do_roadblock() {

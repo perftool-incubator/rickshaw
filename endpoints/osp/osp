@@ -557,9 +557,9 @@ function move_osp_logs() {
         echo "this_cs_label: [$this_cs_label]"
         if echo $this_cs_label | grep -q ^compute; then
             # This assumes user stack on undercloud can ssh passwordless to root@controllers
-            this_cs_ssh="ssh $ssh_opts root@${ips[$this_cs_label]}"
+            this_cs_ssh="ssh $ssh_vm_opts root@${ips[$this_cs_label]}"
         else
-            this_cs_ssh="ssh $ssh_opts -i $vm_ssh_key_file $vm_user@${ips[$this_cs_label]}"
+            this_cs_ssh="ssh $ssh_vm_opts -i $vm_ssh_key_file $vm_user@${ips[$this_cs_label]}"
         fi
         remote_cs_log_file="$remote_logs_dir/$this_cs_label.txt"
         local_cs_log_file="$engine_logs_dir/$this_cs_label.txt"

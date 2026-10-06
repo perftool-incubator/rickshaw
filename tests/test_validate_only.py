@@ -252,6 +252,89 @@ class TestValidateOnlyExecutionFlow(unittest.TestCase):
         self.assertIn("VALID", mock_stdout.getvalue())
 
 
+class TestEndpointSSHIdentityEnvironment(unittest.TestCase):
+    def setUp(self):
+        self.rr = import_rickshaw_run()
+        self.state = self.rr.RunState()
+
+    def _validated_remotehosts_endpoint(self, remotes):
+        endpoint_block = {
+            "type": "remotehosts",
+            "ssh-identity-profile": "endpoint-default",
+            "remotes": remotes,
+        }
+        run_file_document = {"endpoints": [endpoint_block]}
+        endpoint = {
+            "type": "remotehosts",
+            "opts": "",
+            "run-file-endpoint-index": 0,
+        }
+        state = self.rr.RunState()
+        state.endpoints = [endpoint]
+
+        with tempfile.NamedTemporaryFile() as run_file:
+            state.run = {"run-file": run_file.name}
+            with patch.object(
+                self.rr, "load_json_file", return_value=(run_file_document, None)
+            ), patch.object(self.rr, "validate_schema", return_value=(True, None)):
+                state.validate_endpoint_schemas()
+
+        return state.endpoints[0]
+
+    def test_unused_remotehosts_default_is_not_resolved(self):
+        endpoint = self._validated_remotehosts_endpoint([
+            {"config": {"ssh-identity-profile": "remote-one"}},
+            {"config": {"ssh-identity-profile": "remote-two"}},
+        ])
+
+        self.assertIsNone(endpoint["ssh-identity-profile"])
+        with patch.dict(os.environ, {}, clear=True), patch.object(
+            self.rr, "profile_socket"
+        ) as profile_socket:
+            environment = self.state._endpoint_environment(endpoint)
+
+        self.assertNotIn("CRUCIBLE_SSH_IDENTITY_PROFILE", environment)
+        profile_socket.assert_not_called()
+
+    def test_remotehosts_default_is_resolved_when_a_remote_inherits(self):
+        endpoint = self._validated_remotehosts_endpoint([
+            {"config": {"ssh-identity-profile": "remote-one"}},
+            {"config": {}},
+        ])
+
+        self.assertEqual(endpoint["ssh-identity-profile"], "endpoint-default")
+
+    def test_selected_profile_is_added_to_endpoint_environment(self):
+        with patch.dict(
+            os.environ,
+            {"CRUCIBLE_SSH_KNOWN_HOSTS_FILE": "/var/lib/crucible/known_hosts"},
+            clear=True,
+        ), patch.object(self.rr, "profile_socket", return_value="/run/profile.sock"):
+            environment = self.state._endpoint_environment(
+                {"ssh-identity-profile": "cluster-admin"}
+            )
+
+        self.assertEqual(environment["SSH_AUTH_SOCK"], "/run/profile.sock")
+        self.assertEqual(
+            environment["CRUCIBLE_SSH_IDENTITY_PROFILE"], "cluster-admin"
+        )
+        self.assertEqual(
+            environment["CRUCIBLE_SSH_KNOWN_HOSTS_FILE"],
+            "/var/lib/crucible/known_hosts",
+        )
+
+    def test_unselected_profile_preserves_ambient_agent(self):
+        ambient_socket = "/run/user/1000/ssh-agent.sock"
+        with patch.dict(os.environ, {"SSH_AUTH_SOCK": ambient_socket}), patch.object(
+            self.rr, "profile_socket"
+        ) as profile_socket:
+            environment = self.state._endpoint_environment({})
+
+        self.assertEqual(environment["SSH_AUTH_SOCK"], ambient_socket)
+        self.assertNotIn("CRUCIBLE_SSH_IDENTITY_PROFILE", environment)
+        profile_socket.assert_not_called()
+
+
 class TestValidateOnlyLogging(unittest.TestCase):
     """Test logger configuration for validation mode."""
 
