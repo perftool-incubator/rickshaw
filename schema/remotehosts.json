@@ -123,7 +123,7 @@
                     "type": "boolean"
                 },
                 "disable-tools": {
-                    "description": "This parameter controls whether tool engines should be provisioned for the remote host.  When set to true, no tool collection engines will be deployed alongside the benchmark engines.",
+                    "description": "Controls whether tool engines should be provisioned for this remote host.  When true, no tool collection engines are deployed there.",
                     "type": "boolean"
                 },
                 "host-mounts": {
