@@ -46,6 +46,8 @@ endpoint_defaults = {
     "controller-ip-address": None,
     "cpu-partitioning": False,
     "disable-tools": False,
+    "tool-opt-in-tags": [],
+    "tool-opt-out-tags": [],
     "host-mounts": [],
     "hypervisor-host": "none",
     "image-cache-size": 9,
@@ -264,6 +266,8 @@ def normalize_endpoint_settings(endpoint, rickshaw):
         "controller-ip-address": endpoint_defaults["controller-ip-address"],
         "cpu-partitioning": endpoint_defaults["cpu-partitioning"],
         "disable-tools": endpoint_defaults["disable-tools"],
+        "tool-opt-in-tags": endpoint_defaults["tool-opt-in-tags"],
+        "tool-opt-out-tags": endpoint_defaults["tool-opt-out-tags"],
         "host-mounts": endpoint_defaults["host-mounts"],
         "hypervisor-host": endpoint_defaults["hypervisor-host"],
         "image-cache-size": endpoint_defaults["image-cache-size"],
@@ -280,6 +284,29 @@ def normalize_endpoint_settings(endpoint, rickshaw):
             if key in endpoint["settings"]:
                 defaults[key] = endpoint["settings"][key]
 
+    # Entries for one hostname share tool selection, so combine explicit host
+    # values before applying endpoint defaults to avoid reintroducing defaults.
+    tag_keys = ("tool-opt-in-tags", "tool-opt-out-tags")
+    host_tags = {}
+    for remote in endpoint["remotes"]:
+        host = remote["config"]["host"]
+        remote_settings = remote["config"].get("settings", {})
+        if host not in host_tags:
+            host_tags[host] = {
+                key: {"overridden": False, "values": []}
+                for key in tag_keys
+            }
+        for key in tag_keys:
+            if key in remote_settings:
+                host_tags[host][key]["overridden"] = True
+                host_tags[host][key]["values"].extend(remote_settings[key])
+
+    for host in host_tags:
+        for key in tag_keys:
+            tag_settings = host_tags[host][key]
+            if not tag_settings["overridden"]:
+                tag_settings["values"] = list(defaults[key])
+
     cached_controller_ips = dict()
     for remote in endpoint["remotes"]:
         if not "settings" in remote["config"]:
@@ -289,8 +316,15 @@ def normalize_endpoint_settings(endpoint, rickshaw):
             remote["config"]["settings"]["ssh-identity-profile"] = remote["config"]["ssh-identity-profile"]
 
         for key in defaults.keys():
+            if key in tag_keys:
+                continue
             if not key in remote["config"]["settings"]:
                 remote["config"]["settings"][key] = defaults[key]
+
+        for key in tag_keys:
+            remote["config"]["settings"][key] = list(
+                host_tags[remote["config"]["host"]][key]["values"]
+            )
 
         if remote["config"]["settings"]["controller-ip-address"] is None:
             if remote["config"]["host"] in cached_controller_ips:
