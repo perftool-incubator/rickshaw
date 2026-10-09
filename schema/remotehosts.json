@@ -14,7 +14,7 @@
             "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"
         },
         "settings": {
-            "description": "An optional top-level settings object that provides default configuration values for all remote hosts in this endpoint.  Individual remote hosts can override these defaults by specifying their own settings in their config block.",
+            "description": "An optional top-level settings object that provides default configuration values for all remote hosts in this endpoint. Individual remote hosts can override a default by specifying the same setting in their config block.",
             "$ref": "#/definitions/settings"
         },
         "remotes": {
@@ -110,7 +110,7 @@
     ],
     "definitions": {
         "settings": {
-            "description": "The properties defined here can be used as either endpoint-level defaults or per-remote-host configuration overrides.  When specified at the endpoint level, these values apply to all remote hosts unless a host provides its own override.",
+            "description": "The properties defined here can be used as either endpoint-level defaults or per-remote-host configuration overrides. When specified at the endpoint level, these values apply to all remote hosts unless a remote provides the same setting in its config block; a remote value replaces the endpoint value for that setting.",
             "type": "object",
             "properties": {
                 "controller-ip-address": {
@@ -172,9 +172,8 @@
                     "enum": [ "chroot", "podman" ]
                 },
                 "tool-opt-in-tags": {
-                    "description": "A list of tags used to enable optional tools that are not active by default.  Tools declare opt-in tags in their configuration, and only tools whose tags appear in this list will be activated for the engines on this remote host.",
+                    "description": "A list of tags used to enable optional tools that are not active by default. Tools declare opt-in tags in their configuration. At endpoint scope, this list is the default for each host. For a hostname in multiple remote entries, explicitly supplied lists are combined and the endpoint default is used only if no entry for that host supplies this setting; an explicit empty list clears the default unless another entry for that host supplies tags.",
                     "type": "array",
-                    "minItems": 1,
                     "uniqueItems": true,
                     "items": {
                         "description": "A tag string that matches a tool's declared opt-in tag to enable that tool.",
@@ -183,9 +182,8 @@
                     }
                 },
                 "tool-opt-out-tags": {
-                    "description": "A list of tags used to disable tools that are active by default.  Tools declare opt-out tags in their configuration, and any tools whose tags appear in this list will be deactivated for the engines on this remote host.",
+                    "description": "A list of tags used to disable tools that are active by default. Tools declare opt-out tags in their configuration. At endpoint scope, this list is the default for each host. For a hostname in multiple remote entries, explicitly supplied lists are combined and the endpoint default is used only if no entry for that host supplies this setting; an explicit empty list clears the default unless another entry for that host supplies tags.",
                     "type": "array",
-                    "minItems": 1,
                     "uniqueItems": true,
                     "items": {
                         "description": "A tag string that matches a tool's declared opt-out tag to disable that tool.",

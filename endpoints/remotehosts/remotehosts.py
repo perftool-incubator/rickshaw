@@ -46,6 +46,8 @@ endpoint_defaults = {
     "controller-ip-address": None,
     "cpu-partitioning": False,
     "disable-tools": False,
+    "tool-opt-in-tags": [],
+    "tool-opt-out-tags": [],
     "host-mounts": [],
     "hypervisor-host": "none",
     "image-cache-size": 9,
@@ -275,6 +277,8 @@ def normalize_endpoint_settings(endpoint, rickshaw):
         "userenv": rickshaw["userenvs"]["default"]["benchmarks"]
     }
 
+    # Tool tags are host-scoped and aggregated when unique remote configs are
+    # built; keeping them out of per-entry defaults avoids repeated tag lists.
     if "settings" in endpoint:
         for key in defaults.keys():
             if key in endpoint["settings"]:
@@ -321,6 +325,41 @@ def normalize_endpoint_settings(endpoint, rickshaw):
                 return None
 
     return endpoint
+
+def build_remote_host_tool_tags(endpoint):
+    """Build effective tool tag lists once per host, rather than per entry."""
+    tag_keys = ("tool-opt-in-tags", "tool-opt-out-tags")
+    endpoint_settings = endpoint.get("settings", {})
+    defaults = {
+        key: endpoint_settings.get(key, endpoint_defaults[key])
+        for key in tag_keys
+    }
+    host_tags = {}
+
+    for remote in endpoint["remotes"]:
+        host = remote["config"]["host"]
+        remote_settings = remote["config"].get("settings", {})
+        if host not in host_tags:
+            host_tags[host] = {
+                key: {"overridden": False, "values": []}
+                for key in tag_keys
+            }
+        for key in tag_keys:
+            if key in remote_settings:
+                host_tags[host][key]["overridden"] = True
+                host_tags[host][key]["values"].extend(remote_settings[key])
+
+    effective_tags = {}
+    for host, tag_settings_by_key in host_tags.items():
+        effective_tags[host] = {}
+        for key in tag_keys:
+            tag_settings = tag_settings_by_key[key]
+            if tag_settings["overridden"]:
+                effective_tags[host][key] = tag_settings["values"]
+            else:
+                effective_tags[host][key] = list(defaults[key])
+
+    return effective_tags
 
 def check_base_requirements():
     """
@@ -376,16 +415,20 @@ def build_unique_remote_configs():
     settings["engines"]["profiler-mapping"] = dict()
     settings["engines"]["new-followers"] = []
 
-    for remote_idx,remote in enumerate(settings["run-file"]["endpoints"][args.endpoint_index]["remotes"]):
+    endpoint = settings["run-file"]["endpoints"][args.endpoint_index]
+    host_tool_tags = build_remote_host_tool_tags(endpoint)
+
+    for remote_idx,remote in enumerate(endpoint["remotes"]):
         identity_profile = remote["config"]["settings"].get("ssh-identity-profile")
         if not remote["config"]["host"] in settings["engines"]["remotes"]:
+            host = remote["config"]["host"]
             settings["engines"]["remotes"][remote["config"]["host"]] = {
                 "roles": dict(),
                 "run-file-idx": [],
                 "disable-tools": None,
                 "engines": [],
-                "tool-opt-in-tags": [],
-                "tool-opt-out-tags": [],
+                "tool-opt-in-tags": list(host_tool_tags[host]["tool-opt-in-tags"]),
+                "tool-opt-out-tags": list(host_tool_tags[host]["tool-opt-out-tags"]),
                 "ssh-identity-profile": identity_profile,
             }
         elif settings["engines"]["remotes"][remote["config"]["host"]]["ssh-identity-profile"] != identity_profile:
@@ -398,10 +441,6 @@ def build_unique_remote_configs():
             settings["engines"]["remotes"][remote["config"]["host"]]["disable-tools"] = remote["config"]["settings"]["disable-tools"]
         elif settings["engines"]["remotes"][remote["config"]["host"]]["disable-tools"] != remote["config"]["settings"]["disable-tools"]:
             raise ValueError("Conflicting values for disable-tools for remote %s" % (remote["config"]["host"]))
-
-        for opt_tag_type in [ "tool-opt-in-tags", "tool-opt-out-tags" ]:
-            if opt_tag_type in remote["config"]["settings"]:
-                settings["engines"]["remotes"][remote["config"]["host"]][opt_tag_type].extend(remote["config"]["settings"][opt_tag_type])
 
         settings["engines"]["remotes"][remote["config"]["host"]]["run-file-idx"].append(remote_idx)
 
