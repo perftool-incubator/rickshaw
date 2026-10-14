@@ -2599,6 +2599,34 @@ class RunState:
             else:
                 logger.info("\t\tfailed to compress")
 
+    def _tool_command_file_for_engine(self, cs_type, cs_id):
+        tool_cmd_file = os.path.join(self.tool_cmds_dir, cs_type, "start.json.xz")
+        if cs_type in ("client", "server"):
+            tool_cmd_file = os.path.join(self.tool_cmds_dir, cs_type, str(cs_id), "start.json.xz")
+        return tool_cmd_file
+
+    def _expected_tool_names_for_engine(self, cs_type, cs_id):
+        # Generated start commands already include the endpoint and collector filters used for this engine.
+        tool_cmd_file = self._tool_command_file_for_engine(cs_type, cs_id)
+        tool_commands, err = load_json_file(tool_cmd_file, uselzma=True)
+        if err:
+            return None, err
+        if not isinstance(tool_commands, dict) or not isinstance(tool_commands.get("tools"), list):
+            return None, "tool command file does not contain a tools list"
+
+        tool_names = []
+        for tool in tool_commands["tools"]:
+            if not isinstance(tool, dict) or not isinstance(tool.get("name"), str) or not tool["name"]:
+                return None, "tool command file contains an entry without a name"
+            tool_names.append(tool["name"])
+
+        return tool_names, None
+
+    def _engine_tools_disabled(self, cs_type, cs_id):
+        engine = self.clients_servers.get(cs_type, {}).get(str(cs_id), {})
+        # Remotehosts and OSP start non-profiler benchmark engines with disable_tools=1.
+        return engine.get("endpoint-type") in ("remotehosts", "osp")
+
     def organize_run_data(self):
         logger.info("Moving per-client/server/tool data into common iterations and tool-data directories")
         tmp_data_dir = os.path.join(self.run_dir, "tmp-data-dir")
@@ -2667,13 +2695,40 @@ class RunState:
                     archive_error = True
 
             tool_data_dir = os.path.join(tmp_data_dir, "tool-data")
-            if os.path.isdir(tool_data_dir) and os.listdir(tool_data_dir):
+            tool_data_items = os.listdir(tool_data_dir) if os.path.isdir(tool_data_dir) else []
+            missing_tool_names = []
+            tool_command_error = None
+            if cs_type != "profiler" and not self._engine_tools_disabled(cs_type, cs_id):
+                expected_tool_names, tool_command_error = self._expected_tool_names_for_engine(cs_type, cs_id)
+                if expected_tool_names is not None:
+                    present_tool_names = {
+                        name for name in tool_data_items
+                        if os.path.isdir(os.path.join(tool_data_dir, name))
+                    }
+                    missing_tool_names = [
+                        name for name in expected_tool_names
+                        if name not in present_tool_names
+                    ]
+
+            if tool_data_items:
                 dest = os.path.join(self.run_dir, "tool-data", cs_type, cs_id)
                 os.makedirs(dest, exist_ok=True)
-                for item in os.listdir(tool_data_dir):
+                for item in tool_data_items:
                     shutil.move(os.path.join(tool_data_dir, item), dest)
-            elif os.path.isdir(tool_data_dir) and cs_type != "profiler":
-                logger.warning("WARNING: did not find sub-directories in tool-data for %s-%s", cs_type, cs_id)
+
+            if tool_command_error:
+                tool_cmd_file = self._tool_command_file_for_engine(cs_type, cs_id)
+                logger.warning(
+                    "Unable to verify tool-data for %s-%s because expected tools could not be read from %s: %s; "
+                    "run completion is unaffected by this warning, and tool metrics may be incomplete",
+                    cs_type, cs_id, tool_cmd_file, tool_command_error
+                )
+            elif missing_tool_names:
+                logger.warning(
+                    "Missing tool-data directories for configured tool(s) %s in %s-%s; "
+                    "run completion is unaffected by this warning, but tool metrics may be incomplete",
+                    ", ".join(missing_tool_names), cs_type, cs_id
+                )
 
             sysinfo_dir = os.path.join(tmp_data_dir, "sysinfo")
             if os.path.isdir(sysinfo_dir) and os.listdir(sysinfo_dir):
