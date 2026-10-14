@@ -21,11 +21,14 @@ import importlib.util
 import io
 import json
 import logging
+import lzma
 import os
 import sys
+import tarfile
 import tempfile
 import types
 import unittest
+import warnings
 from unittest.mock import MagicMock, patch
 
 
@@ -38,7 +41,8 @@ def import_rickshaw_run():
 
     def fake_load_json_file(json_file, uselzma=False):
         try:
-            with open(json_file, "r") as f:
+            open_file = lzma.open if uselzma else open
+            with open_file(json_file, "rt") as f:
                 return json.load(f), None
         except Exception as e:
             return None, str(e)
@@ -670,6 +674,181 @@ class TestEndpointSchemaValidation(unittest.TestCase):
         with self.assertRaises(SystemExit) as cm:
             self.state.validate_endpoint_schemas()
         self.assertEqual(cm.exception.code, 1)
+
+
+class TestOrganizeRunDataToolWarnings(unittest.TestCase):
+    """Check tool-data warnings against each engine's generated start commands."""
+
+    def setUp(self):
+        self.rr = import_rickshaw_run()
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp_dir.cleanup)
+
+        self.state = self.rr.RunState.__new__(self.rr.RunState)
+        self.state.run_dir = os.path.join(self.temp_dir.name, "run")
+        self.state.engine_archives_dir = os.path.join(self.temp_dir.name, "archives")
+        self.state.tool_cmds_dir = os.path.join(self.temp_dir.name, "tool-cmds")
+        self.state.clients_servers = {}
+        self.state.run = {"iterations": [{}]}
+        os.makedirs(self.state.run_dir)
+        os.makedirs(self.state.engine_archives_dir)
+
+        self.logger = MagicMock()
+        self.rr.logger = self.logger
+
+    def _write_tool_commands(self, cs_type, cs_id, tool_names):
+        command_dir = os.path.join(self.state.tool_cmds_dir, cs_type)
+        if cs_type in ("client", "server"):
+            command_dir = os.path.join(command_dir, str(cs_id))
+        os.makedirs(command_dir, exist_ok=True)
+        command_file = os.path.join(command_dir, "start.json.xz")
+        with lzma.open(command_file, "wt") as f:
+            json.dump({"tools": [{"name": name} for name in tool_names]}, f)
+
+    def _write_archive(self, cs_type, cs_id, tool_dirs=(), create_tool_data_dir=True):
+        staging_dir = os.path.join(self.temp_dir.name, "archive-content")
+        os.makedirs(staging_dir)
+
+        if create_tool_data_dir or tool_dirs:
+            tool_data_dir = os.path.join(staging_dir, "tool-data")
+            os.makedirs(tool_data_dir)
+            for tool_name in tool_dirs:
+                tool_dir = os.path.join(tool_data_dir, tool_name)
+                os.makedirs(tool_dir)
+                with open(os.path.join(tool_dir, "sample.dat"), "w") as f:
+                    f.write("sample data\n")
+
+        sysinfo_dir = os.path.join(staging_dir, "sysinfo")
+        os.makedirs(sysinfo_dir)
+        with open(os.path.join(sysinfo_dir, "host.json"), "w") as f:
+            f.write("{}\n")
+
+        if cs_type in ("client", "server"):
+            sample_dir = os.path.join(staging_dir, "iteration-1", "sample-1")
+            os.makedirs(sample_dir)
+            with open(os.path.join(sample_dir, "result.txt"), "w") as f:
+                f.write("complete\n")
+
+        archive_file = os.path.join(
+            self.state.engine_archives_dir,
+            f"{cs_type}-{cs_id}-data.tgz",
+        )
+        with tarfile.open(archive_file, "w:gz") as archive:
+            for item in os.listdir(staging_dir):
+                archive.add(os.path.join(staging_dir, item), arcname=item)
+        return archive_file
+
+    def _warning_messages(self):
+        messages = []
+        for call in self.logger.warning.call_args_list:
+            template, *args = call.args
+            message = template
+            for arg in args:
+                for placeholder in ("%s", "%d"):
+                    if placeholder in message:
+                        message = message.replace(placeholder, str(arg), 1)
+                        break
+            messages.append(message)
+        return messages
+
+    def _organize_run_data(self):
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                "ignore",
+                message="The default behavior of tarfile extraction",
+                category=RuntimeWarning,
+            )
+            self.state.organize_run_data()
+
+    def test_empty_tool_data_is_expected_when_engine_has_no_tools(self):
+        self._write_tool_commands("client", "1", [])
+        self._write_archive("client", "1")
+
+        self._organize_run_data()
+
+        self.assertEqual(self._warning_messages(), [])
+
+    def test_non_client_collector_uses_collector_type_command_file(self):
+        self._write_tool_commands("worker", "1", ["sysstat"])
+        self._write_archive("worker", "1")
+
+        self._organize_run_data()
+
+        messages = self._warning_messages()
+        self.assertEqual(len(messages), 1)
+        self.assertIn("sysstat", messages[0])
+        self.assertIn("worker-1", messages[0])
+
+    def test_missing_tool_directories_are_named_and_run_impact_is_clear(self):
+        self._write_tool_commands("client", "1", ["sysstat", "procstat"])
+        self._write_archive("client", "1")
+
+        self._organize_run_data()
+
+        messages = self._warning_messages()
+        self.assertEqual(len(messages), 1)
+        self.assertIn("sysstat, procstat", messages[0])
+        self.assertIn("client-1", messages[0])
+        self.assertIn("run completion is unaffected", messages[0])
+        self.assertIn("tool metrics may be incomplete", messages[0])
+
+    def test_missing_parent_directory_is_checked_for_expected_tools(self):
+        self._write_tool_commands("client", "1", ["sysstat"])
+        self._write_archive("client", "1", create_tool_data_dir=False)
+
+        self._organize_run_data()
+
+        messages = self._warning_messages()
+        self.assertEqual(len(messages), 1)
+        self.assertIn("sysstat", messages[0])
+
+    def test_partial_tool_data_moves_available_data_and_names_only_missing_tool(self):
+        self._write_tool_commands("client", "1", ["sysstat", "procstat"])
+        self._write_archive("client", "1", tool_dirs=["sysstat"])
+
+        self._organize_run_data()
+
+        messages = self._warning_messages()
+        self.assertEqual(len(messages), 1)
+        self.assertIn("procstat", messages[0])
+        self.assertNotIn("sysstat", messages[0])
+        self.assertTrue(
+            os.path.isfile(
+                os.path.join(self.state.run_dir, "tool-data", "client", "1", "sysstat", "sample.dat")
+            )
+        )
+
+    def test_all_expected_tool_data_moves_without_warning(self):
+        self._write_tool_commands("client", "1", ["sysstat"])
+        self._write_archive("client", "1", tool_dirs=["sysstat"])
+
+        self._organize_run_data()
+
+        self.assertEqual(self._warning_messages(), [])
+        self.assertTrue(
+            os.path.isfile(
+                os.path.join(self.state.run_dir, "tool-data", "client", "1", "sysstat", "sample.dat")
+            )
+        )
+
+    def test_profiler_tool_data_is_moved_without_missing_client_warning(self):
+        self._write_archive("profiler", "sysstat-1", tool_dirs=["sysstat"])
+
+        self._organize_run_data()
+
+        self.assertEqual(self._warning_messages(), [])
+        self.assertTrue(
+            os.path.isfile(
+                os.path.join(
+                    self.state.run_dir,
+                    "tool-data",
+                    "profiler",
+                    "sysstat-1",
+                    "sysstat",
+                    "sample.dat",
+                )
+            )
+        )
 
 
 if __name__ == "__main__":
