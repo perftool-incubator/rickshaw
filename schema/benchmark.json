@@ -74,7 +74,8 @@
         },
         "client-server-ratio": {
           "type": "string",
-          "pattern": "^.+$"
+          "pattern": "^.+$",
+          "description": "Client/server topology. Use 1:N for the existing one-client-to-many-servers arrangement, or N:M to let every client receive service information from every server in the benchmark. If omitted, Rickshaw requires matching client/server IDs."
         },
         "runtime": {
           "type": "string",

@@ -950,6 +950,72 @@ sub assign_bench_ids() {
     }
 }
 
+sub validate_nm_benchmark_engines() {
+    my $benchmark = shift;
+    my $ratio = $bench_configs{$benchmark}{'client'}{'client-server-ratio'} // "1:1";
+    return if ($ratio ne "N:M");
+
+    my %benchmark_ids = map { $_ => 1 } @{ $benchmark_to_ids{$benchmark} // [] };
+    my %engine_counts = ( 'client' => 0, 'server' => 0 );
+    foreach my $role (qw(client server)) {
+        next if (! exists $clients_servers{$role});
+        foreach my $engine (@{ $clients_servers{$role} }) {
+            next if (! defined $engine or ! defined $$engine{'id'});
+            $engine_counts{$role}++ if (exists $benchmark_ids{$$engine{'id'}});
+        }
+    }
+
+    if ($engine_counts{'client'} == 0) {
+        log_print sprintf "[ERROR]N:M topology for benchmark %s requires at least one client engine\n", $benchmark;
+        exit 1;
+    }
+
+    my $server_required = exists $bench_configs{$benchmark}{'server'};
+    if ($server_required && exists $bench_configs{$benchmark}{'server'}{'required'} && ! $bench_configs{$benchmark}{'server'}{'required'}) {
+        $server_required = 0;
+    }
+    if ($server_required && $engine_counts{'server'} == 0) {
+        log_print sprintf "[ERROR]N:M topology for benchmark %s requires at least one server engine\n", $benchmark;
+        exit 1;
+    }
+    if (! exists $bench_configs{$benchmark}{'server'} && $engine_counts{'server'} > 0) {
+        log_print sprintf "[ERROR]server engines are mapped to benchmark %s, but this benchmark does not use servers\n", $benchmark;
+        exit 1;
+    }
+}
+
+sub write_engine_topology() {
+    my %topology;
+
+    foreach my $benchmark (keys %bench_configs) {
+        my $ratio = $bench_configs{$benchmark}{'client'}{'client-server-ratio'} // "1:1";
+        next if ($ratio ne "N:M");
+
+        my %benchmark_ids = map { $_ => 1 } @{ $benchmark_to_ids{$benchmark} // [] };
+        my %entry = (
+            'client-server-ratio' => $ratio,
+            'client-ids' => [],
+            'server-ids' => [],
+        );
+
+        foreach my $role (qw(client server)) {
+            next if (! exists $clients_servers{$role});
+            foreach my $engine (@{ $clients_servers{$role} }) {
+                next if (! defined $engine or ! defined $$engine{'id'});
+                my $id = $$engine{'id'};
+                next if (! exists $benchmark_ids{$id});
+                push @{ $entry{$role . '-ids'} }, $id;
+            }
+        }
+
+        $topology{$benchmark} = \%entry;
+    }
+
+    my $topology_file = $config_dir . "/engine-topology.json";
+    put_json_file($topology_file, \%topology) &&
+        die "[ERROR] Failed to create " . $topology_file . "!\n";
+}
+
 sub load_bench_params() {
     $run{'iterations'} = ();
     # Load the bench config and user params
@@ -1514,8 +1580,8 @@ sub endpoint_validation_worker_thread() {
 sub validate_endpoints() {
     # Call each endpoint script with "--validate" as the first option, and each endpoint script should
     # return a list of clients and servers which are used from this endpoint.  Collect this output
-    # and verify there are no gaps in the numbering of clients, and if the benchmark uses servers,
-    # that there is 1 server for every client.
+    # and verify engine IDs are valid. By default, client/server IDs must match; benchmarks using
+    # N:M topology may use independent client and server ID sets.
     # Why can't we just parse the endpoint option?  Because there is no gaurantee that the endpoint
     # option always contains the client and server IDs that will be used.  For example, an endpoint
     # for k8s might look like: "--endpoint:[1-5]" where client and server are not required, and when
@@ -1754,6 +1820,7 @@ sub validate_endpoints() {
         my $this_benchmark = $benchmarks[0];
 
         my $server_required = 0;
+        my $client_server_ratio = $bench_configs{$this_benchmark}{'client'}{'client-server-ratio'} // "1:1";
         if (exists $bench_configs{$this_benchmark}{'server'}) {
             debug_log("server is present\n");
             $server_required = 1;
@@ -1766,37 +1833,62 @@ sub validate_endpoints() {
         }
         my $servers_present = 0;
         my $clients_present = 0;
-        for (my $id = $min_id; $id <= $max_id; $id++) {
-            debug_log(sprintf "checking for client ID %d\n", $id);
-            # Only check for matching clients if we have 1:1 assignment.
-            # 1:N can have as many servers with just 1 client
-            if (defined $clients_servers{'client'}[$id - 1]) {
-                $clients_present++;
-            } elsif (exists $bench_configs{$this_benchmark}{'client'}{'client-server-ratio'} and $bench_configs{$this_benchmark}{'client'}{'client-server-ratio'} eq "1:N") {
-                debug_log(sprintf "Did not find same client ID for server ID %d, but client-server-ratio is 1:N\n", $id);
-            } else {
-                log_print sprintf "[ERROR]client ID %d is not defined in ID range %d - %d\n", $id, $min_id, $max_id;
-                exit 1;
-            }
-            if (exists $bench_configs{$this_benchmark}{'server'}) {
-                debug_log(sprintf "checking for server ID %d\n", $id);
-                if (! defined $clients_servers{'server'}[$id - 1]) {
-                    if ($server_required) {
-                        log_print sprintf "[ERROR]server ID %d is not defined in ID range %d - %d\n",
-                            $id, $min_id, $max_id;
-                        exit 1;
-                    } else {
-                        debug_log(sprintf "server ID %d missing but not required\n", $id);
-                    }
-                } else {
-                    $servers_present++;
-                }
-            } else {
-                debug_log(sprintf "checking for no server IDs\n");
-                if (defined $clients_servers{'server'}[$id - 1]) {
+        if ($client_server_ratio eq "N:M") {
+            for (my $id = $min_id; $id <= $max_id; $id++) {
+                my $client_id_present = defined $clients_servers{'client'} && defined $clients_servers{'client'}[$id - 1];
+                my $server_id_present = defined $clients_servers{'server'} && defined $clients_servers{'server'}[$id - 1];
+                $clients_present++ if $client_id_present;
+                if (exists $bench_configs{$this_benchmark}{'server'}) {
+                    $servers_present++ if $server_id_present;
+                } elsif ($server_id_present) {
                     log_print sprintf "[ERROR]server ID %d is defined in ID range %d - %d, but this benchmark " .
                         "does not use servers\n", $id, $min_id, $max_id;
                     exit 1;
+                }
+            }
+            if ($clients_present == 0) {
+                log_print "[ERROR]N:M topology requires at least one client engine\n";
+                exit 1;
+            }
+            if ($server_required && $servers_present == 0) {
+                log_print "[ERROR]N:M topology requires at least one server engine for this benchmark\n";
+                exit 1;
+            }
+        } else {
+            for (my $id = $min_id; $id <= $max_id; $id++) {
+                my $client_id_present = defined $clients_servers{'client'} && defined $clients_servers{'client'}[$id - 1];
+                my $server_id_present = defined $clients_servers{'server'} && defined $clients_servers{'server'}[$id - 1];
+                debug_log(sprintf "checking for client ID %d\n", $id);
+                # Only check for matching clients if we have 1:1 assignment.
+                # 1:N can have as many servers with just 1 client
+                if ($client_id_present) {
+                    $clients_present++;
+                } elsif ($client_server_ratio eq "1:N") {
+                    debug_log(sprintf "Did not find same client ID for server ID %d, but client-server-ratio is 1:N\n", $id);
+                } else {
+                    log_print sprintf "[ERROR]client ID %d is not defined in ID range %d - %d\n", $id, $min_id, $max_id;
+                    exit 1;
+                }
+                if (exists $bench_configs{$this_benchmark}{'server'}) {
+                    debug_log(sprintf "checking for server ID %d\n", $id);
+                    if (! $server_id_present) {
+                        if ($server_required) {
+                            log_print sprintf "[ERROR]server ID %d is not defined in ID range %d - %d\n",
+                                $id, $min_id, $max_id;
+                            exit 1;
+                        } else {
+                            debug_log(sprintf "server ID %d missing but not required\n", $id);
+                        }
+                    } else {
+                        $servers_present++;
+                    }
+                } else {
+                    debug_log(sprintf "checking for no server IDs\n");
+                    if ($server_id_present) {
+                        log_print sprintf "[ERROR]server ID %d is defined in ID range %d - %d, but this benchmark " .
+                            "does not use servers\n", $id, $min_id, $max_id;
+                        exit 1;
+                    }
                 }
             }
         }
@@ -1812,8 +1904,12 @@ sub validate_endpoints() {
         # Assumes --bench-ids is already defined by user, which is required
         # when multi-benchmarks are used.
         assign_bench_ids();
+        foreach my $benchmark (keys %bench_configs) {
+            validate_nm_benchmark_engines($benchmark);
+        }
         log_print "Check for multi-benchmark IDs here\n";
     }
+    write_engine_topology();
 
     $endpoint_roadblock_opt = " --roadblock-id=" . $run{'id'} .
         " --roadblock-passwd=" . $run{'roadblock-password'};
@@ -2352,10 +2448,16 @@ sub deploy_endpoints() {
                 }
 
                 $cmd .= " --crucible-dir=" . $ENV{'CRUCIBLE_HOME'};
+                $cmd .= " --engine-topology-file=" . $config_dir . "/engine-topology.json";
                 $cmd .= " --log-level=" . $endpoint_log_level;
             } else {
                 $cmd .= " --roadblock-dir=" . $run{'roadblock-dir'};
-                $cmd .= " --endpoint-opts=" . $opts .
+                my $endpoint_opts = $opts;
+                if ($type eq "osp") {
+                    $endpoint_opts .= "," if ($endpoint_opts ne "");
+                    $endpoint_opts .= "engine-topology-file:" . $config_dir . "/engine-topology.json";
+                }
+                $cmd .= " --endpoint-opts=" . $endpoint_opts .
                         $bench_ids_opt;
             }
             # The below 'system' needs to be forked, then wait for all to finish.

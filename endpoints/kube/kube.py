@@ -2577,6 +2577,11 @@ def test_start(msgs_dir, test_id, tx_msgs_dir):
                         if "svc" in msg["payload"]["message"]["user-object"] and "ports" in msg["payload"]["message"]["user-object"]["svc"]:
                             server_engine = msg["payload"]["sender"]["id"]
                             client_engine = re.sub(r"server", r"client", server_engine)
+                            topology = endpoints.benchmark_topology_for_engine(settings, "server", server_engine)
+                            if topology and topology.get("client-server-ratio") == "N:M":
+                                client_engines = ["client-%s" % (client_id) for client_id in topology.get("client-ids", [])]
+                            else:
+                                client_engines = [client_engine]
 
                             logger.info("Found a service message from server engine %s to client engine %s:\n%s" % (server_engine, client_engine, endpoints.dump_json(msg["payload"])))
 
@@ -2589,6 +2594,7 @@ def test_start(msgs_dir, test_id, tx_msgs_dir):
                             obj = {
                                 "server-engine": server_engine,
                                 "client-engine": client_engine,
+                                "client-engines": client_engines,
                                 "test-ip": msg["payload"]["message"]["user-object"]["svc"]["ip"],
                                 "pod-ip": settings["engines"]["endpoint"]["pods"][server_engine]["pod-ip"],
                                 "service-ip": None,
@@ -2608,8 +2614,9 @@ def test_start(msgs_dir, test_id, tx_msgs_dir):
                             else:
                                 logger.info("The test IP address (%s) and the pod IP address (%s) are the same for server engine %s" % (obj["test-ip"], obj["pod-ip"], obj["server-engine"]))
 
-                                if client_engine in settings["engines"]["endpoint"]["pods"]:
-                                    logger.info("Client %s is inside the cluster" % (obj["client-engine"]))
+                                clients_inside_cluster = all(client in settings["engines"]["endpoint"]["pods"] for client in client_engines)
+                                if clients_inside_cluster:
+                                    logger.info("All client engines %s are inside the cluster" % (client_engines))
 
                                     # if the client is hosted in the cluster then a clusterIP service will
                                     # be created for the server and an endpoint will be created to ensure
@@ -2640,7 +2647,7 @@ def test_start(msgs_dir, test_id, tx_msgs_dir):
 
                                     settings["networking"][test_id]["service"].append(obj)
                                 else:
-                                    logger.info("Client %s is outside the cluster" % (client_engine))
+                                    logger.info("At least one client engine %s is outside the cluster" % (client_engines))
 
                                     if "metallb-pool" in endpoint:
                                         logger.info("User has requested an ingress LoadBalancer service")
@@ -2850,26 +2857,33 @@ def test_start(msgs_dir, test_id, tx_msgs_dir):
 
             logger.info("There are %d client engines to process for this networking mode (%s)" % (len(settings["networking"][test_id][key]), key))
             for obj in settings["networking"][test_id][key]:
-                logger.info("Processing client engine %s" % (obj["client-engine"]))
+                client_engines = obj.get("client-engines", [obj["client-engine"]])
+                logger.info("Processing client engines %s" % (client_engines))
 
                 if obj["service-ip"] is not None:
-                    logger.info("Creating a message to send to the client engine (%s) with the service IP address information" % (obj["client-engine"]))
-
                     user_object = {
                         "svc": {
                             "ip": obj["service-ip"],
                             "ports": obj["ports"]
                         }
                     }
+                    topology = endpoints.benchmark_topology_for_engine(settings, "server", obj["server-engine"])
+                    if topology and topology.get("client-server-ratio") == "N:M":
+                        user_object["server-engine"] = obj["server-engine"]
 
-                    msg = endpoints.create_roadblock_msg("follower", obj["client-engine"], "user-object", user_object)
+                    for client_engine in client_engines:
+                        logger.info("Creating a message to send to client engine (%s) with the service IP address information" % (client_engine))
+                        msg = endpoints.create_roadblock_msg("follower", client_engine, "user-object", user_object)
 
-                    msg_file = tx_msgs_dir + "/service-ip-" + obj["server-engine"] + ".json"
-                    logger.info("Writing follower service-ip message to '%s'" % (msg_file))
-                    with open(msg_file, "w", encoding = "ascii") as msg_file_fp:
-                        msg_file_fp.write(endpoints.dump_json(msg))
+                        msg_name = "service-ip-" + obj["server-engine"]
+                        if topology and topology.get("client-server-ratio") == "N:M":
+                            msg_name += "-" + client_engine
+                        msg_file = tx_msgs_dir + "/" + msg_name + ".json"
+                        logger.info("Writing follower service-ip message to '%s'" % (msg_file))
+                        with open(msg_file, "w", encoding = "ascii") as msg_file_fp:
+                            msg_file_fp.write(endpoints.dump_json(msg))
                 else:
-                    logger.warning("A service IP address is not available for this client engine (%s) which likely indicates a prior error during process a message from it's matching server engine (%s)" % (obj["client-engine"], obj["server-engine"]))
+                    logger.warning("A service IP address is not available for client engines %s which likely indicates a prior error while processing server engine %s" % (client_engines, obj["server-engine"]))
     else:
         logger.info("No IP address messages to send to clients")
 
@@ -3074,7 +3088,8 @@ def main():
                                        run_file = args.run_file,
                                        rickshaw_dir = args.rickshaw_dir,
                                        endpoint_index = args.endpoint_index,
-                                       endpoint_normalizer_callback = normalize_endpoint_settings)
+                                       endpoint_normalizer_callback = normalize_endpoint_settings,
+                                       engine_topology_file = args.engine_topology_file)
     if settings is None:
         logger.error("Enabling early abort due to error in endpoints.load_settings")
         early_abort = True

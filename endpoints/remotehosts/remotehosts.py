@@ -1430,6 +1430,27 @@ def test_start(msgs_dir, test_id, tx_msgs_dir):
                     if msg["payload"]["message"]["command"] == "user-object":
                         if "svc" in msg["payload"]["message"]["user-object"] and "ports" in msg["payload"]["message"]["user-object"]["svc"]:
                             server_engine = msg["payload"]["sender"]["id"]
+                            topology = endpoints.benchmark_topology_for_engine(settings, "server", server_engine)
+                            if topology and topology.get("client-server-ratio") == "N:M":
+                                server_mine = any(server_engine in settings["engines"]["remotes"][remote]["engines"]
+                                                  for remote in settings["engines"]["remotes"])
+                                if not server_mine:
+                                    logger.info("N:M service message from %s is not owned by this endpoint, ignoring" % (server_engine))
+                                    continue
+
+                                logger.info("Relaying N:M service information from %s to all %d client engines" %
+                                            (server_engine, len(topology.get("client-ids", []))))
+                                user_object = copy.deepcopy(msg["payload"]["message"]["user-object"])
+                                user_object["server-engine"] = server_engine
+                                for client_id in topology.get("client-ids", []):
+                                    client_engine = "client-%s" % (client_id)
+                                    client_msg = endpoints.create_roadblock_msg("follower", client_engine, "user-object", user_object)
+                                    msg_file = tx_msgs_dir + "/server-ip-" + server_engine + "-" + client_engine + ".json"
+                                    logger.info("Writing N:M service message for %s to '%s'" % (client_engine, msg_file))
+                                    with open(msg_file, "w", encoding = "ascii") as msg_file_fp:
+                                        msg_file_fp.write(endpoints.dump_json(client_msg))
+                                continue
+
                             client_engine = re.sub(r"server", r"client", server_engine)
 
                             logger.info("Found a service message from server engine %s to client engine %s" % (server_engine, client_engine))
@@ -2426,7 +2447,8 @@ def main():
                                        rickshaw_dir = args.rickshaw_dir,
                                        endpoint_index = args.endpoint_index,
                                        endpoint_normalizer_callback = normalize_endpoint_settings,
-                                       crucible_dir = args.crucible_dir)
+                                       crucible_dir = args.crucible_dir,
+                                       engine_topology_file = args.engine_topology_file)
     if settings is None:
         return 1
 

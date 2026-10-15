@@ -26,6 +26,7 @@ Rickshaw needs the following:
       --endpoint:ssh:client[8]:$client8-hostname </pre>
     - 8 servers running in 8 containers in kube cluster A and 8 clients running in 8 containers in kube cluster B:
       <pre>--endpoint:kube:server[1-8]:$cluster-a-master-hostname --endpoint:kube:client[1-8]:$cluster-b-master-hostname</pre>
+  - Benchmarks whose helper `rickshaw.json` declares `client.client-server-ratio` as `N:M` can use different client and server engine IDs. For example, three server engines and two client engines can be assigned as `server[1-3]` and `client[1-2]`; each client receives the service information published by all three servers. The reverse count, such as three clients and two servers, works the same way. Each received service `user-object` includes `server-engine` and `svc` fields so the benchmark can build its shared contact-point list. Server startup and readiness still complete before clients start.
   - If you don't provide any endpoint options, rickshaw will assume you want to run on the local system, and only 1 client will be used, and if the benchmark requires a server, only 1 server will be used, also on the local host.  
 - User and test information
   - The following is optional, but is highly recommended to use so that your run can be easily searchable later.  Rickshaw looks for the following
