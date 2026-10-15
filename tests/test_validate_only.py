@@ -696,14 +696,21 @@ class TestOrganizeRunDataToolWarnings(unittest.TestCase):
         self.logger = MagicMock()
         self.rr.logger = self.logger
 
-    def _write_tool_commands(self, cs_type, cs_id, tool_names):
+    def _tool_command_file(self, cs_type, cs_id):
         command_dir = os.path.join(self.state.tool_cmds_dir, cs_type)
         if cs_type in ("client", "server"):
             command_dir = os.path.join(command_dir, str(cs_id))
-        os.makedirs(command_dir, exist_ok=True)
-        command_file = os.path.join(command_dir, "start.json.xz")
+        return os.path.join(command_dir, "start.json.xz")
+
+    def _write_tool_command_contents(self, cs_type, cs_id, contents):
+        command_file = self._tool_command_file(cs_type, cs_id)
+        os.makedirs(os.path.dirname(command_file), exist_ok=True)
         with lzma.open(command_file, "wt") as f:
-            json.dump({"tools": [{"name": name} for name in tool_names]}, f)
+            f.write(contents)
+
+    def _write_tool_commands(self, cs_type, cs_id, tool_names):
+        contents = json.dumps({"tools": [{"name": name} for name in tool_names]})
+        self._write_tool_command_contents(cs_type, cs_id, contents)
 
     def _write_archive(self, cs_type, cs_id, tool_dirs=(), create_tool_data_dir=True):
         staging_dir = os.path.join(self.temp_dir.name, "archive-content")
@@ -760,6 +767,43 @@ class TestOrganizeRunDataToolWarnings(unittest.TestCase):
             )
             self.state.organize_run_data()
 
+    def _assert_disabled_endpoint_suppresses_tool_warnings(self, cs_type, endpoint_type):
+        self.state.clients_servers = {
+            cs_type: {"1": {"endpoint-type": endpoint_type}}
+        }
+        self._write_archive(cs_type, "1", tool_dirs=["sysstat"])
+
+        self._organize_run_data()
+
+        self.assertEqual(self._warning_messages(), [])
+        tool_data_file = os.path.join(
+            self.state.run_dir, "tool-data", cs_type, "1", "sysstat", "sample.dat"
+        )
+        with open(tool_data_file) as f:
+            self.assertEqual(f.read(), "sample data\n")
+
+    def _assert_command_metadata_error_preserves_tool_data(self, expected_reason=None):
+        self._write_archive("client", "1", tool_dirs=["sysstat"])
+
+        self._organize_run_data()
+
+        messages = self._warning_messages()
+        self.assertEqual(len(messages), 1)
+        self.assertIn("Unable to verify tool-data", messages[0])
+        self.assertIn("client-1", messages[0])
+        self.assertIn("tool-cmds/client/1/start.json.xz", messages[0])
+        self.assertIn("run completion is unaffected", messages[0])
+        self.assertIn("tool metrics may be incomplete", messages[0])
+        self.assertNotIn("Missing tool-data directories", messages[0])
+        if expected_reason:
+            self.assertIn(expected_reason, messages[0])
+
+        tool_data_file = os.path.join(
+            self.state.run_dir, "tool-data", "client", "1", "sysstat", "sample.dat"
+        )
+        with open(tool_data_file) as f:
+            self.assertEqual(f.read(), "sample data\n")
+
     def test_empty_tool_data_is_expected_when_engine_has_no_tools(self):
         self._write_tool_commands("client", "1", [])
         self._write_archive("client", "1")
@@ -801,6 +845,40 @@ class TestOrganizeRunDataToolWarnings(unittest.TestCase):
         messages = self._warning_messages()
         self.assertEqual(len(messages), 1)
         self.assertIn("sysstat", messages[0])
+
+    def test_remotehosts_client_tool_data_suppresses_missing_metadata_warning(self):
+        self._assert_disabled_endpoint_suppresses_tool_warnings("client", "remotehosts")
+
+    def test_remotehosts_server_tool_data_suppresses_missing_metadata_warning(self):
+        self._assert_disabled_endpoint_suppresses_tool_warnings("server", "remotehosts")
+
+    def test_osp_client_tool_data_suppresses_missing_metadata_warning(self):
+        self._assert_disabled_endpoint_suppresses_tool_warnings("client", "osp")
+
+    def test_osp_server_tool_data_suppresses_missing_metadata_warning(self):
+        self._assert_disabled_endpoint_suppresses_tool_warnings("server", "osp")
+
+    def test_missing_tool_command_metadata_warns_and_preserves_available_tool_data(self):
+        self._assert_command_metadata_error_preserves_tool_data()
+
+    def test_unreadable_tool_command_metadata_warns_and_preserves_available_tool_data(self):
+        self._write_tool_command_contents("client", "1", '{"tools":')
+
+        self._assert_command_metadata_error_preserves_tool_data()
+
+    def test_tool_command_metadata_without_tools_list_warns_and_preserves_data(self):
+        self._write_tool_command_contents("client", "1", json.dumps({"commands": []}))
+
+        self._assert_command_metadata_error_preserves_tool_data(
+            "tool command file does not contain a tools list"
+        )
+
+    def test_tool_command_entry_without_name_warns_and_preserves_data(self):
+        self._write_tool_command_contents("client", "1", json.dumps({"tools": [{}]}))
+
+        self._assert_command_metadata_error_preserves_tool_data(
+            "tool command file contains an entry without a name"
+        )
 
     def test_partial_tool_data_moves_available_data_and_names_only_missing_tool(self):
         self._write_tool_commands("client", "1", ["sysstat", "procstat"])
