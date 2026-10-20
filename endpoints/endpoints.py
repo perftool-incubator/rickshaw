@@ -955,6 +955,20 @@ def build_benchmark_engine_mapping(benchmarks):
 
     return mapping
 
+def benchmark_topology_for_engine(settings, role, engine_name):
+    """Return optional topology metadata for an engine such as ``server-2``."""
+    try:
+        engine_id = int(engine_name.rsplit("-", 1)[1])
+    except (AttributeError, IndexError, ValueError):
+        return None
+
+    topology_by_benchmark = settings.get("engines", {}).get("topology", {})
+    for topology in topology_by_benchmark.values():
+        if engine_id in topology.get(role + "-ids", []):
+            return topology
+
+    return None
+
 def gmtimestamp_to_gmepoch(gmtimestamp):
     """
     Convert the provided formatted UTC timestamp to a UTC epoch timestamp
@@ -1804,6 +1818,12 @@ def process_options():
                         type = int,
                         default = 300)
 
+    parser.add_argument("--engine-topology-file",
+                        dest = "engine_topology_file",
+                        help = "Path to the Rickshaw-generated benchmark engine topology metadata file.",
+                        required = False,
+                        type = str)
+
     parser.add_argument("--image-map",
                         dest = "image_map",
                         help = "Path to the image-map.json file mapping benchmarks and tools to container image URLs.",
@@ -1960,6 +1980,8 @@ def log_settings(settings, mode = "all", endpoint_index = None):
     match mode:
         case "benchmark-mapping":
             return logger.info("settings[benchmark-mapping]:\n%s" % (dump_json(settings["engines"]["benchmark-mapping"])), stacklevel = 2)
+        case "engine-topology":
+            return logger.info("settings[engine-topology]:\n%s" % (dump_json(settings["engines"]["topology"])), stacklevel = 2)
         case "crucible":
             return logger.info("settings[crucible]:\n%s" % (dump_json(settings["crucible"])), stacklevel = 2)
         case "engines":
@@ -1977,7 +1999,7 @@ def log_settings(settings, mode = "all", endpoint_index = None):
         case "all" | _:
             return logger.info("settings:\n%s" % (dump_json(settings)), stacklevel = 2)
 
-def load_settings(settings, endpoint_name = None, run_file = None, rickshaw_dir = None, endpoint_index = None, endpoint_normalizer_callback = None, crucible_dir = None):
+def load_settings(settings, endpoint_name = None, run_file = None, rickshaw_dir = None, endpoint_index = None, endpoint_normalizer_callback = None, crucible_dir = None, engine_topology_file = None):
     """
     Load settings from config multiple config files
 
@@ -2068,6 +2090,14 @@ def load_settings(settings, endpoint_name = None, run_file = None, rickshaw_dir 
         settings["engines"] = dict()
     settings["engines"]["benchmark-mapping"] = build_benchmark_engine_mapping(settings["run-file"]["benchmarks"])
     log_settings(settings, mode = "benchmark-mapping")
+
+    settings["engines"]["topology"] = {}
+    if engine_topology_file:
+        settings["engines"]["topology"],err = load_json_file(engine_topology_file)
+        if settings["engines"]["topology"] is None:
+            logger.error("Failed to load benchmark engine topology from %s with error '%s'" % (engine_topology_file, err))
+            return None
+        log_settings(settings, mode = "engine-topology")
 
     logger.info("Loading SSH private key into misc settings")
     settings["misc"]["ssh-private-key"] = ""

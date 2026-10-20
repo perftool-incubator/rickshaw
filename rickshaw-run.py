@@ -1001,13 +1001,13 @@ class RunState:
                         "but none are defined", label)
                     sys.exit(1)
 
-                if server_ids and server_required and ratio != "1:N":
+                if server_ids and server_required and ratio not in ("1:N", "N:M"):
                     if len(client_ids) != len(server_ids):
                         logger.error(
                             "[ERROR] benchmark '%s' has %d client(s) and "
                             "%d server(s); for 1:1 client-server-ratio "
                             "these must be equal (set client-server-ratio "
-                            "to '1:N' in rickshaw.json to allow unequal "
+                            "to '1:N' or 'N:M' in rickshaw.json to allow unequal "
                             "counts)", label,
                             len(client_ids), len(server_ids))
                         sys.exit(1)
@@ -1048,7 +1048,14 @@ class RunState:
             if not client_ids or not server_ids:
                 continue
 
-            if ratio == "1:N":
+            if ratio == "N:M":
+                # Retain a primary buddy for the existing engine environment;
+                # endpoints use engine-topology.json for all-to-all discovery.
+                for cid in client_ids:
+                    pairing[f"client-{cid}"] = f"server-{server_ids[0]}"
+                for sid in server_ids:
+                    pairing[f"server-{sid}"] = f"client-{client_ids[0]}"
+            elif ratio == "1:N":
                 for i, sid in enumerate(server_ids):
                     target_client = client_ids[i % len(client_ids)]
                     pairing[f"server-{sid}"] = f"client-{target_client}"
@@ -1065,8 +1072,9 @@ class RunState:
             ratio_label = f" (client-server-ratio: {ratio})" if ratio else ""
             logger.info("Engine pairing for benchmark '%s'%s:", bench_name, ratio_label)
             for cid in client_ids:
-                paired_servers = [sid for sid in server_ids
-                                  if pairing.get(f"server-{sid}") == f"client-{cid}"]
+                paired_servers = server_ids if ratio == "N:M" else [
+                    sid for sid in server_ids
+                    if pairing.get(f"server-{sid}") == f"client-{cid}"]
                 if paired_servers:
                     server_list = ", ".join(f"server-{s}" for s in paired_servers)
                     logger.info("  client-%s <-> %s", cid, server_list)
@@ -1075,6 +1083,24 @@ class RunState:
         with open(pairing_file, "w") as fh:
             json.dump(pairing, fh, indent=2, sort_keys=True)
         logger.debug("Wrote engine pairing manifest to %s", pairing_file)
+
+    def write_engine_topology(self):
+        """Record N:M membership separately for each benchmark instance."""
+        topology = {}
+        for index, instance in enumerate(self.bench_instances):
+            bench_name = instance["name"]
+            ratio = self.bench_configs[bench_name].get("client", {}).get("client-server-ratio", "")
+            if ratio != "N:M":
+                continue
+            entry = {"benchmark": bench_name, "client-server-ratio": ratio}
+            for role in ("client", "server"):
+                entry[f"{role}-ids"] = sorted(
+                    int(eid) for eid in instance["ids"]
+                    if eid in self.clients_servers.get(role, {}))
+            topology[str(index)] = entry
+        topology_file = os.path.join(self.config_dir, "engine-topology.json")
+        with open(topology_file, "w") as fh:
+            json.dump(topology, fh, indent=2, sort_keys=True)
 
     def make_run_dirs(self):
         for dirtype in ("base-run-dir", "tools-dir"):
@@ -1415,6 +1441,7 @@ class RunState:
         self.assign_bench_ids()
         self.validate_client_server_ids()
         self.compute_engine_pairing()
+        self.write_engine_topology()
 
         for endpoint in self.endpoints:
             engine_userenvs = endpoint.get("engine-userenvs", {})
@@ -2356,9 +2383,13 @@ class RunState:
                 for arg in opts.split(","):
                     cmd += f" --{arg}"
                 cmd += f" --crucible-dir={os.environ.get('CRUCIBLE_HOME', '')}"
+                cmd += f" --engine-topology-file={self.config_dir}/engine-topology.json"
                 cmd += f" --log-level={self.endpoint_log_level}"
             else:
                 cmd += f" --roadblock-dir={self.run.get('roadblock-dir', '')}"
+                if ep_type == "osp":
+                    opts += "," if opts else ""
+                    opts += f"engine-topology-file:{self.config_dir}/engine-topology.json"
                 cmd += f" --endpoint-opts={opts}{bench_ids_opt}"
 
             logger.info("Going to run endpoint command for %s and log it to %s:\n%s\n", label, cmd_log, cmd)

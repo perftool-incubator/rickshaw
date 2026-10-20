@@ -88,9 +88,9 @@
           "additionalItems": false
         },
         "client-server-ratio": {
-          "description": "Defines the ratio of client engines to server engines (e.g., '1:1', '2:1').  Controls how many clients are paired with each server.",
           "type": "string",
-          "pattern": "^.+$"
+          "pattern": "^.+$",
+          "description": "Client/server topology. Use 1:N for round-robin assignment of servers to clients, or N:M to let every client receive service information from every server in its benchmark instance. If omitted, required servers and clients must have equal counts and are paired in ID order."
         },
         "runtime": {
           "description": "The benchmark runtime script executed on the client engine.  Manages the actual benchmark execution loop.",
