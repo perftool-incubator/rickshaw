@@ -26,6 +26,17 @@ Rickshaw needs the following:
       --endpoint:ssh:client[8]:$client8-hostname </pre>
     - 8 servers running in 8 containers in kube cluster A and 8 clients running in 8 containers in kube cluster B:
       <pre>--endpoint:kube:server[1-8]:$cluster-a-master-hostname --endpoint:kube:client[1-8]:$cluster-b-master-hostname</pre>
+  - Benchmarks whose helper `rickshaw.json` declares `client.client-server-ratio` as `N:M` can use different client and server engine IDs. For example, three server engines and two client engines can be assigned as `server[1-3]` and `client[1-2]`; each client receives the service information published by all three servers. The reverse count, such as three clients and two servers, works the same way. Each relayed service `user-object` includes `server-engine` and `svc` fields so the benchmark can build its shared contact-point list. Server startup and readiness still complete before clients start; clients stop before servers stop. Membership is scoped to each benchmark instance, including repeated instances of the same benchmark.
+
+    For example, add `"client-server-ratio": "N:M"` to the helper's `client` configuration. With clients 1–2 and servers 1–3, each client's received-message directory contains endpoint messages such as:
+
+    ```json
+    {"server-engine": "server-1", "svc": {"ip": "192.0.2.11", "ports": [9042]}}
+    {"server-engine": "server-2", "svc": {"ip": "192.0.2.12", "ports": [9042]}}
+    {"server-engine": "server-3", "svc": {"ip": "192.0.2.13", "ports": [9042]}}
+    ```
+
+    The benchmark client start script can collect these from all `endpoint-start-end:*` JSON files in its sample's `msgs/rx` directory, filtering for `server-engine` and `svc` and deduplicating by `server-engine`. The legacy `svc` symlink resolves only one message; use the full message set for a cluster contact list. `cs_buddy` retains a primary peer for existing engine behavior. The default equal-count pairing and `1:N` round-robin assignment remain available for pairwise workloads.
   - If you don't provide any endpoint options, rickshaw will assume you want to run on the local system, and only 1 client will be used, and if the benchmark requires a server, only 1 server will be used, also on the local host.  
 - User and test information
   - The following is optional, but is highly recommended to use so that your run can be easily searchable later.  Rickshaw looks for the following

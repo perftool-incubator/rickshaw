@@ -30,6 +30,7 @@ instance_prefix="rickshaw"
 base_osruntime_bootstrap="$endpoint_base_dir/osruntime-bootstrap"
 vm_image="centos9"
 vm_user="root"
+engine_topology_file=""
 profiler_count=0
 declare -A flavor
 declare -A availability_zone
@@ -103,6 +104,7 @@ function endpoint_osp_test_start() {
     local msgs_dir="$1"; shift
     local test_id="$1"; shift
     local tx_msgs_dir="$1"; shift
+    local service server_engine server_id user_object client_ids client_id client_engine msg_file
     echo "Running endpoint_osp_test_start"
     # Creating any service or ingress only works if any servers provided information about its
     # IP and ports.
@@ -112,6 +114,29 @@ function endpoint_osp_test_start() {
         # Extract the cs-label (server-n, client-y) the IP, and the ports this benchmark is using:
         # server-1 1.2.3.4 30002 30003
         cat $this_msg_file | jq -r '.received[] | if .payload.message.command == "user-object" and .payload.message."user-object".svc.ports then [ .payload.sender.id, .payload.message."user-object".svc.ip, .payload.message."user-object".svc.ports ] | flatten | tostring   else null end' | grep -v null | sed -e 's/"//g' -e 's/\[//' -e 's/\]//' -e 's/,/ /g' >"$endpoint_run_dir/ports.txt"
+
+        if [ -n "$engine_topology_file" ] && [ -f "$engine_topology_file" ]; then
+            while IFS= read -r service; do
+                server_engine=$(echo "$service" | jq -r '.payload.sender.id')
+                # Only the endpoint hosting the server relays its service.
+                [[ " ${servers[*]} " == *" $server_engine "* ]] || continue
+                server_id=${server_engine#server-}
+                user_object=$(echo "$service" | jq -c '.payload.message["user-object"]')
+                client_ids=$(jq -r --argjson server_id "$server_id" '
+                    .[] | select(."client-server-ratio" == "N:M" and (."server-ids" | index($server_id))) | ."client-ids"[]
+                ' "$engine_topology_file")
+
+                for client_id in $client_ids; do
+                    client_engine="client-$client_id"
+                    msg_file="$tx_msgs_dir/service-ip-$server_engine-$client_engine.json"
+                    jq -cn --arg client "$client_engine" \
+                           --arg server "$server_engine" \
+                           --argjson user_object "$user_object" \
+                           '[{"recipient":{"type":"follower","id":$client},"user-object":($user_object + {"server-engine":$server})}]' > "$msg_file"
+                    echo "Wrote N:M service message from $server_engine to $client_engine at $msg_file"
+                done
+            done < <(jq -c '.received[] | select(.payload.message.command == "user-object" and .payload.message["user-object"].svc.ports)' "$this_msg_file")
+        fi
 
         while read -u 9 line; do
             echo "line: $line"
@@ -171,6 +196,9 @@ function process_osp_opts() {
                 ;;
             ospconfig)
                 ospconfig=$val
+                ;;
+            engine-topology-file)
+                engine_topology_file=$val
                 ;;
             network|networks)
                 # networks:<scope>:<network-names>
