@@ -1,0 +1,67 @@
+{
+    "benchmarks": [
+        {
+            "name": "stream",
+            "ids": "1",
+            "mv-params": {
+                "global-options": [
+                    {
+                        "name": "ci-representative",
+                        "params": [
+                            { "arg": "test-type", "vals": [ "triad" ] },
+                            { "arg": "threads", "vals": [ "1" ] },
+                            { "arg": "array-mib", "vals": [ "256" ] },
+                            { "arg": "cpu-node", "vals": [ "none" ] },
+                            { "arg": "memory-node", "vals": [ "none" ] },
+                            { "arg": "deadline", "vals": [ "300" ] }
+                        ]
+                    }
+                ],
+                "sets": [
+                    { "include": "ci-representative" }
+                ]
+            }
+        }
+    ],
+    "tool-params": [
+        { "tool": "sysstat" },
+        { "tool": "procstat" },
+        {
+            "tool": "kernel",
+            "params": [
+                { "arg": "subtools", "val": "turbostat" }
+            ]
+        },
+        { "tool": "forkstat" }
+    ],
+    "tags": {
+        "description": "stream-remotehosts-ci-run-file-json"
+    },
+    "endpoints": [
+        {
+            "type": "remotehosts",
+            "settings": {
+                "user": "CI_ENDPOINT_USER",
+                "controller-ip-address": "CONTROLLER_IP",
+                "cpu-partitioning": false
+            },
+            "remotes": [
+                {
+                    "engines": [
+                        { "role": "client", "ids": [ 1 ] }
+                    ],
+                    "config": {
+                        "host": "CI_ENDPOINT_HOST",
+                        "settings": {
+                            "osruntime": "podman"
+                        }
+                    }
+                }
+            ]
+        }
+    ],
+    "run-params": {
+        "num-samples": 1,
+        "test-order": "s"
+    }
+}

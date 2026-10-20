@@ -328,6 +328,10 @@ def _process_scenario(logger, scenario, benchmark, pool, input_json, raw_jobs):
             "endpoint": endpoint,
             "runner_labels": pool["labels"]
         }
+        if "userenvs" in benchmark:
+            # Retain benchmark-level image constraints until the matrix is
+            # expanded, then remove this internal field from the output job.
+            job["_userenvs"] = benchmark["userenvs"]
         raw_jobs.append(job)
 
 
@@ -499,16 +503,31 @@ def get_userenvs(logger):
             logger.info("Adding 'default' userenv since no other userenvs were added")
             final_userenvs.append("default")
 
-    if args.job_size == "small":
-        # nothing to do here, the userenvs as indidvidual elements is
-        # what we want
-        pass
-    elif args.job_size == "big":
-        # collapse the userenvs into a comma separated list so that
-        # one job will process all userenvs
-        final_userenvs = [ ",".join(final_userenvs) ]
-
     return final_userenvs
+
+
+def _get_job_userenvs(logger, raw_job, selected_userenvs):
+    """Apply an optional benchmark allowlist or denylist to selected userenvs."""
+    userenv_config = raw_job.get("_userenvs", {})
+    allowlist = userenv_config.get("allowlist")
+    denylist = userenv_config.get("denylist")
+
+    if allowlist is not None:
+        allowed = set(allowlist)
+        job_userenvs = [userenv for userenv in selected_userenvs if userenv in allowed]
+        logger.info(
+            "Benchmark '%s' userenv allowlist selected %s from %s",
+            raw_job["benchmark"], job_userenvs, selected_userenvs)
+    elif denylist is not None:
+        denied = set(denylist)
+        job_userenvs = [userenv for userenv in selected_userenvs if userenv not in denied]
+        logger.info(
+            "Benchmark '%s' userenv denylist selected %s from %s",
+            raw_job["benchmark"], job_userenvs, selected_userenvs)
+    else:
+        job_userenvs = list(selected_userenvs)
+
+    return job_userenvs
 
 def main():
     """
@@ -549,14 +568,32 @@ def main():
         return 1
     logger.info("Generated %d userenvs\n%s" % (len(userenvs), "\n".join(userenvs)))
 
-    # multiply the jobs * userenvs to get the final job list
-    logger.info("Performing job multiplication (jobs * userenvs)")
+    # Filter each benchmark's userenvs before expanding the matrix. Big jobs
+    # collapse only that benchmark's eligible userenvs into a comma list.
+    logger.info("Applying benchmark userenv restrictions and expanding jobs")
     for raw_job in raw_jobs:
-        for userenv in userenvs:
+        job_userenvs = _get_job_userenvs(logger, raw_job, userenvs)
+        if args.job_size == "big" and job_userenvs:
+            job_userenvs = [ ",".join(job_userenvs) ]
+
+        for userenv in job_userenvs:
             job = copy.deepcopy(raw_job)
+            job.pop("_userenvs", None)
             job["userenv"] = userenv
             jobs.append(job)
             logger.info("Adding job \"%s\"" % (job))
+
+    if len(jobs) == 0:
+        # Keep a non-empty GitHub matrix when restrictions exclude every
+        # globally selected userenv; the disabled row is skipped by CI.
+        runner_labels = raw_jobs[0].get("runner_labels", []) if raw_jobs else []
+        jobs.append({
+            "benchmark": args.benchmark,
+            "enabled": False,
+            "endpoint": "remotehosts",
+            "runner_labels": runner_labels,
+            "userenv": "default"
+        })
 
     logger.info("Generated %d final jobs:\n%s" % (len(jobs), dump_json(jobs)))
 

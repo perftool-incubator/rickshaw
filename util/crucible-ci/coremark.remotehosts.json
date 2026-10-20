@@ -1,0 +1,64 @@
+{
+    "benchmarks": [
+        {
+            "name": "coremark",
+            "ids": "1",
+            "mv-params": {
+                "global-options": [
+                    {
+                        "name": "ci-representative",
+                        "params": [
+                            { "arg": "threads", "vals": [ "1" ] },
+                            { "arg": "iterations", "vals": [ "0" ] },
+                            { "arg": "deadline", "vals": [ "300" ] }
+                        ]
+                    }
+                ],
+                "sets": [
+                    { "include": "ci-representative" }
+                ]
+            }
+        }
+    ],
+    "tool-params": [
+        { "tool": "sysstat" },
+        { "tool": "procstat" },
+        {
+            "tool": "kernel",
+            "params": [
+                { "arg": "subtools", "val": "turbostat" }
+            ]
+        },
+        { "tool": "forkstat" }
+    ],
+    "tags": {
+        "description": "coremark-remotehosts-ci-run-file-json"
+    },
+    "endpoints": [
+        {
+            "type": "remotehosts",
+            "settings": {
+                "user": "CI_ENDPOINT_USER",
+                "controller-ip-address": "CONTROLLER_IP",
+                "cpu-partitioning": false
+            },
+            "remotes": [
+                {
+                    "engines": [
+                        { "role": "client", "ids": [ 1 ] }
+                    ],
+                    "config": {
+                        "host": "CI_ENDPOINT_HOST",
+                        "settings": {
+                            "osruntime": "podman"
+                        }
+                    }
+                }
+            ]
+        }
+    ],
+    "run-params": {
+        "num-samples": 1,
+        "test-order": "s"
+    }
+}

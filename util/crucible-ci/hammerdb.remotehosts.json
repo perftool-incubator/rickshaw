@@ -1,0 +1,64 @@
+{
+    "benchmarks": [
+        {
+            "name": "hammerdb",
+            "ids": "1",
+            "mv-params": {
+                "sets": [
+                    {
+                        "params": [
+                            { "arg": "backend", "vals": [ "mariadb" ] },
+                            { "arg": "warehouses", "vals": [ "1" ] },
+                            { "arg": "virtual-users", "vals": [ "2" ] },
+                            { "arg": "rampup-minutes", "vals": [ "1" ] },
+                            { "arg": "duration-minutes", "vals": [ "1" ] },
+                            { "arg": "data-dir", "vals": [ "." ] },
+                            { "arg": "log-dir", "vals": [ "." ] }
+                        ]
+                    }
+                ]
+            }
+        }
+    ],
+    "tool-params": [
+        { "tool": "sysstat" },
+        { "tool": "procstat" },
+        {
+            "tool": "kernel",
+            "params": [
+                { "arg": "subtools", "val": "turbostat" }
+            ]
+        },
+        { "tool": "forkstat" }
+    ],
+    "tags": {
+        "description": "hammerdb-remotehosts-ci-run-file-json"
+    },
+    "endpoints": [
+        {
+            "type": "remotehosts",
+            "settings": {
+                "user": "CI_ENDPOINT_USER",
+                "controller-ip-address": "CONTROLLER_IP",
+                "cpu-partitioning": false
+            },
+            "remotes": [
+                {
+                    "engines": [
+                        { "role": "client", "ids": [ 1 ] }
+                    ],
+                    "config": {
+                        "host": "CI_ENDPOINT_HOST",
+                        "settings": {
+                            "osruntime": "podman"
+                        }
+                    }
+                }
+            ]
+        }
+    ],
+    "run-params": {
+        "num-samples": 1,
+        "test-order": "s"
+    }
+}

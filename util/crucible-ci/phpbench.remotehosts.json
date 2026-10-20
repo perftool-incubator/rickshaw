@@ -1,0 +1,58 @@
+{
+    "benchmarks": [
+        {
+            "name": "phpbench",
+            "ids": "1",
+            "mv-params": {
+                "sets": [
+                    {
+                        "params": [
+                            { "arg": "iterations", "vals": [ "100000" ] }
+                        ]
+                    }
+                ]
+            }
+        }
+    ],
+    "tool-params": [
+        { "tool": "sysstat" },
+        { "tool": "procstat" },
+        {
+            "tool": "kernel",
+            "params": [
+                { "arg": "subtools", "val": "turbostat" }
+            ]
+        },
+        { "tool": "forkstat" }
+    ],
+    "tags": {
+        "description": "phpbench-remotehosts-ci-run-file-json"
+    },
+    "endpoints": [
+        {
+            "type": "remotehosts",
+            "settings": {
+                "user": "CI_ENDPOINT_USER",
+                "controller-ip-address": "CONTROLLER_IP",
+                "cpu-partitioning": false
+            },
+            "remotes": [
+                {
+                    "engines": [
+                        { "role": "client", "ids": [ 1 ] }
+                    ],
+                    "config": {
+                        "host": "CI_ENDPOINT_HOST",
+                        "settings": {
+                            "osruntime": "podman"
+                        }
+                    }
+                }
+            ]
+        }
+    ],
+    "run-params": {
+        "num-samples": 1,
+        "test-order": "s"
+    }
+}
