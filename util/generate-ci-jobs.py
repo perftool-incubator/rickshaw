@@ -2,7 +2,9 @@
 
 import argparse
 import copy
+import json
 import logging
+import re
 from invoke import run
 
 import sys
@@ -21,6 +23,11 @@ else:
         exit(2)
     sys.path.append(str(p))
 from toolbox.json import *
+
+
+CI_CONFIG_PATH = "util/crucible-ci.json"
+CI_SCHEMA_PATH = "schema/crucible-ci.json"
+SCENARIO_FILE_RE = re.compile(r"^util/crucible-ci/([^./]+)\.([^./]+)\.json$")
 
 def process_options():
     """
@@ -164,6 +171,238 @@ def _validate_capabilities(logger, input_json):
     return errors
 
 
+def _normalize_json(value):
+    """Return a JSON value with object and array ordering removed."""
+    if isinstance(value, dict):
+        return {key: _normalize_json(item) for key, item in value.items()}
+    if isinstance(value, list):
+        normalized = [_normalize_json(item) for item in value]
+        return sorted(normalized, key=lambda item: json.dumps(item, sort_keys=True))
+    return value
+
+
+def _load_git_json(logger, path):
+    """Load a JSON file from the first parent, or return None if unavailable."""
+    result = run("git show HEAD^1:%s" % (path), hide=True, warn=True)
+    if result.exited != 0:
+        logger.info("Could not load %s from HEAD^1; using the full scenario matrix", path)
+        return None
+
+    try:
+        return json.loads(result.stdout)
+    except (TypeError, ValueError) as e:
+        logger.info("Could not parse %s from HEAD^1 (%s); using the full scenario matrix", path, str(e))
+        return None
+
+
+def _load_current_json(logger, path):
+    """Load a JSON file from the checked-out head, or return None on error."""
+    try:
+        with open(os.path.join(rickshaw_dir, path), "r") as fh:
+            return json.load(fh)
+    except (OSError, TypeError, ValueError) as e:
+        logger.info("Could not load current %s (%s); using the full scenario matrix", path, str(e))
+        return None
+
+
+def _benchmark_entries(input_json):
+    """Index benchmark entries by name, rejecting ambiguous configurations."""
+    benchmarks = input_json.get("benchmarks")
+    if not isinstance(benchmarks, list):
+        return None
+
+    entries = {}
+    for benchmark in benchmarks:
+        if not isinstance(benchmark, dict) or not isinstance(benchmark.get("name"), str):
+            return None
+        name = benchmark["name"]
+        if name in entries:
+            return None
+        entries[name] = benchmark
+    return entries
+
+
+def _benchmark_enum_location(schema):
+    """Return the schema node containing the benchmark name enum."""
+    try:
+        return schema["properties"]["benchmarks"]["items"]["properties"]["name"]
+    except (KeyError, TypeError):
+        return None
+
+
+def _isolated_benchmark_enum_addition(base_schema, head_schema, new_benchmark_names):
+    """Return one newly configured benchmark name added only to the schema enum."""
+    base_name_schema = _benchmark_enum_location(base_schema)
+    head_name_schema = _benchmark_enum_location(head_schema)
+    if base_name_schema is None or head_name_schema is None:
+        return None
+
+    base_names = base_name_schema.get("enum")
+    head_names = head_name_schema.get("enum")
+    if not isinstance(base_names, list) or not isinstance(head_names, list):
+        return None
+    if not all(isinstance(name, str) for name in base_names + head_names):
+        return None
+
+    additions = set(head_names) - set(base_names)
+    removals = set(base_names) - set(head_names)
+    if len(additions) != 1 or removals:
+        return None
+
+    added_name = next(iter(additions))
+    if added_name not in new_benchmark_names:
+        return None
+
+    # The enum's order has no meaning. Ignore its contents after checking that
+    # exactly one configured benchmark name was added, then compare the rest.
+    base_copy = copy.deepcopy(base_schema)
+    head_copy = copy.deepcopy(head_schema)
+    _benchmark_enum_location(base_copy)["enum"] = ["<benchmark-name-enum>"]
+    _benchmark_enum_location(head_copy)["enum"] = ["<benchmark-name-enum>"]
+    if _normalize_json(base_copy) != _normalize_json(head_copy):
+        return None
+
+    return added_name
+
+
+def _current_job_pairs(input_json, pool):
+    """Return benchmark/endpoint pairs that can produce enabled current jobs."""
+    pairs = set()
+    if not input_json.get("config", {}).get("enabled", False):
+        return pairs
+
+    pool_provides = set(pool.get("provides", []))
+    for benchmark in input_json.get("benchmarks", []):
+        if not benchmark.get("enabled", False):
+            continue
+        for scenario in benchmark.get("scenarios", []):
+            if not scenario.get("enabled", False):
+                continue
+            for endpoint in scenario.get("endpoints", []):
+                endpoint_config = input_json.get("endpoints", {}).get(endpoint, {})
+                if not endpoint_config.get("enabled", True):
+                    continue
+                requirements = set(scenario.get("requirements", []))
+                requirements.update(endpoint_config.get("requirements", []))
+                if requirements.issubset(pool_provides):
+                    pairs.add((benchmark["name"], endpoint))
+    return pairs
+
+
+def _classify_changed_scenarios(logger, changed_files, input_json, current_pairs):
+    """Return selected benchmark/endpoint pairs, or None for the full matrix."""
+    if changed_files is None:
+        logger.info("Changed-file history is unavailable; using the full scenario matrix")
+        return None
+
+    if not changed_files:
+        logger.info("No changed paths were available; using the full scenario matrix")
+        return None
+
+    selected_pairs = set()
+    config_changed = False
+    schema_changed = False
+
+    for path in changed_files:
+        match = SCENARIO_FILE_RE.fullmatch(path)
+        if match is not None:
+            pair = (match.group(1), match.group(2))
+            if not os.path.isfile(os.path.join(rickshaw_dir, path)):
+                logger.info("Changed scenario file %s is not present at HEAD; using the full scenario matrix", path)
+                return None
+            if pair not in current_pairs:
+                logger.info("Changed scenario file %s has no current enabled job; using the full scenario matrix", path)
+                return None
+            selected_pairs.add(pair)
+        elif path == CI_CONFIG_PATH:
+            config_changed = True
+        elif path == CI_SCHEMA_PATH:
+            schema_changed = True
+        else:
+            logger.info("Changed path %s is outside the scenario classifier; using the full scenario matrix", path)
+            return None
+
+    changed_benchmark_names = set()
+    new_benchmark_names = set()
+    if config_changed:
+        base_config = _load_git_json(logger, CI_CONFIG_PATH)
+        if not isinstance(base_config, dict):
+            logger.info("Base CI config is unavailable or invalid; using the full scenario matrix")
+            return None
+
+        base_shared = {key: value for key, value in base_config.items() if key != "benchmarks"}
+        head_shared = {key: value for key, value in input_json.items() if key != "benchmarks"}
+        if _normalize_json(base_shared) != _normalize_json(head_shared):
+            logger.info("Shared CI settings changed; using the full scenario matrix")
+            return None
+
+        base_benchmarks = _benchmark_entries(base_config)
+        head_benchmarks = _benchmark_entries(input_json)
+        if base_benchmarks is None or head_benchmarks is None:
+            logger.info("Benchmark entries cannot be compared safely; using the full scenario matrix")
+            return None
+
+        changed_benchmark_names = {
+            name for name in set(base_benchmarks) | set(head_benchmarks)
+            if name not in base_benchmarks or name not in head_benchmarks or
+            _normalize_json(base_benchmarks.get(name)) != _normalize_json(head_benchmarks.get(name))
+        }
+        new_benchmark_names = set(head_benchmarks) - set(base_benchmarks)
+
+        if not changed_benchmark_names:
+            logger.info("CI config has no structural benchmark changes")
+
+        for name in changed_benchmark_names:
+            if name not in head_benchmarks:
+                logger.info("Benchmark %s was removed; using the full scenario matrix", name)
+                return None
+            benchmark_pairs = {pair for pair in current_pairs if pair[0] == name}
+            if not benchmark_pairs:
+                logger.info("Changed benchmark %s has no current enabled job; using the full scenario matrix", name)
+                return None
+            selected_pairs.update(benchmark_pairs)
+
+    if schema_changed:
+        if not config_changed:
+            logger.info("CI schema changed without a matching benchmark config change; using the full scenario matrix")
+            return None
+        base_schema = _load_git_json(logger, CI_SCHEMA_PATH)
+        head_schema = _load_current_json(logger, CI_SCHEMA_PATH)
+        if base_schema is None or head_schema is None:
+            return None
+        added_name = _isolated_benchmark_enum_addition(base_schema, head_schema, new_benchmark_names)
+        if added_name is None:
+            logger.info("CI schema changes extend beyond a new benchmark name; using the full scenario matrix")
+            return None
+        added_pairs = {pair for pair in current_pairs if pair[0] == added_name}
+        if not added_pairs:
+            logger.info("New benchmark %s has no current enabled job; using the full scenario matrix", added_name)
+            return None
+        selected_pairs.update(added_pairs)
+
+    if not selected_pairs:
+        logger.info("Changed paths did not identify current scenarios; using the full scenario matrix")
+        return None
+
+    logger.info("Restricting CI scenarios to: %s", sorted(selected_pairs))
+    return selected_pairs
+
+
+def _apply_scenario_filter(logger, raw_jobs, selected_pairs):
+    """Apply classified scenarios before userenvs are expanded into jobs."""
+    if selected_pairs is None:
+        return raw_jobs
+    filtered_jobs = [
+        job for job in raw_jobs
+        if (job["benchmark"], job["endpoint"]) in selected_pairs
+    ]
+    if raw_jobs and not filtered_jobs:
+        logger.info("No changed scenarios overlap the requested jobs; using the requested job matrix")
+        return raw_jobs
+    logger.info("Scenario filtering kept %d of %d raw jobs", len(filtered_jobs), len(raw_jobs))
+    return filtered_jobs
+
+
 def _get_runner_pool(logger, input_json):
     """
     Get the runner pool configuration from the CI config or fall back to legacy behavior.
@@ -219,7 +458,7 @@ def _get_effective_requirements(logger, scenario, endpoint_name, input_json):
     return effective
 
 
-def get_jobs(logger):
+def get_jobs(logger, changed_files):
     """
     Load the CI config file and generate raw jobs from it based on the user input
 
@@ -262,6 +501,9 @@ def get_jobs(logger):
     if pool is None:
         return None
 
+    current_pairs = _current_job_pairs(input_json, pool)
+    selected_pairs = _classify_changed_scenarios(logger, changed_files, input_json, current_pairs)
+
     raw_jobs = list()
 
     if input_json["config"]["enabled"]:
@@ -287,6 +529,8 @@ def get_jobs(logger):
                 logger.debug("Benchmark '%s' enabled is False" % (benchmark["name"]))
     else:
         logger.debug("Global enabled is False")
+
+    raw_jobs = _apply_scenario_filter(logger, raw_jobs, selected_pairs)
 
     if len(raw_jobs) == 0:
         runner_labels = pool["labels"]
@@ -359,7 +603,25 @@ def references_file(obj, target_path):
                 return True
     return False
 
-def get_userenvs(logger):
+def get_changed_files(logger):
+    """Read the PR changed paths once for both scenario and userenv selection."""
+    result = run("git log HEAD^1", hide=True, warn=True)
+    if result.exited != 0:
+        logger.info("Rickshaw history is not available")
+        return None
+
+    logger.info("Rickshaw history is available")
+    result = run("git diff --name-only HEAD^1 HEAD", hide=True, warn=True)
+    if result.exited != 0:
+        logger.warning("Could not read changed paths from HEAD^1 to HEAD; using the full CI matrix")
+        return None
+
+    changed_files = list(filter(None, result.stdout.split("\n")))
+    logger.info("%d rickshaw files changed:\n%s" % (len(changed_files), "\n".join(changed_files)))
+    return changed_files
+
+
+def get_userenvs(logger, changed_files):
     """
     Inspect the rickshaw directory and generate a list of userenvs based on user input
 
@@ -377,9 +639,6 @@ def get_userenvs(logger):
     userenvs = list()
     final_userenvs = list()
     userenv_excludes = list()
-    diff_cmd_validate="git log HEAD^1"
-    diff_cmd="git diff --name-only HEAD^1 HEAD"
-
     try:
         userenv_excludes_file = rickshaw_dir + "/userenvs/ci-excludes.txt"
         logger.debug("Loading userenv excludes from: %s" % (userenv_excludes_file))
@@ -391,18 +650,8 @@ def get_userenvs(logger):
         userenv_excludes.extend([ "stream8-flexran", "rhel-ai" ])
     logger.debug("List of %d userenv excludes:\n%s" % (len(userenv_excludes), "\n".join(userenv_excludes)))
 
-    include_all_testable_userenvs = False
-
-    result = run(diff_cmd_validate, hide = True, warn = True)
-    changed_files = None
-    if result.exited == 0:
-        # history is available -- this must be a rickshaw repository PR
-        logger.info("Rickshaw history is available")
-
-        result = run(diff_cmd, hide = True, warn = True)
-        changed_files = result.stdout.split("\n")
-        changed_files = list(filter(None, changed_files)) # remove the empty lines
-        logger.info("%d rickshaw files changed:\n%s" % (len(changed_files), "\n".join(changed_files)))
+    include_all_testable_userenvs = changed_files is None
+    if changed_files is not None:
         non_userenv_files_changed = list(filter(lambda x: not x.startswith("userenvs/"), changed_files)) # get the files that do not start with 'userenvs/'
         logger.info("%d rickshaw non-userenv files changed:\n%s" % (len(non_userenv_files_changed), "\n".join(non_userenv_files_changed)))
 
@@ -410,9 +659,8 @@ def get_userenvs(logger):
             include_all_testable_userenvs = True
             logger.info("Non userenv changes are present so reverting to normal behavior")
     else:
-        # no history available -- this is not a rickshaw repository PR
-        logger.info("Rickshaw history is not available")
-        include_all_testable_userenvs = True
+        # No usable history is available, so preserve the full userenv matrix.
+        logger.info("Using all testable userenvs because changed paths are unavailable")
 
     start_path = Path(rickshaw_dir + "/userenvs")
     testable_userenv_paths = sorted(start_path.glob("*.json"))
@@ -529,6 +777,24 @@ def _get_job_userenvs(logger, raw_job, selected_userenvs):
 
     return job_userenvs
 
+
+def _expand_jobs(logger, raw_jobs, selected_userenvs, job_size):
+    """Apply benchmark userenv restrictions and expand the final job matrix."""
+    jobs = list()
+    for raw_job in raw_jobs:
+        job_userenvs = _get_job_userenvs(logger, raw_job, selected_userenvs)
+        if job_size == "big" and job_userenvs:
+            job_userenvs = [ ",".join(job_userenvs) ]
+
+        for userenv in job_userenvs:
+            job = copy.deepcopy(raw_job)
+            job.pop("_userenvs", None)
+            job["userenv"] = userenv
+            jobs.append(job)
+            logger.info("Adding job \"%s\"" % (job))
+
+    return jobs
+
 def main():
     """
     The main processing function
@@ -556,32 +822,22 @@ def main():
     logger.info("Parameters: " + str(args))
     os.chdir(rickshaw_dir)
 
+    changed_files = get_changed_files(logger)
+
     jobs = list()
 
-    raw_jobs = get_jobs(logger)
+    raw_jobs = get_jobs(logger, changed_files)
     if raw_jobs is None:
         return 1
     logger.info("Generated %d jobs:\n%s" % (len(raw_jobs), dump_json(raw_jobs)))
 
-    userenvs = get_userenvs(logger)
+    userenvs = get_userenvs(logger, changed_files)
     if userenvs is None:
         return 1
     logger.info("Generated %d userenvs\n%s" % (len(userenvs), "\n".join(userenvs)))
 
-    # Filter each benchmark's userenvs before expanding the matrix. Big jobs
-    # collapse only that benchmark's eligible userenvs into a comma list.
     logger.info("Applying benchmark userenv restrictions and expanding jobs")
-    for raw_job in raw_jobs:
-        job_userenvs = _get_job_userenvs(logger, raw_job, userenvs)
-        if args.job_size == "big" and job_userenvs:
-            job_userenvs = [ ",".join(job_userenvs) ]
-
-        for userenv in job_userenvs:
-            job = copy.deepcopy(raw_job)
-            job.pop("_userenvs", None)
-            job["userenv"] = userenv
-            jobs.append(job)
-            logger.info("Adding job \"%s\"" % (job))
+    jobs = _expand_jobs(logger, raw_jobs, userenvs, args.job_size)
 
     if len(jobs) == 0:
         # Keep a non-empty GitHub matrix when restrictions exclude every
