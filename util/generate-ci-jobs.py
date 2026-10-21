@@ -230,8 +230,8 @@ def _benchmark_enum_location(schema):
         return None
 
 
-def _isolated_benchmark_enum_addition(base_schema, head_schema, new_benchmark_names):
-    """Return one newly configured benchmark name added only to the schema enum."""
+def _isolated_benchmark_enum_additions(base_schema, head_schema, new_benchmark_names):
+    """Return newly configured benchmark names added only to the schema enum."""
     base_name_schema = _benchmark_enum_location(base_schema)
     head_name_schema = _benchmark_enum_location(head_schema)
     if base_name_schema is None or head_name_schema is None:
@@ -243,18 +243,18 @@ def _isolated_benchmark_enum_addition(base_schema, head_schema, new_benchmark_na
         return None
     if not all(isinstance(name, str) for name in base_names + head_names):
         return None
+    if len(set(base_names)) != len(base_names) or len(set(head_names)) != len(head_names):
+        return None
 
     additions = set(head_names) - set(base_names)
     removals = set(base_names) - set(head_names)
-    if len(additions) != 1 or removals:
+    if not additions or removals:
         return None
-
-    added_name = next(iter(additions))
-    if added_name not in new_benchmark_names:
+    if not additions.issubset(new_benchmark_names):
         return None
 
     # The enum's order has no meaning. Ignore its contents after checking that
-    # exactly one configured benchmark name was added, then compare the rest.
+    # only configured benchmark names were added, then compare the rest.
     base_copy = copy.deepcopy(base_schema)
     head_copy = copy.deepcopy(head_schema)
     _benchmark_enum_location(base_copy)["enum"] = ["<benchmark-name-enum>"]
@@ -262,7 +262,7 @@ def _isolated_benchmark_enum_addition(base_schema, head_schema, new_benchmark_na
     if _normalize_json(base_copy) != _normalize_json(head_copy):
         return None
 
-    return added_name
+    return additions
 
 
 def _current_job_pairs(input_json, pool):
@@ -370,15 +370,16 @@ def _classify_changed_scenarios(logger, changed_files, input_json, current_pairs
         head_schema = _load_current_json(logger, CI_SCHEMA_PATH)
         if base_schema is None or head_schema is None:
             return None
-        added_name = _isolated_benchmark_enum_addition(base_schema, head_schema, new_benchmark_names)
-        if added_name is None:
+        added_names = _isolated_benchmark_enum_additions(base_schema, head_schema, new_benchmark_names)
+        if added_names is None:
             logger.info("CI schema changes extend beyond a new benchmark name; using the full scenario matrix")
             return None
-        added_pairs = {pair for pair in current_pairs if pair[0] == added_name}
-        if not added_pairs:
-            logger.info("New benchmark %s has no current enabled job; using the full scenario matrix", added_name)
-            return None
-        selected_pairs.update(added_pairs)
+        for added_name in added_names:
+            added_pairs = {pair for pair in current_pairs if pair[0] == added_name}
+            if not added_pairs:
+                logger.info("New benchmark %s has no current enabled job; using the full scenario matrix", added_name)
+                return None
+            selected_pairs.update(added_pairs)
 
     if not selected_pairs:
         logger.info("Changed paths did not identify current scenarios; using the full scenario matrix")

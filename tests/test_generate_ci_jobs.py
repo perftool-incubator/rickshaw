@@ -204,6 +204,53 @@ class GenerateCIJobsScenarioFilterTests(unittest.TestCase):
 
         self.assertEqual(selected, {("newbench", "kube")})
 
+    def test_multiple_matching_new_benchmarks_and_schema_enum_additions_are_narrowed(self):
+        base_config = self._config([self._benchmark("fio")])
+        head_config = copy.deepcopy(base_config)
+        head_config["benchmarks"].extend([
+            self._benchmark("newbench", ("kube",)),
+            self._benchmark("otherbench", ("remotehosts",)),
+        ])
+        base_schema = self._schema(["fio"])
+        head_schema = self._schema(["otherbench", "fio", "newbench"])
+        self._write_json("schema/crucible-ci.json", head_schema)
+        current_pairs = generator._current_job_pairs(head_config, head_config["runner-pools"]["pool"])
+
+        with self._base_run({
+            "util/crucible-ci.json": base_config,
+            "schema/crucible-ci.json": base_schema,
+        }):
+            selected = generator._classify_changed_scenarios(
+                self.logger,
+                ["util/crucible-ci.json", "schema/crucible-ci.json"],
+                head_config,
+                current_pairs,
+            )
+
+        self.assertEqual(selected, {("newbench", "kube"), ("otherbench", "remotehosts")})
+
+    def test_schema_enum_addition_without_matching_new_benchmark_uses_full_matrix(self):
+        base_config = self._config([self._benchmark("fio")])
+        head_config = copy.deepcopy(base_config)
+        head_config["benchmarks"].append(self._benchmark("newbench", ("kube",)))
+        base_schema = self._schema(["fio"])
+        head_schema = self._schema(["fio", "newbench", "unconfigured"])
+        self._write_json("schema/crucible-ci.json", head_schema)
+        current_pairs = generator._current_job_pairs(head_config, head_config["runner-pools"]["pool"])
+
+        with self._base_run({
+            "util/crucible-ci.json": base_config,
+            "schema/crucible-ci.json": base_schema,
+        }):
+            selected = generator._classify_changed_scenarios(
+                self.logger,
+                ["util/crucible-ci.json", "schema/crucible-ci.json"],
+                head_config,
+                current_pairs,
+            )
+
+        self.assertIsNone(selected)
+
     def test_unclassified_mixed_shared_and_unavailable_changes_use_full_matrix(self):
         base_config = self._config([self._benchmark("fio"), self._benchmark("oslat")])
         current_pairs = generator._current_job_pairs(base_config, base_config["runner-pools"]["pool"])
