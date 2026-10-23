@@ -59,6 +59,25 @@
             ]
         },
         {
+            "name": "coremark",
+            "enabled": true,
+            "scenarios": [
+                {
+                    "enabled": true,
+                    "endpoints": [
+                        "kube",
+                        "remotehosts"
+                    ],
+                    "requirements": []
+                }
+            ],
+            "userenvs": {
+                "allowlist": [
+                    "alma9"
+                ]
+            }
+        },
+        {
             "name": "fio",
             "enabled": true,
             "scenarios": [
@@ -71,6 +90,25 @@
                     "requirements": []
                 }
             ]
+        },
+        {
+            "name": "hammerdb",
+            "enabled": true,
+            "scenarios": [
+                {
+                    "enabled": true,
+                    "endpoints": [
+                        "kube",
+                        "remotehosts"
+                    ],
+                    "requirements": []
+                }
+            ],
+            "userenvs": {
+                "allowlist": [
+                    "alma9"
+                ]
+            }
         },
         {
             "name": "hwnoise",
@@ -145,6 +183,25 @@
             ]
         },
         {
+            "name": "phpbench",
+            "enabled": true,
+            "scenarios": [
+                {
+                    "enabled": true,
+                    "endpoints": [
+                        "kube",
+                        "remotehosts"
+                    ],
+                    "requirements": []
+                }
+            ],
+            "userenvs": {
+                "allowlist": [
+                    "alma9"
+                ]
+            }
+        },
+        {
             "name": "sleep",
             "enabled": true,
             "scenarios": [
@@ -157,6 +214,25 @@
                     "requirements": []
                 }
             ]
+        },
+        {
+            "name": "stream",
+            "enabled": true,
+            "scenarios": [
+                {
+                    "enabled": true,
+                    "endpoints": [
+                        "kube",
+                        "remotehosts"
+                    ],
+                    "requirements": []
+                }
+            ],
+            "userenvs": {
+                "allowlist": [
+                    "alma9"
+                ]
+            }
         },
         {
             "name": "uperf",

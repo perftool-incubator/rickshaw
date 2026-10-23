@@ -1,0 +1,54 @@
+{
+    "benchmarks": [
+        {
+            "name": "phpbench",
+            "ids": "1",
+            "mv-params": {
+                "sets": [
+                    {
+                        "params": [
+                            { "arg": "iterations", "vals": [ "100000" ] }
+                        ]
+                    }
+                ]
+            }
+        }
+    ],
+    "tool-params": [
+        { "tool": "sysstat" },
+        { "tool": "procstat" },
+        {
+            "tool": "kernel",
+            "params": [
+                { "arg": "subtools", "val": "turbostat" }
+            ]
+        },
+        { "tool": "forkstat" }
+    ],
+    "tags": {
+        "description": "phpbench-kube-ci-run-file-json"
+    },
+    "endpoints": [
+        {
+            "type": "kube",
+            "controller-ip-address": "CONTROLLER_IP",
+            "host": "CI_ENDPOINT_HOST",
+            "user": "CI_ENDPOINT_USER",
+            "engines": {
+                "client": "1"
+            },
+            "config": [
+                {
+                    "targets": "default",
+                    "settings": {
+                        "cpu-partitioning": false
+                    }
+                }
+            ]
+        }
+    ],
+    "run-params": {
+        "num-samples": 1,
+        "test-order": "s"
+    }
+}

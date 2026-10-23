@@ -117,12 +117,16 @@
                         "type": "string",
                         "enum": [
                             "cyclictest",
+                            "coremark",
                             "fio",
+                            "hammerdb",
                             "hwnoise",
                             "iperf",
                             "multi",
                             "oslat",
+                            "phpbench",
                             "sleep",
+                            "stream",
                             "uperf"
                         ]
                     },
@@ -177,14 +181,14 @@
                         }
                     },
                     "userenvs": {
-                        "description": "Optional restriction on which user environments this benchmark should be tested with.  Specify either an allowlist or a denylist, but not both.",
+                        "description": "Optional allowlist or denylist applied to the globally selected user environments before this benchmark's CI matrix is expanded. Specify one, not both.",
                         "oneOf": [
                             {
                                 "description": "An allowlist restricts testing to only the specified user environments.",
                                 "type": "object",
                                 "properties": {
                                     "allowlist": {
-                                        "description": "A list of userenv names to include.  Only these userenvs will be tested.",
+                                        "description": "A list of userenv names to include from the globally selected userenvs.",
                                         "type": "array",
                                         "minItems": 1,
                                         "uniqueItems": true,
@@ -205,7 +209,7 @@
                                 "type": "object",
                                 "properties": {
                                     "denylist": {
-                                        "description": "A list of userenv names to exclude.  All userenvs except these will be tested.",
+                                        "description": "A list of globally selected userenv names to exclude.",
                                         "type": "array",
                                         "minItems": 1,
                                         "uniqueItems": true,
