@@ -70,12 +70,7 @@
                     ],
                     "requirements": []
                 }
-            ],
-            "userenvs": {
-                "allowlist": [
-                    "alma9"
-                ]
-            }
+            ]
         },
         {
             "name": "fio",
