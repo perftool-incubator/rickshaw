@@ -86,6 +86,21 @@ def process_options():
                         default = "all",
                         choices = [ "all", "minimal", "unique" ])
 
+    parser.add_argument("--pr-base-sha",
+                        dest = "pr_base_sha",
+                        help = "Base commit SHA for an eligible pull request diff",
+                        default = "")
+
+    parser.add_argument("--pr-head-sha",
+                        dest = "pr_head_sha",
+                        help = "Head commit SHA for an eligible pull request diff",
+                        default = "")
+
+    parser.add_argument("--pr-number",
+                        dest = "pr_number",
+                        help = "Pull request number used to resolve its head commit",
+                        default = "")
+
     the_args = parser.parse_args()
 
     return the_args
@@ -181,17 +196,17 @@ def _normalize_json(value):
     return value
 
 
-def _load_git_json(logger, path):
-    """Load a JSON file from the first parent, or return None if unavailable."""
-    result = run("git show HEAD^1:%s" % (path), hide=True, warn=True)
+def _load_git_json(logger, path, base_revision="HEAD^1"):
+    """Load a JSON file from the diff base, or return None if unavailable."""
+    result = run("git show %s:%s" % (base_revision, path), hide=True, warn=True)
     if result.exited != 0:
-        logger.info("Could not load %s from HEAD^1; using the full scenario matrix", path)
+        logger.info("Could not load %s from %s; using the full scenario matrix", path, base_revision)
         return None
 
     try:
         return json.loads(result.stdout)
     except (TypeError, ValueError) as e:
-        logger.info("Could not parse %s from HEAD^1 (%s); using the full scenario matrix", path, str(e))
+        logger.info("Could not parse %s from %s (%s); using the full scenario matrix", path, base_revision, str(e))
         return None
 
 
@@ -289,7 +304,7 @@ def _current_job_pairs(input_json, pool):
     return pairs
 
 
-def _classify_changed_scenarios(logger, changed_files, input_json, current_pairs):
+def _classify_changed_scenarios(logger, changed_files, input_json, current_pairs, base_revision="HEAD^1"):
     """Return selected benchmark/endpoint pairs, or None for the full matrix."""
     if changed_files is None:
         logger.info("Changed-file history is unavailable; using the full scenario matrix")
@@ -325,7 +340,7 @@ def _classify_changed_scenarios(logger, changed_files, input_json, current_pairs
     changed_benchmark_names = set()
     new_benchmark_names = set()
     if config_changed:
-        base_config = _load_git_json(logger, CI_CONFIG_PATH)
+        base_config = _load_git_json(logger, CI_CONFIG_PATH, base_revision)
         if not isinstance(base_config, dict):
             logger.info("Base CI config is unavailable or invalid; using the full scenario matrix")
             return None
@@ -366,7 +381,7 @@ def _classify_changed_scenarios(logger, changed_files, input_json, current_pairs
         if not config_changed:
             logger.info("CI schema changed without a matching benchmark config change; using the full scenario matrix")
             return None
-        base_schema = _load_git_json(logger, CI_SCHEMA_PATH)
+        base_schema = _load_git_json(logger, CI_SCHEMA_PATH, base_revision)
         head_schema = _load_current_json(logger, CI_SCHEMA_PATH)
         if base_schema is None or head_schema is None:
             return None
@@ -459,7 +474,7 @@ def _get_effective_requirements(logger, scenario, endpoint_name, input_json):
     return effective
 
 
-def get_jobs(logger, changed_files):
+def get_jobs(logger, changed_files, base_revision="HEAD^1"):
     """
     Load the CI config file and generate raw jobs from it based on the user input
 
@@ -503,7 +518,8 @@ def get_jobs(logger, changed_files):
         return None
 
     current_pairs = _current_job_pairs(input_json, pool)
-    selected_pairs = _classify_changed_scenarios(logger, changed_files, input_json, current_pairs)
+    selected_pairs = _classify_changed_scenarios(
+        logger, changed_files, input_json, current_pairs, base_revision)
 
     raw_jobs = list()
 
@@ -604,20 +620,67 @@ def references_file(obj, target_path):
                 return True
     return False
 
-def get_changed_files(logger):
-    """Read the PR changed paths once for both scenario and userenv selection."""
-    result = run("git log HEAD^1", hide=True, warn=True)
+def _commit_exists(logger, revision):
+    """Return whether revision names a locally available commit."""
+    result = run("git cat-file -e %s^{commit}" % (revision), hide=True, warn=True)
+    return result.exited == 0
+
+
+def _fetch_pr_revision(logger, revision, pr_number, is_head):
+    """Fetch PR git objects without checking out or running their contents."""
+    if _commit_exists(logger, revision):
+        return True
+
+    if is_head:
+        # GitHub's pull ref resolves fork PR heads through the base repository.
+        # Fetching objects keeps pull_request_target from checking out untrusted code.
+        fetch_ref = "refs/pull/%s/head" % (pr_number)
+    else:
+        fetch_ref = revision
+
+    result = run("git fetch --no-tags --depth=1 origin %s" % (fetch_ref), hide=True, warn=True)
     if result.exited != 0:
-        logger.info("Rickshaw history is not available")
+        logger.info("Could not fetch pull request revision %s", revision)
+        return False
+
+    if is_head:
+        resolved = run("git rev-parse --verify FETCH_HEAD^{commit}", hide=True, warn=True)
+        if resolved.exited != 0 or resolved.stdout.strip().lower() != revision.lower():
+            logger.info("Pull request head ref did not resolve to event SHA %s", revision)
+            return False
+
+    return _commit_exists(logger, revision)
+
+
+def get_changed_files(logger, pr_base_sha="", pr_head_sha="", pr_number=""):
+    """Read changed paths for an explicitly enabled PR, or return None for full CI."""
+    if not pr_base_sha or not pr_head_sha or not pr_number:
+        logger.info("Pull request diff inputs are unavailable; using the full CI matrix")
         return None
 
-    logger.info("Rickshaw history is available")
-    result = run("git diff --name-only HEAD^1 HEAD", hide=True, warn=True)
+    if (re.fullmatch(r"[0-9a-fA-F]{40}|[0-9a-fA-F]{64}", pr_base_sha) is None or
+            re.fullmatch(r"[0-9a-fA-F]{40}|[0-9a-fA-F]{64}", pr_head_sha) is None or
+            re.fullmatch(r"[1-9][0-9]*", str(pr_number)) is None):
+        logger.info("Pull request diff inputs are invalid; using the full CI matrix")
+        return None
+
+    if not _fetch_pr_revision(logger, pr_base_sha, str(pr_number), is_head=False):
+        logger.info("Pull request base SHA is unavailable; using the full CI matrix")
+        return None
+    if not _fetch_pr_revision(logger, pr_head_sha, str(pr_number), is_head=True):
+        logger.info("Pull request head SHA is unavailable; using the full CI matrix")
+        return None
+
+    result = run("git diff --name-only %s %s" % (pr_base_sha, pr_head_sha), hide=True, warn=True)
     if result.exited != 0:
-        logger.warning("Could not read changed paths from HEAD^1 to HEAD; using the full CI matrix")
+        logger.warning("Could not read pull request changed paths; using the full CI matrix")
         return None
 
     changed_files = list(filter(None, result.stdout.split("\n")))
+    if not changed_files:
+        logger.info("Pull request diff has no changed paths; using the full CI matrix")
+        return None
+
     logger.info("%d rickshaw files changed:\n%s" % (len(changed_files), "\n".join(changed_files)))
     return changed_files
 
@@ -823,11 +886,13 @@ def main():
     logger.info("Parameters: " + str(args))
     os.chdir(rickshaw_dir)
 
-    changed_files = get_changed_files(logger)
+    changed_files = get_changed_files(
+        logger, args.pr_base_sha, args.pr_head_sha, args.pr_number)
+    base_revision = args.pr_base_sha if changed_files is not None else "HEAD^1"
 
     jobs = list()
 
-    raw_jobs = get_jobs(logger, changed_files)
+    raw_jobs = get_jobs(logger, changed_files, base_revision)
     if raw_jobs is None:
         return 1
     logger.info("Generated %d jobs:\n%s" % (len(raw_jobs), dump_json(raw_jobs)))
