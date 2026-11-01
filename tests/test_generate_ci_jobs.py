@@ -90,9 +90,9 @@ class GenerateCIJobsScenarioFilterTests(unittest.TestCase):
 
     def _base_run(self, base_files):
         def fake_run(command, **kwargs):
-            prefix = "git show HEAD^1:"
-            if command.startswith(prefix):
-                path = command[len(prefix):]
+            prefix = "git show "
+            if command.startswith(prefix) and ":" in command[len(prefix):]:
+                _, _, path = command[len(prefix):].partition(":")
                 if path in base_files:
                     return SimpleNamespace(exited=0, stdout=json.dumps(base_files[path]))
             return SimpleNamespace(exited=1, stdout="")
@@ -203,6 +203,26 @@ class GenerateCIJobsScenarioFilterTests(unittest.TestCase):
             )
 
         self.assertEqual(selected, {("newbench", "kube")})
+
+    def test_pull_request_base_sha_is_used_for_base_config(self):
+        base_config = self._config([self._benchmark("fio"), self._benchmark("oslat")])
+        head_config = copy.deepcopy(base_config)
+        head_config["benchmarks"][0]["userenvs"] = {"allowlist": ["alma9"]}
+        current_pairs = generator._current_job_pairs(head_config, head_config["runner-pools"]["pool"])
+        base_sha = "a" * 40
+
+        with self._base_run({"util/crucible-ci.json": base_config}) as base_run:
+            selected = generator._classify_changed_scenarios(
+                self.logger,
+                ["util/crucible-ci.json"],
+                head_config,
+                current_pairs,
+                base_sha,
+            )
+
+        self.assertIn("git show %s:util/crucible-ci.json" % base_sha,
+                      [call.args[0] for call in base_run.call_args_list])
+        self.assertEqual(selected, {("fio", "kube"), ("fio", "remotehosts")})
 
     def test_multiple_matching_new_benchmarks_and_schema_enum_additions_are_narrowed(self):
         base_config = self._config([self._benchmark("fio")])
@@ -354,6 +374,134 @@ class GenerateCIJobsScenarioFilterTests(unittest.TestCase):
         self.assertTrue(all(job["benchmark"] == "fio" and job["endpoint"] == "kube"
                             for job in small_jobs + big_jobs))
         self.assertTrue(all("_userenvs" not in job for job in small_jobs + big_jobs))
+
+
+class GenerateCIJobsPullRequestFilterTests(unittest.TestCase):
+    def setUp(self):
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.root = Path(self.temp_dir.name)
+        self.logger = NullLogger()
+        generator.rickshaw_dir = str(self.root)
+        self.userenv_dir = self.root / "userenvs"
+        self.userenv_dir.mkdir()
+        for name in ("alma9", "fedora40"):
+            (self.userenv_dir / (name + ".json")).write_text("{}")
+
+    def tearDown(self):
+        self.temp_dir.cleanup()
+
+    def _select_scenarios(self, changed_files):
+        config = GenerateCIJobsScenarioFilterTests._config([
+            GenerateCIJobsScenarioFilterTests._benchmark("fio"),
+            GenerateCIJobsScenarioFilterTests._benchmark("oslat"),
+        ])
+        current_pairs = generator._current_job_pairs(config, config["runner-pools"]["pool"])
+        selected = generator._classify_changed_scenarios(
+            self.logger, changed_files, config, current_pairs)
+        return selected, current_pairs, config
+
+    def _select_userenvs(self, changed_files, userenv_filter="all"):
+        generator.args = SimpleNamespace(userenv_filter=userenv_filter)
+        return generator.get_userenvs(self.logger, changed_files)
+
+    def test_missing_pr_inputs_keep_full_scenario_and_userenv_selections(self):
+        changed_files = generator.get_changed_files(self.logger)
+
+        selected, current_pairs, _ = self._select_scenarios(changed_files)
+        userenvs = self._select_userenvs(changed_files)
+
+        self.assertIsNone(selected)
+        self.assertEqual(len(current_pairs), 4)
+        self.assertEqual(userenvs, ["default", "alma9", "fedora40", "external"])
+
+    def test_config_only_pr_narrows_scenarios_but_keeps_all_testable_userenvs(self):
+        base_config = GenerateCIJobsScenarioFilterTests._config([
+            GenerateCIJobsScenarioFilterTests._benchmark("fio"),
+            GenerateCIJobsScenarioFilterTests._benchmark("oslat"),
+        ])
+        head_config = copy.deepcopy(base_config)
+        head_config["benchmarks"][0]["userenvs"] = {"allowlist": ["alma9"]}
+        current_pairs = generator._current_job_pairs(head_config, head_config["runner-pools"]["pool"])
+        generator.rickshaw_dir = str(self.root)
+
+        def fake_run(command, **kwargs):
+            if command == "git show HEAD^1:util/crucible-ci.json":
+                return SimpleNamespace(exited=0, stdout=json.dumps(base_config))
+            return SimpleNamespace(exited=1, stdout="")
+
+        with patch.object(generator, "run", side_effect=fake_run):
+            selected = generator._classify_changed_scenarios(
+                self.logger, ["util/crucible-ci.json"], head_config, current_pairs)
+        userenvs = self._select_userenvs(["util/crucible-ci.json"])
+
+        self.assertEqual(selected, {("fio", "kube"), ("fio", "remotehosts")})
+        self.assertEqual(userenvs, ["default", "alma9", "fedora40", "external"])
+
+    def test_userenv_only_pr_keeps_full_scenarios_but_narrows_userenvs(self):
+        changed_files = ["userenvs/alma9.json"]
+        selected, current_pairs, _ = self._select_scenarios(changed_files)
+        userenvs = self._select_userenvs(changed_files)
+
+        self.assertIsNone(selected)
+        self.assertEqual(len(current_pairs), 4)
+        self.assertEqual(userenvs, ["alma9"])
+
+    def test_unresolvable_pr_refs_fall_back_to_full_selections(self):
+        failed = SimpleNamespace(exited=1, stdout="")
+        with patch.object(generator, "run", return_value=failed) as run_mock:
+            changed_files = generator.get_changed_files(
+                self.logger, "a" * 40, "b" * 40, "17")
+
+        self.assertIsNone(changed_files)
+        self.assertFalse(any("checkout" in call.args[0] for call in run_mock.call_args_list))
+        selected, current_pairs, _ = self._select_scenarios(changed_files)
+        userenvs = self._select_userenvs(changed_files)
+        self.assertIsNone(selected)
+        self.assertEqual(len(current_pairs), 4)
+        self.assertEqual(userenvs, ["default", "alma9", "fedora40", "external"])
+
+    def test_pr_head_is_fetched_as_git_data_and_checked_against_event_sha(self):
+        base_sha = "a" * 40
+        head_sha = "b" * 40
+        head_fetched = False
+
+        def fake_run(command, **kwargs):
+            nonlocal head_fetched
+            if command == "git cat-file -e %s^{commit}" % base_sha:
+                return SimpleNamespace(exited=0, stdout="")
+            if command == "git cat-file -e %s^{commit}" % head_sha:
+                return SimpleNamespace(exited=int(not head_fetched), stdout="")
+            if command == "git fetch --no-tags --depth=1 origin refs/pull/17/head":
+                head_fetched = True
+                return SimpleNamespace(exited=0, stdout="")
+            if command == "git rev-parse --verify FETCH_HEAD^{commit}":
+                return SimpleNamespace(exited=0, stdout=head_sha + "\n")
+            if command == "git diff --name-only %s %s" % (base_sha, head_sha):
+                return SimpleNamespace(exited=0, stdout="userenvs/alma9.json\n")
+            return SimpleNamespace(exited=1, stdout="")
+
+        with patch.object(generator, "run", side_effect=fake_run) as run_mock:
+            changed_files = generator.get_changed_files(
+                self.logger, base_sha, head_sha, "17")
+
+        self.assertEqual(changed_files, ["userenvs/alma9.json"])
+        self.assertFalse(any("checkout" in call.args[0] for call in run_mock.call_args_list))
+
+    def test_explicit_userenv_filters_still_apply_without_pr_diff(self):
+        self.assertEqual(self._select_userenvs(None, "minimal"), ["default"])
+        self.assertEqual(self._select_userenvs(None, "unique"), ["alma9", "fedora40"])
+
+    def test_pr_diff_command_line_inputs_are_optional_and_parsed(self):
+        with patch.object(sys, "argv", [
+                "generate-ci-jobs.py",
+                "--pr-base-sha", "a" * 40,
+                "--pr-head-sha", "b" * 40,
+                "--pr-number", "17"]):
+            parsed = generator.process_options()
+
+        self.assertEqual(parsed.pr_base_sha, "a" * 40)
+        self.assertEqual(parsed.pr_head_sha, "b" * 40)
+        self.assertEqual(parsed.pr_number, "17")
 
 
 if __name__ == "__main__":
