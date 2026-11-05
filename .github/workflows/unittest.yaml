@@ -11,7 +11,7 @@ jobs:
   blockbreaker:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Install dependencies
         run: |
@@ -27,7 +27,7 @@ jobs:
           pytest -v --html=report.html --self-contained-html blockbreaker.py validate_run_file.py tests/*.py
 
       - name: Upload html report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: report
           path: util/report.html
@@ -35,7 +35,7 @@ jobs:
   rickshaw-run-tests:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Install dependencies
         run: |
@@ -50,7 +50,7 @@ jobs:
           pytest -v --html=report.html --self-contained-html tests/*.py
 
       - name: Upload html report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: rickshaw-run-tests-report
           path: report.html
