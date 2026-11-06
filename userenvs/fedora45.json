@@ -5,11 +5,11 @@
     }
   },
   "userenv": {
-    "name": "fedora43",
-    "label": "Fedora 43",
+    "name": "fedora45",
+    "label": "Fedora 45",
     "origin": {
       "image": "registry.fedoraproject.org/fedora",
-      "tag": "43",
+      "tag": "45",
       "build-policy": "missing"
     },
     "properties": {
@@ -29,11 +29,11 @@
   },
   "requirements": [
     {
-      "name": "python310",
+      "name": "python3",
       "type": "distro",
       "distro_info": {
         "packages": [
-          "python310",
+          "python3",
           "python3-pip",
           "python3-devel"
         ]
@@ -88,6 +88,15 @@
           "numactl-devel",
           "libpfm",
           "glibc-gconv-extra"
+        ]
+      }
+    },
+    {
+      "name": "util-linux",
+      "type": "distro",
+      "distro_info": {
+        "packages": [
+          "util-linux"
         ]
       }
     },
