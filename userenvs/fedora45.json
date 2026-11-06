@@ -92,6 +92,15 @@
       }
     },
     {
+      "name": "util-linux",
+      "type": "distro",
+      "distro_info": {
+        "packages": [
+          "util-linux"
+        ]
+      }
+    },
+    {
       "name": "core-node",
       "type": "distro",
       "distro_info": {
