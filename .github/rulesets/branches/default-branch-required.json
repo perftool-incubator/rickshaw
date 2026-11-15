@@ -27,8 +27,13 @@
         "dismiss_stale_reviews_on_push": true,
         "required_reviewers": [],
         "require_code_owner_review": false,
+        "dismissal_restriction": {
+          "enabled": false,
+          "allowed_actors": []
+        },
         "require_last_push_approval": false,
         "required_review_thread_resolution": true,
+        "require_extra_approval_for_unattributed_changes": true,
         "allowed_merge_methods": [
           "merge"
         ]
@@ -48,5 +53,17 @@
       }
     }
   ],
-  "bypass_actors": []
+  "node_id": "RRS_lACqUmVwb3NpdG9yec4NdrVlzgA6tfw",
+  "created_at": "2025-02-25T13:56:04.925-06:00",
+  "updated_at": "2026-08-11T11:16:35.759-05:00",
+  "bypass_actors": [],
+  "current_user_can_bypass": "never",
+  "_links": {
+    "self": {
+      "href": "https://api.github.com/repos/perftool-incubator/rickshaw/rulesets/3847676"
+    },
+    "html": {
+      "href": "https://github.com/perftool-incubator/rickshaw/rules/3847676"
+    }
+  }
 }
